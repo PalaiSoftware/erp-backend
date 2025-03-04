@@ -1,0 +1,2 @@
+DROP SEQUENCE IF EXISTS sale_id_seq;
+DROP SEQUENCE IF EXISTS purchase_id_seq;
