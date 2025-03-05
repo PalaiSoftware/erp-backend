@@ -8,6 +8,7 @@ use App\Http\Controllers\VendorController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\SalesController;
+use App\Http\Controllers\CustomerController;
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -32,6 +33,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/purchase', [PurchaseController::class, 'store']);
     Route::post('/sales', [SalesController::class, 'store']);
     Route::get('/invoices/{sale_id}', [SalesController::class, 'generateInvoice']);
+    Route::post('/customers', [CustomerController::class, 'store']);
+    Route::get('/customers', [CustomerController::class, 'index']);
+
 
 });
 

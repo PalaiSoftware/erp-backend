@@ -19,7 +19,7 @@ class CreateTransactionSalesTable extends Migration
             $table->unsignedBigInteger('customer_id');     // Customer ID
             $table->decimal('total_amount', 10, 2);
             $table->string('payment_mode', 50);
-            $table->timestamps();
+            $table->timestamp('created_at')->useCurrent();
         });
     }
 

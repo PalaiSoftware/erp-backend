@@ -90,6 +90,7 @@ class SalesController extends Controller
                     'customer_id'  => $request->customer_id,
                     'payment_mode' => $request->payment_mode,
                     'total_amount' => $totalAmount,
+                    'created_at'   => now(),
          ]);
 
             DB::commit();
