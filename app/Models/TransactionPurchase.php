@@ -4,18 +4,16 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class TransactionSales extends Model
+class TransactionPurchase extends Model
 {
-    protected $table = 'transaction_sales';
+    protected $table = 'transaction_purchases';
 
     protected $fillable = [
-        'sale_id',
+        'purchase_id',
         'uid',
         'cid',
-        'customer_id',
         'total_amount',
-        'payment_mode'
+        'payment_mode',
     ];
     public $timestamps = false;
-
 }

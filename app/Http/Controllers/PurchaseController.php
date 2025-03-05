@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Purchase;
 use App\Models\PurchaseItem;
+use App\Models\TransactionPurchase;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -28,6 +29,8 @@ class PurchaseController extends Controller
                 'products.*.vendor_id' => 'required|integer',
                 'products.*.quantity' => 'required|integer|min:1',
                 'products.*.per_item_cost' => 'required|numeric|min:0',
+                'cid' => 'required|integer',
+                'payment_mode' => 'required|string|max:50',
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             Log::error('Purchase validation failed', ['errors' => $e->errors()]);
@@ -59,13 +62,33 @@ class PurchaseController extends Controller
                     'created_at' => now(), // Explicitly set created_at
                 ]);
             }
+             // Calculate the total amount from purchase items using a foreach loop
+             $totalAmount = 0;
+             foreach ($request->products as $product) {
+                 $lineTotal = $product['quantity'] * $product['per_item_cost'];
+                 $totalAmount += $lineTotal;
+             }
+ 
+             // Insert into the transaction_purchases table
+             $transaction = TransactionPurchase::create([
+                 'purchase_id'  => $purchaseId,
+                 'uid'          => $user->id,
+                 'cid'          => $request->cid, // Now taking cid from the request
+                 'total_amount' => $totalAmount,
+                 'payment_mode' => $request->payment_mode,
+                 'created_at'   => now(),
+                 
+                 
+             ]);
+ 
 
             DB::commit();
-            Log::info('Purchase recorded successfully', ['purchase_id' => $purchaseId]);
+            Log::info('Purchase and transaction recorded successfully', ['purchase_id' => $purchaseId]);
 
             return response()->json([
                 'message' => 'Purchases recorded successfully',
                 'purchase_id' => $purchaseId,
+                'transaction' => $transaction,
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
