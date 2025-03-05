@@ -15,4 +15,5 @@ class TransactionPurchase extends Model
         'total_amount',
         'payment_mode',
     ];
+    public $timestamps = false;
 }

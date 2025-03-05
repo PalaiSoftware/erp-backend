@@ -17,7 +17,7 @@ return new class extends Migration {
             $table->string('email')->nullable();      // Email (optional)
             $table->string('phone', 20);              // Phone number
             $table->text('address')->nullable();      // Address (optional)
-            $table->timestamp('created_at')->useCurrent();// created_at & updated_at
+            $table->timestamp('created_at')->useCurrent();
         });
     }
 
