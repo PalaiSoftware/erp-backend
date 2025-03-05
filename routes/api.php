@@ -31,7 +31,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/products', [ProductController::class, 'index']);
     Route::post('/purchase', [PurchaseController::class, 'store']);
     Route::post('/sales', [SalesController::class, 'store']);
-
+    Route::get('/invoices/{sale_id}', [SalesController::class, 'generateInvoice']);
 
 });
 

@@ -9,6 +9,12 @@ use App\Models\TransactionSales;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log; // Fixed this import
+use App\Models\Company; // Assuming this exists
+use App\Models\Product; // For product names
+// use Barryvdh\DomPDF\Facade as PDF;
+use Barryvdh\DomPDF\Facade\Pdf;
+
+
 class SalesController extends Controller
 {
     public function store(Request $request)
@@ -102,5 +108,229 @@ class SalesController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+
+
+
+//     public function generateInvoice($saleId)
+// {
+//     // Check if user is logged in
+//     $user = Auth::user();
+//     if (!$user) {
+//         return response()->json(['message' => 'Unauthorized'], 401);
+//     }
+
+//     // Fetch the data
+//     $transaction = TransactionSales::where('sale_id', $saleId)->firstOrFail();
+//     $salesItems = SalesItem::where('sale_id', $saleId)->get();
+//     $products = Product::whereIn('id', $salesItems->pluck('product_id'))->get()->keyBy('id');
+//     $company = Company::find($transaction->cid);
+//     // $customer = Customer::find($transaction->customer_id);
+
+//     // Prepare data for the invoice
+//     $data = [
+//         'transaction' => $transaction,
+//         'salesItems' => $salesItems,
+//         'products' => $products,
+//         'company' => $company,
+//         // 'customer' => $customer,
+//         'invoiceNumber' => 'INV-' . $saleId, // Simple format, tweak as needed
+//         'invoiceDate' => now()->format('Y-m-d'),
+//     ];
+
+//     // Generate the PDF
+//     // $pdf = PDF::loadView('invoices.invoice', $data);
+
+//     // // Send it back
+//     // return response($pdf->output())
+//     //     ->header('Content-Type', 'application/pdf')
+//     //     ->header('Content-Disposition', 'inline; filename="invoice_' . $saleId . '.pdf"');
+//     $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('invoices.invoice', $data);
+//     return $pdf->download('invoice.pdf');
+// }
+
+// public function generateInvoice($saleId)
+// {
+//     // Check if user is logged in
+//     $user = Auth::user();
+//     if (!$user) {
+//         return response()->json(['message' => 'Unauthorized'], 401);
+//     }
+
+//     // Fetch the data
+//     $transaction = TransactionSales::where('sale_id', $saleId)->firstOrFail();
+//     $salesItems = SalesItem::where('sale_id', $saleId)->get();
+//     $products = Product::whereIn('id', $salesItems->pluck('product_id'))->get()->keyBy('id');
+//     $company = Company::find($transaction->cid);
+//     // $customer = Customer::find($transaction->customer_id);
+
+//     // Prepare invoice data
+//     $invoice = [
+//         'number' => 'INV-' . $saleId,
+//         'date' => now()->format('Y-m-d'),
+//     ];
+
+//     // Prepare data for the view
+//     $data = [
+//         'invoice' => (object) $invoice,
+//         'transaction' => $transaction,
+//         'salesItems' => $salesItems,
+//         'products' => $products,
+//         'company' => $company,
+//         // 'customer' => $customer,
+//     ];
+
+//     // Generate the PDF
+//     $pdf = Pdf::loadView('invoices.invoice', $data);
+
+//     // Send it back
+//     return response($pdf->output())
+//         ->header('Content-Type', 'application/pdf')
+//         ->header('Content-Disposition', 'inline; filename="invoice_' . $saleId . '.pdf"');
+// }
+// public function generateInvoice($saleId)
+// {
+//     Log::info("Generating invoice for sale_id: {$saleId}");
+
+//     $user = Auth::user();
+//     if (!$user) {
+//         return response()->json(['message' => 'Unauthorized'], 401);
+//     }
+
+//     $transaction = TransactionSales::where('sale_id', $saleId)->firstOrFail();
+//     $salesItems = SalesItem::where('sale_id', $saleId)->get();
+//     $productIds = $salesItems->pluck('product_id')->filter()->unique()->toArray();
+//     Log::info('Product IDs from sales_items', ['product_ids' => $productIds]);
+
+//     $products = Product::whereIn('id', $productIds)->get()->keyBy('id');
+//     Log::info('Products fetched', ['products' => $products->toArray()]);
+
+//     $company = Company::find($transaction->cid);
+
+//     $invoice = [
+//         'number' => 'INV-' . $saleId,
+//         'date' => now()->format('Y-m-d'),
+//     ];
+
+//     $data = [
+//         'invoice' => (object) $invoice,
+//         'transaction' => $transaction,
+//         'salesItems' => $salesItems,
+//         'products' => $products,
+//         'company' => $company,
+//     ];
+
+//     $pdf = Pdf::loadView('invoices.invoice', $data);
+
+//     return response($pdf->output())
+//         ->header('Content-Type', 'application/pdf')
+//         ->header('Content-Disposition', 'inline; filename="invoice_' . $saleId . '.pdf"');
+// }
+
+// public function generateInvoice($saleId)
+//     {
+//         Log::info("Generating invoice for sale_id: {$saleId}");
+
+//         $user = Auth::user();
+//         if (!$user) {
+//             return response()->json(['message' => 'Unauthorized'], 401);
+//         }
+
+//         $transaction = TransactionSales::where('sale_id', $saleId)->firstOrFail();
+//         $salesItems = SalesItem::where('sale_id', $saleId)->get();
+//         if ($salesItems->isEmpty()) {
+//             Log::warning("No sales items found for sale_id: {$saleId}");
+//         }
+
+//         // Fetch product_ids from sales table instead of sales_items
+//         $sales = Sale::where('sale_id', $saleId)->get();
+//         if ($sales->isEmpty()) {
+//             Log::warning("No sales records found for sale_id: {$saleId}");
+//         }
+
+//         $productIds = $sales->pluck('product_id')->filter()->unique()->toArray();
+//         Log::info('Product IDs from sales', ['product_ids' => $productIds]);
+
+//         $products = Product::whereIn('id', $productIds)->get()->keyBy('id');
+//         Log::info('Products fetched', ['products' => $products->toArray()]);
+
+//         $company = Company::find($transaction->cid);
+
+//         $invoice = [
+//             'number' => 'INV-' . $saleId,
+//             'date' => now()->format('Y-m-d'),
+//         ];
+
+//         $data = [
+//             'invoice' => (object) $invoice,
+//             'transaction' => $transaction,
+//             'salesItems' => $salesItems,
+//             'products' => $products,
+//             'company' => $company,
+//         ];
+
+//         $pdf = Pdf::loadView('invoices.invoice', $data);
+//         return response($pdf->output())
+//             ->header('Content-Type', 'application/pdf')
+//             ->header('Content-Disposition', 'inline; filename="invoice_' . $saleId . '.pdf"');
+//     }
+public function generateInvoice($saleId)
+    {
+        Log::info("Generating invoice for sale_id: {$saleId}");
+
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+
+        $transaction = TransactionSales::where('sale_id', $saleId)->firstOrFail();
+        $salesItems = SalesItem::where('sale_id', $saleId)->get();
+        if ($salesItems->isEmpty()) {
+            Log::warning("No sales items found for sale_id: {$saleId}");
+        }
+
+        $sales = Sale::where('sale_id', $saleId)->get();
+        if ($sales->isEmpty()) {
+            Log::warning("No sales records found for sale_id: {$saleId}");
+        }
+
+        $productIds = $sales->pluck('product_id')->filter()->unique()->toArray();
+        Log::info('Product IDs from sales', ['product_ids' => $productIds]);
+
+        $products = Product::whereIn('id', $productIds)->get()->keyBy('id');
+        Log::info('Products fetched', ['products' => $products->toArray()]);
+
+        $company = Company::find($transaction->cid);
+
+        $invoice = [
+            'number' => 'INV-' . $saleId,
+            'date' => $transaction->created_at,
+        ];
+
+        // Combine sales and sales_items data
+        $items = [];
+        foreach ($salesItems as $index => $salesItem) {
+            $sale = $sales[$index] ?? null;
+            $product = $sale ? $products->get($sale->product_id) : null;
+            $items[] = [
+                'product_name' => $product ? $product->name : 'Unknown Product',
+                'quantity' => $salesItem->quantity,
+                'per_item_cost' => $salesItem->per_item_cost,
+                'discount' => $salesItem->discount,
+                'total' => $salesItem->quantity * ($salesItem->per_item_cost - $salesItem->discount),            ];
+        }
+        Log::info('Invoice items prepared', ['items' => $items]);
+
+        $data = [
+            'invoice' => (object) $invoice,
+            'transaction' => $transaction,
+            'items' => $items,
+            'company' => $company,
+        ];
+
+        $pdf = Pdf::loadView('invoices.invoice', $data);
+        return response($pdf->output())
+            ->header('Content-Type', 'application/pdf')
+            ->header('Content-Disposition', 'inline; filename="invoice_' . $saleId . '.pdf"');
     }
 }
