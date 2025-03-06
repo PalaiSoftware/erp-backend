@@ -25,13 +25,18 @@
         }
         .table th, .table td {
             border: 1px solid #ddd;
-            padding: 8px;
+            /* padding: 8px; */
             text-align: left;
         }
         .footer {
             margin-top: 20px;
             text-align: center;
         }
+        .logo {
+    max-width: 150px; /* Adjust the size as needed */
+    height: auto;
+    display: block; /* Ensure the image is displayed as a block element */
+}
     </style>
 </head>
 <body>
@@ -40,7 +45,9 @@
             <tr>
                 <td>
                     <div class="company-info">
-                        <h3>Company Details</h3>
+                        <!-- <h3>Company Details</h3> -->
+
+                        <img src="{{ public_path('images/logo.png') }}" alt="Company Logo" class="logo">
                         <p>Name: {{ $company->name }}</p>
                         <p>Address: {{$company->address}}</p>
                         <p>Phone: +91 {{$company->phone}}</p>
@@ -53,6 +60,26 @@
                         <h1>Invoice</h1>
                         <p>Invoice Number: {{ $invoice->number }}</p>
                         <p>Date: {{ $invoice->date }}</p>
+                        <h4>Billed to </h4>
+                        @isset($customer)
+                        @if(!is_null($customer->name))
+                            <p>Customer Name: {{ $customer->name }}</p>
+                        @endif
+                        
+                        @if(!is_null($customer->phone))
+                            <p>Phone: {{ $customer->phone }}</p>
+                        @endif
+                        
+                        @if(!is_null($customer->address))
+                            <p>Address: {{ $customer->address }}</p>
+                        @endif
+                        
+                        @if(!is_null($customer->email))
+                            <p>Email: {{ $customer->email }}</p>
+                        @endif
+                        @else
+                        <p>No customer information available</p>
+                        @endisset
                     </div>
                 </td>
             </tr>
@@ -65,7 +92,7 @@
                     <th>Item</th>
                     <th>Quantity</th>
                     <th>Price</th>
-                    <th>Discount(%)</th>
+                    <th>Dis(%)</th>
                     <th>Total</th>
                 </tr>
             </thead>
