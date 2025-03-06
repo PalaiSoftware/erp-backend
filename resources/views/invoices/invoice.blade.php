@@ -4,95 +4,151 @@
     <meta charset="UTF-8">
     <title>Invoice</title>
     <style>
-        .invoice-container {
-            width: 100%;
-            margin: 5px auto;
+        /* General Styles */
+        body {
             font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f9f9f9;
         }
-        .top-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        .top-table td {
-            vertical-align: top;
-            padding: 5px;
-            width: 50%;
-        }
-        .table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        .table th, .table td {
+        .invoice-container {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+            background-color: #fff;
             border: 1px solid #ddd;
-            /* padding: 8px; */
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        h1.invoice-title {
+            text-align: center;
+            font-size: 24px;
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        /* Header Section */
+        .header-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        .header-table td {
+            vertical-align: top;
+            padding: 0; /* No padding to avoid extra space */
+        }
+        .company-info, .billing-info {
+            width: 50%; /* Split into two equal columns */
+        }
+        .company-info img {
+            max-width: 120px;
+            height: auto;
+            margin-bottom: 8px;
+        }
+        .company-info p, .billing-info p {
+            margin: 4px 0;
+            font-size: 13px;
+            color: #555;
+        }
+        .billing-info h4 {
+            margin: 8px 0;
+            font-size: 15px;
+            color: #333;
+        }
+
+        /* Items Table */
+        table.items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        table.items-table th,
+        table.items-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
             text-align: left;
         }
-        .footer {
-            margin-top: 20px;
-            text-align: center;
+        table.items-table th {
+            background-color: #f4f4f4;
+            font-weight: bold;
+            font-size: 13px;
+            color: #333;
         }
-        .logo {
-    max-width: 150px; /* Adjust the size as needed */
-    height: auto;
-    display: block; /* Ensure the image is displayed as a block element */
-}
+        table.items-table td {
+            font-size: 13px;
+            color: #555;
+        }
+
+        /* Footer Section */
+        .footer-section {
+            margin-top: 15px;
+            text-align: right;
+        }
+        .footer-section p {
+            margin: 4px 0;
+            font-size: 14px;
+            color: #333;
+        }
+        .footer-section strong {
+            font-size: 16px;
+            color: #000;
+        }
     </style>
 </head>
 <body>
     <div class="invoice-container">
-        <table class="top-table">
-            <tr>
-                <td>
-                    <div class="company-info">
-                        <!-- <h3>Company Details</h3> -->
+        <!-- Title -->
+        <h1 class="invoice-title">Invoice</h1>
 
-                        <img src="{{ public_path('images/logo.png') }}" alt="Company Logo" class="logo">
-                        <p>Name: {{ $company->name }}</p>
-                        <p>Address: {{$company->address}}</p>
-                        <p>Phone: +91 {{$company->phone}}</p>
-                        <p>GSTIN: {{$company->gst_no}}</p>
-                        <p>PAN Number: {{$company->pan}}</p>
-                    </div>
+        <!-- Header Section (Using Table) -->
+        <table class="header-table">
+            <tr>
+                <!-- Company Info -->
+                <td class="company-info">
+                    <img src="{{ public_path('images/logo.png') }}" alt="Company Logo" class="logo">
+                    <p><strong>Name:</strong> {{ $company->name }}</p>
+                    <p><strong>Address:</strong> {{ $company->address }}</p>
+                    <p><strong>Phone:</strong> +91 {{ $company->phone }}</p>
+                    <p><strong>GSTIN:</strong> {{ $company->gst_no }}</p>
+                    <p><strong>PAN Number:</strong> {{ $company->pan }}</p>
                 </td>
-                <td>
-                    <div class="header">
-                        <h1>Invoice</h1>
-                        <p>Invoice Number: {{ $invoice->number }}</p>
-                        <p>Date: {{ $invoice->date }}</p>
-                        <h4>Billed to </h4>
-                        @isset($customer)
+
+                <!-- Billing Info -->
+                <td class="billing-info" style="text-align: right;">
+                    <h4>Billing Details</h4>
+                    <p><strong>Invoice Number:</strong> {{ $invoice->number }}</p>
+                    <p><strong>Date:</strong> {{ $invoice->date }}</p>
+                    <p><strong>Billing Done By:</strong> {{ $userDetails->name }}</p>
+
+                    <h4>Billed To</h4>
+                    @isset($customer)
                         @if(!is_null($customer->name))
-                            <p>Customer Name: {{ $customer->name }}</p>
+                            <p><strong>Customer Name:</strong> {{ $customer->name }}</p>
                         @endif
-                        
                         @if(!is_null($customer->phone))
-                            <p>Phone: {{ $customer->phone }}</p>
+                            <p><strong>Phone:</strong> {{ $customer->phone }}</p>
                         @endif
-                        
                         @if(!is_null($customer->address))
-                            <p>Address: {{ $customer->address }}</p>
+                            <p><strong>Address:</strong> {{ $customer->address }}</p>
                         @endif
-                        
                         @if(!is_null($customer->email))
-                            <p>Email: {{ $customer->email }}</p>
+                            <p><strong>Email:</strong> {{ $customer->email }}</p>
                         @endif
-                        @else
+                    @else
                         <p>No customer information available</p>
-                        @endisset
-                    </div>
+                    @endisset
                 </td>
             </tr>
         </table>
 
-        <table class="table">
+        <!-- Items Table -->
+        <table class="items-table">
             <thead>
                 <tr>
                     <th>S.No.</th>
                     <th>Item</th>
                     <th>Quantity</th>
                     <th>Price</th>
-                    <th>Dis(%)</th>
+                    <th>Discount (%)</th>
                     <th>Total</th>
                 </tr>
             </thead>
@@ -108,14 +164,15 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="5">No items found for this sale.</td>
+                        <td colspan="6">No items found for this sale.</td>
                     </tr>
                 @endforelse
             </tbody>
         </table>
 
-        <div class="footer">
-            <p><strong>Total Amount: {{ number_format($transaction->total_amount, 2) }}</strong></p>
+        <!-- Footer Section -->
+        <div class="footer-section">
+            <p><strong>Total Amount:</strong> {{ number_format($transaction->total_amount, 2) }}</p>
         </div>
     </div>
 </body>
