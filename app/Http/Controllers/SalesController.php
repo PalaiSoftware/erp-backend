@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Log; // Fixed this import
 use App\Models\Company; // Assuming this exists
 use App\Models\Product; // For product names
 use App\Models\Customer;
+use App\Models\User;
 // use Barryvdh\DomPDF\Facade as PDF;
 use Barryvdh\DomPDF\Facade\Pdf;
 
@@ -142,6 +143,8 @@ public function generateInvoice($saleId)
         Log::info('Products fetched', ['products' => $products->toArray()]);
 
         $company = Company::find($transaction->cid);
+        $userDetails = User::find($transaction->uid);
+
 
         $invoice = [
             'number' => 'INV-' . $saleId,
@@ -168,7 +171,7 @@ public function generateInvoice($saleId)
             'items' => $items,
             'company' => $company,
             'customer' => $customer, // Pass customer to view
-
+            'userDetails' => $userDetails,
         ];
 
         $pdf = Pdf::loadView('invoices.invoice', $data);
