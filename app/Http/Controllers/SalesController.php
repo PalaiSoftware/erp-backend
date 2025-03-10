@@ -8,14 +8,12 @@ use App\Models\SalesItem;
 use App\Models\TransactionSales;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log; // Fixed this import
-use App\Models\Company; // Assuming this exists
-use App\Models\Product; // For product names
+use Illuminate\Support\Facades\Log;
+use App\Models\Company;
+use App\Models\Product;
 use App\Models\Customer;
 use App\Models\User;
-// use Barryvdh\DomPDF\Facade as PDF;
 use Barryvdh\DomPDF\Facade\Pdf;
-
 
 class SalesController extends Controller
 {
@@ -50,59 +48,43 @@ class SalesController extends Controller
 
         DB::beginTransaction();
         try {
-            // Get the next sale_id from the sequence
-            $saleId = DB::selectOne('SELECT nextval(\'sale_id_seq\')')->nextval;
-            Log::info('Generated sale_id', ['sale_id' => $saleId]);
+            // Step 1: Create TransactionSales record
+            $transaction = TransactionSales::create([
+                'uid' => $user->id,
+                'cid' => $request->cid,
+                'customer_id' => $request->customer_id,
+                'payment_mode' => $request->payment_mode,
+                'created_at' => now(),
+            ]);
+            $transactionId = $transaction->id;
+            Log::info('Created transaction', ['transaction_id' => $transactionId]);
 
-            // Step 1: Create Sale records for each product with the same sale_id
+            // Step 2: Create Sale and SalesItem records for each product
             foreach ($request->products as $product) {
-                Sale::create([
-                    'sale_id' => $saleId,
+                // Create Sale record
+                $sale = Sale::create([
+                    'transaction_id' => $transactionId,
                     'product_id' => $product['product_id'],
                 ]);
-            }
+                $saleId = $sale->id;
+                Log::info('Created sale', ['sale_id' => $saleId]);
 
-            // Step 2: Add all products as SalesItems with the same sale_id
-            foreach ($request->products as $product) {
+                // Create SalesItem record
                 SalesItem::create([
                     'sale_id' => $saleId,
-                    'product_id' => $product['product_id'],
                     'quantity' => $product['quantity'],
                     'discount' => $product['discount'] ?? 0,
                     'per_item_cost' => $product['per_item_cost'],
                 ]);
             }
-            // for transaction_sales table new added
-               // Step 3: Calculate total amount separately
-               $totalAmount = 0;
-            foreach ($request->products as $product) {
-               $quantity = $product['quantity'];
-               $perItemCost = $product['per_item_cost'];
-               $discount = $product['discount'] ?? 0;
-
-               // Calculate item total after discount
-               $itemTotal = ($quantity * $perItemCost) - (($quantity * $perItemCost) * ($discount / 100.0));
-               $totalAmount += $itemTotal;
-           }
-               // Step 4: Insert transaction data into transactions table
-         $transaction = TransactionSales::create([
-                    'sale_id'      => $saleId,
-                    'uid'          => $user->id,
-                    'cid'          => $request->cid, // Now taking cid from the request
-                    'customer_id'  => $request->customer_id,
-                    'payment_mode' => $request->payment_mode,
-                    'total_amount' => $totalAmount,
-                    'created_at'   => now(),
-         ]);
 
             DB::commit();
-            Log::info('Sale and transaction recorded successfully', ['sale_id' => $saleId]);
+            Log::info('Sale recorded successfully', ['transaction_id' => $transactionId]);
 
-        return response()->json([
-            'message' => 'Sale recorded successfully',
-            'sale_id' => $saleId,
-            'transaction' => $transaction
-        ], 201);
+            return response()->json([
+                'message' => 'Sale recorded successfully',
+                'transaction_id' => $transactionId,
+            ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error('Sale failed', ['error' => $e->getMessage()]);
@@ -113,55 +95,48 @@ class SalesController extends Controller
         }
     }
 
-public function generateInvoice($saleId)
+    public function generateInvoice($transactionId)
     {
-        Log::info("Generating invoice for sale_id: {$saleId}");
+        Log::info("Generating invoice for transaction_id: {$transactionId}");
 
         $user = Auth::user();
         if (!$user) {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        $transaction = TransactionSales::where('sale_id', $saleId)->firstOrFail();
-        $salesItems = SalesItem::where('sale_id', $saleId)->get();
+        $transaction = TransactionSales::findOrFail($transactionId);
+        $sales = Sale::where('transaction_id', $transactionId)->with('salesItem')->get();
 
-        $customer = Customer::find($transaction->customer_id); // Fetch customer details
-
-        if ($salesItems->isEmpty()) {
-            Log::warning("No sales items found for sale_id: {$saleId}");
-        }
-
-        $sales = Sale::where('sale_id', $saleId)->get();
         if ($sales->isEmpty()) {
-            Log::warning("No sales records found for sale_id: {$saleId}");
+            Log::warning("No sales records found for transaction_id: {$transactionId}");
         }
 
-        $productIds = $sales->pluck('product_id')->filter()->unique()->toArray();
-        Log::info('Product IDs from sales', ['product_ids' => $productIds]);
-
-        $products = Product::whereIn('id', $productIds)->get()->keyBy('id');
-        Log::info('Products fetched', ['products' => $products->toArray()]);
-
+        $customer = Customer::find($transaction->customer_id);
         $company = Company::find($transaction->cid);
         $userDetails = User::find($transaction->uid);
 
-
         $invoice = [
-            'number' => 'INV-' . $saleId,
+            'number' => 'INV-' . $transactionId,
             'date' => $transaction->created_at,
         ];
 
-        // Combine sales and sales_items data
+        // Prepare invoice items
         $items = [];
-        foreach ($salesItems as $index => $salesItem) {
-            $sale = $sales[$index] ?? null;
-            $product = $sale ? $products->get($sale->product_id) : null;
-            $items[] = [
-                'product_name' => $product ? $product->name : 'Unknown Product',
-                'quantity' => $salesItem->quantity,
-                'per_item_cost' => $salesItem->per_item_cost,
-                'discount' => $salesItem->discount,
-                'total' => $salesItem->quantity * ($salesItem->per_item_cost - $salesItem->discount),            ];
+        $totalAmount = 0;
+        foreach ($sales as $sale) {
+            $product = Product::find($sale->product_id);
+            $salesItem = $sale->salesItem;
+            if ($salesItem) {
+                $itemTotal = $salesItem->quantity * ($salesItem->per_item_cost - $salesItem->discount);
+                $items[] = [
+                    'product_name' => $product ? $product->name : 'Unknown Product',
+                    'quantity' => $salesItem->quantity,
+                    'per_item_cost' => $salesItem->per_item_cost,
+                    'discount' => $salesItem->discount,
+                    'total' => $itemTotal,
+                ];
+                $totalAmount += $itemTotal;
+            }
         }
         Log::info('Invoice items prepared', ['items' => $items]);
 
@@ -169,14 +144,15 @@ public function generateInvoice($saleId)
             'invoice' => (object) $invoice,
             'transaction' => $transaction,
             'items' => $items,
+            'total_amount' => $totalAmount,
             'company' => $company,
-            'customer' => $customer, // Pass customer to view
+            'customer' => $customer,
             'userDetails' => $userDetails,
         ];
 
         $pdf = Pdf::loadView('invoices.invoice', $data);
         return response($pdf->output())
             ->header('Content-Type', 'application/pdf')
-            ->header('Content-Disposition', 'inline; filename="invoice_' . $saleId . '.pdf"');
+            ->header('Content-Disposition', "inline; filename=\"invoice_{$transactionId}.pdf\"");
     }
 }

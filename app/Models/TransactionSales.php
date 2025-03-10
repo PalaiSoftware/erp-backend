@@ -9,13 +9,17 @@ class TransactionSales extends Model
     protected $table = 'transaction_sales';
 
     protected $fillable = [
-        'sale_id',
         'uid',
         'cid',
         'customer_id',
-        'total_amount',
         'payment_mode'
     ];
+
     public $timestamps = false;
 
+    // Relationship to sales (no foreign key enforced)
+    public function sales()
+    {
+        return $this->hasMany(Sale::class, 'transaction_id');
+    }
 }
