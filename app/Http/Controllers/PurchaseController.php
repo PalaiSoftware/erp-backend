@@ -14,14 +14,16 @@ class PurchaseController extends Controller
 {
     public function store(Request $request)
     {
-        Log::info('Purchase API endpoint reached', ['request' => $request->all()]);
-
         $user = Auth::user();
         if (!$user) {
             Log::warning('User not authenticated');
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
+        // Log the incoming request before validation
+        Log::info('Incoming purchase request', ['request_data' => $request->all()]);
+
+        // Validate the request with logging for errors
         try {
             $request->validate([
                 'products' => 'required|array',
@@ -32,67 +34,83 @@ class PurchaseController extends Controller
                 'cid' => 'required|integer',
                 'payment_mode' => 'required|string|max:50',
             ]);
+            Log::info('Validation passed successfully');
         } catch (\Illuminate\Validation\ValidationException $e) {
-            Log::error('Purchase validation failed', ['errors' => $e->errors()]);
+            Log::error('Validation failed', [
+                'errors' => $e->errors(),
+                'request_data' => $request->all()
+            ]);
             return response()->json([
                 'message' => 'Validation failed',
-                'errors' => $e->errors()
+                'errors' => $e->errors(),
             ], 422);
         }
 
+        // Use a transaction to ensure data consistency
         DB::beginTransaction();
         try {
-            $purchaseId = DB::selectOne('SELECT nextval(\'purchase_id_seq\')')->nextval;
-            Log::info('Generated purchase_id', ['purchase_id' => $purchaseId]);
+            // Step 1: Create the transaction
+            $transaction = TransactionPurchase::create([
+                'uid' => $user->id,
+                'cid' => $request->cid,
+                'total_amount' => 0, // Placeholder, updated later
+                'payment_mode' => $request->payment_mode,
+                'created_at' => now(),
+            ]);
+            $transactionId = $transaction->id;
+            Log::info('Transaction created', ['transaction_id' => $transactionId]);
 
+            // Step 2: Process each product
+            $totalAmount = 0;
             foreach ($request->products as $product) {
-                Purchase::create([
-                    'purchase_id' => $purchaseId,
+                // Create purchase record
+                $purchase = Purchase::create([
+                    'transaction_id' => $transactionId,
                     'product_id' => $product['product_id'],
                     'created_at' => now(),
                 ]);
-            }
+                $purchaseId = $purchase->id;
+                Log::info('Purchase created', ['purchase_id' => $purchaseId, 'product_id' => $product['product_id']]);
 
-            foreach ($request->products as $product) {
+                // Create purchase item record
                 PurchaseItem::create([
                     'purchase_id' => $purchaseId,
                     'vendor_id' => $product['vendor_id'],
                     'quantity' => $product['quantity'],
                     'per_item_cost' => $product['per_item_cost'],
-                    'created_at' => now(), // Explicitly set created_at
+                    'created_at' => now(),
                 ]);
+                Log::info('Purchase item created', [
+                    'purchase_id' => $purchaseId,
+                    'vendor_id' => $product['vendor_id'],
+                    'quantity' => $product['quantity']
+                ]);
+
+                // Calculate total amount
+                $totalAmount += $product['quantity'] * $product['per_item_cost'];
             }
-             // Calculate the total amount from purchase items using a foreach loop
-             $totalAmount = 0;
-             foreach ($request->products as $product) {
-                 $lineTotal = $product['quantity'] * $product['per_item_cost'];
-                 $totalAmount += $lineTotal;
-             }
- 
-             // Insert into the transaction_purchases table
-             $transaction = TransactionPurchase::create([
-                 'purchase_id'  => $purchaseId,
-                 'uid'          => $user->id,
-                 'cid'          => $request->cid, // Now taking cid from the request
-                 'total_amount' => $totalAmount,
-                 'payment_mode' => $request->payment_mode,
-                 'created_at'   => now(),
-                 
-                 
-             ]);
- 
+
+            // Step 3: Update transaction with total amount
+            $transaction->update(['total_amount' => $totalAmount]);
+            Log::info('Transaction updated', [
+                'transaction_id' => $transactionId,
+                'total_amount' => $totalAmount
+            ]);
 
             DB::commit();
-            Log::info('Purchase and transaction recorded successfully', ['purchase_id' => $purchaseId]);
+            Log::info('Transaction committed', ['transaction_id' => $transactionId]);
 
             return response()->json([
                 'message' => 'Purchases recorded successfully',
-                'purchase_id' => $purchaseId,
+                'transaction_id' => $transactionId,
                 'transaction' => $transaction,
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error('Purchase failed', ['error' => $e->getMessage()]);
+            Log::error('Purchase failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
             return response()->json([
                 'message' => 'Purchase failed',
                 'error' => $e->getMessage(),
