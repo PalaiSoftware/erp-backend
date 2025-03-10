@@ -12,7 +12,7 @@ class TransactionPurchase extends Model
         'purchase_id',
         'uid',
         'cid',
-        'total_amount',
+        // 'total_amount',
         'payment_mode',
     ];
     public $timestamps = false;
