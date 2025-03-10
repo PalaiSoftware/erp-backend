@@ -11,6 +11,7 @@ class SalesItem extends Model
 
     protected $fillable = ['sale_id', 'quantity', 'discount', 'per_item_cost'];
 
+    // Relationship to sale (no foreign key enforced)
     public function sale()
     {
         return $this->belongsTo(Sale::class, 'sale_id');

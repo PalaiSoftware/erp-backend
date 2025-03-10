@@ -9,11 +9,20 @@ class Sale extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['sale_id', 'product_id'];
+    protected $fillable = ['transaction_id', 'product_id'];
 
-    // Tell Laravel there’s no auto-incrementing id
-    public $incrementing = false;
+    public $incrementing = true; // Auto-incrementing id
+    protected $primaryKey = 'id'; // Primary key is id
 
-    // Tell Laravel there’s no primary key (or set it to sale_id if you want)
-    protected $primaryKey = null; // Or 'sale_id' if you want to use it
+    // Relationship to transaction_sales (no foreign key enforced)
+    public function transaction()
+    {
+        return $this->belongsTo(TransactionSales::class, 'transaction_id');
+    }
+
+    // Relationship to sales_items (no foreign key enforced)
+    public function salesItem()
+    {
+        return $this->hasOne(SalesItem::class, 'sale_id');
+    }
 }
