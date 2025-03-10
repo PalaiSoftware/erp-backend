@@ -12,7 +12,7 @@ class CreateTransactionPurchasesTable extends Migration
             $table->id(); // Auto-incrementing primary key (transaction_id)
             $table->unsignedBigInteger('uid'); // User ID
             $table->unsignedBigInteger('cid')->nullable(); // Company ID
-            $table->decimal('total_amount', 10, 2);
+            // $table->decimal('total_amount', 10, 2);
             $table->string('payment_mode', 50);
             $table->timestamp('created_at')->useCurrent();
         });

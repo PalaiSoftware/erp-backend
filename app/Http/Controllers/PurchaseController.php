@@ -61,7 +61,7 @@ class PurchaseController extends Controller
             Log::info('Transaction created', ['transaction_id' => $transactionId]);
 
             // Step 2: Process each product
-            $totalAmount = 0;
+            // $totalAmount = 0;
             foreach ($request->products as $product) {
                 // Create purchase record
                 $purchase = Purchase::create([
@@ -87,14 +87,14 @@ class PurchaseController extends Controller
                 ]);
 
                 // Calculate total amount
-                $totalAmount += $product['quantity'] * $product['per_item_cost'];
+                // $totalAmount += $product['quantity'] * $product['per_item_cost'];
             }
 
             // Step 3: Update transaction with total amount
-            $transaction->update(['total_amount' => $totalAmount]);
+            // $transaction->update(['total_amount' => $totalAmount]);
             Log::info('Transaction updated', [
-                'transaction_id' => $transactionId,
-                'total_amount' => $totalAmount
+                'transaction_id' => $transactionId
+                // 'total_amount' => $totalAmount
             ]);
 
             DB::commit();
