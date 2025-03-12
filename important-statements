@@ -1,2 +1,7 @@
 DROP SEQUENCE IF EXISTS sale_id_seq;
 DROP SEQUENCE IF EXISTS purchase_id_seq;
+
+required by invoice-api
+-----
+sudo apt-get update
+sudo apt-get install php8.1-gd
