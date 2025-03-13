@@ -147,7 +147,8 @@
                     <th>S.No.</th>
                     <th>Item</th>
                     <th>Quantity</th>
-                    <th>Price</th>
+                    <th>Unit</th> <!-- Add Unit column -->
+                    <th>Price/Unit</th>
                     <th>Discount (%)</th>
                     <th>Total</th>
                 </tr>
@@ -158,6 +159,7 @@
                         <td>{{ $loop->index + 1 }}</td>
                         <td>{{ $item['product_name'] }}</td>
                         <td>{{ $item['quantity'] }}</td>
+                        <td>{{ $item['unit'] }}</td> <!-- Display unit -->
                         <td>{{ number_format($item['per_item_cost'], 2) }}</td>
                         <td>{{ $item['discount'] }}</td>
                         <td>{{ number_format($item['total'], 2) }}</td>
@@ -172,7 +174,7 @@
 
         <!-- Footer Section -->
         <div class="footer-section">
-            <p><strong>Total Amount:</strong> {{ number_format($transaction->total_amount, 2) }}</p>
+            <p><strong>Total Amount:</strong> {{ number_format($total_amount, 2) }}</p>
         </div>
     </div>
 </body>
