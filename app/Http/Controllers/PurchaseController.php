@@ -31,6 +31,7 @@ class PurchaseController extends Controller
                 'products.*.vendor_id' => 'required|integer',
                 'products.*.quantity' => 'required|integer|min:1',
                 'products.*.per_item_cost' => 'required|numeric|min:0',
+                'products.*.unit_id' => 'required|integer|exists:units,id', // Unit validation
                 'cid' => 'required|integer',
                 'payment_mode' => 'required|string|max:50',
             ]);
@@ -53,7 +54,7 @@ class PurchaseController extends Controller
             $transaction = TransactionPurchase::create([
                 'uid' => $user->id,
                 'cid' => $request->cid,
-                'total_amount' => 0, // Placeholder, updated later
+                'total_amount' => 0, // Placeholder, update later if needed
                 'payment_mode' => $request->payment_mode,
                 'created_at' => now(),
             ]);
@@ -61,7 +62,6 @@ class PurchaseController extends Controller
             Log::info('Transaction created', ['transaction_id' => $transactionId]);
 
             // Step 2: Process each product
-            // $totalAmount = 0;
             foreach ($request->products as $product) {
                 // Create purchase record
                 $purchase = Purchase::create([
@@ -72,31 +72,24 @@ class PurchaseController extends Controller
                 $purchaseId = $purchase->id;
                 Log::info('Purchase created', ['purchase_id' => $purchaseId, 'product_id' => $product['product_id']]);
 
-                // Create purchase item record
+                // Create purchase item record with unit_id
                 PurchaseItem::create([
                     'purchase_id' => $purchaseId,
                     'vendor_id' => $product['vendor_id'],
                     'quantity' => $product['quantity'],
                     'per_item_cost' => $product['per_item_cost'],
+                    'unit_id' => $product['unit_id'], // Saving unit_id
                     'created_at' => now(),
                 ]);
                 Log::info('Purchase item created', [
                     'purchase_id' => $purchaseId,
                     'vendor_id' => $product['vendor_id'],
-                    'quantity' => $product['quantity']
+                    'quantity' => $product['quantity'],
+                    'unit_id' => $product['unit_id']
                 ]);
-
-                // Calculate total amount
-                // $totalAmount += $product['quantity'] * $product['per_item_cost'];
             }
 
-            // Step 3: Update transaction with total amount
-            // $transaction->update(['total_amount' => $totalAmount]);
-            Log::info('Transaction updated', [
-                'transaction_id' => $transactionId
-                // 'total_amount' => $totalAmount
-            ]);
-
+            // Step 3: Commit the transaction
             DB::commit();
             Log::info('Transaction committed', ['transaction_id' => $transactionId]);
 
