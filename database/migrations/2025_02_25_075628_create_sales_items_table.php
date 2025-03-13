@@ -13,7 +13,12 @@ return new class extends Migration {
             $table->integer('quantity');
             $table->decimal('discount', 10, 2)->default(0);
             $table->decimal('per_item_cost', 10, 2);
+            $table->unsignedBigInteger('unit_id'); // Links to units.id
             $table->timestamps();
+
+            // Foreign key constraints
+            $table->foreign('sale_id')->references('id')->on('sales');
+            $table->foreign('unit_id')->references('id')->on('units');
         });
     }
 
