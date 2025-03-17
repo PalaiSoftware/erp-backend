@@ -60,4 +60,42 @@ class ProductController extends Controller
         $products = Product::all();
         return response()->json($products);
     }
+    public function getProductStock($cid)
+    {
+        if (!$user) {
+            Log::warning('User not authenticated');
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+
+        // Get the authenticated user's ID
+        $uid = Auth::id();
+
+        // Validate the cid parameter
+        if (!is_numeric($cid) || (int)$cid <= 0) {
+            return response()->json(['error' => 'Invalid company ID'], 400);
+        }
+
+        // Execute the SQL query adapted to Laravel's query builder
+        $products = DB::table('products as p')
+            ->leftJoin('purchases as pur', 'p.id', '=', 'pur.product_id')
+            ->leftJoin('transaction_purchases as tp', function ($join) use ($cid) {
+                $join->on('pur.transaction_id', '=', 'tp.id')
+                     ->where('tp.cid', '=', $cid);
+            })
+            ->leftJoin('purchase_items as pi', 'pur.id', '=', 'pi.purchase_id')
+            ->where('p.uid', '=', $uid) // Filter products by the authenticated user
+            ->select(
+                'p.id',
+                'p.name',
+                'p.description',
+                'p.category',
+                'p.hscode',
+                DB::raw('COALESCE(SUM(pi.quantity), 0) as total_stock')
+            )
+            ->groupBy('p.id', 'p.name', 'p.description', 'p.category', 'p.hscode')
+            ->get();
+
+        // Return the results as JSON
+        return response()->json($products);
+    }
 }

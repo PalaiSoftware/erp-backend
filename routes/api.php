@@ -9,6 +9,8 @@ use App\Http\Controllers\ProductController;
 use App\Http\Controllers\PurchaseController;
 use App\Http\Controllers\SalesController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\WidgetController;
+use App\Http\Controllers\HelperController;
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -42,8 +44,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/user-block-unblock', [AuthController::class, 'userBlockUnblock']);
     // for promote/demote users
     Route::post('/user-promote-demote', [AuthController::class, 'UserPromoteDemote']);
-
+    Route::get('/products/stock/{cid}', [HelperController::class, 'getProductStock']);
 });
-
+Route::get('/widget/total-purchases/{cid}', [WidgetController::class, 'getTotalPurchases']);
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
