@@ -77,19 +77,38 @@ class CustomerController extends Controller
     }
 
     /**
-     * Display a listing of the customers.
+     * Display all customers based on cid.
+     * If cid is not provided or no customers match, return an error.
      */
-    public function index()
+    public function index(Request $request)
     {
         $user = Auth::user();
         if (!$user) {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        $customers = Customer::all();
+        try {
+            $request->validate([
+                'cid' => 'required|integer'
+            ]);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'message' => 'Validation failed, cid is required',
+                'errors' => $e->errors(),
+            ], 422);
+        }
+
+        $cid = $request->input('cid');
+        $customers = Customer::where('cid', $cid)->get();
+
+        if ($customers->isEmpty()) {
+            return response()->json([
+                'message' => 'No customers found for the given cid'
+            ], 404);
+        }
 
         return response()->json([
-            'message'   => 'Customers retrieved successfully',
+            'message' => 'Customers retrieved successfully',
             'customers' => $customers,
         ], 200);
     }
