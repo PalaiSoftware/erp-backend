@@ -45,6 +45,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
     // for promote/demote users
     Route::post('/user-promote-demote', [AuthController::class, 'UserPromoteDemote']);
     Route::get('/products/stock/{cid}', [HelperController::class, 'getProductStock']);
+    Route::post('/transactions-by-cid', [PurchaseController::class, 'getTransactionsByCid']);
+    Route::post('/purchases-by-transaction-id', [PurchaseController::class, 'getPurchaseDetailsByTransaction']);
+
 });
 Route::get('/widget/total-purchases/{cid}', [WidgetController::class, 'getTotalPurchases']);
 Route::post('/register', [AuthController::class, 'register']);
