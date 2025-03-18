@@ -15,6 +15,7 @@ use App\Models\SalesItem;
 use App\Models\TransactionSales;
 use App\Models\User;
 use App\Models\Company;
+use App\Models\Unit;
 
 class HelperController extends Controller
 {
@@ -154,5 +155,16 @@ public function getMultipleProductStock(Request $request, $cid)
 
     // Send back the stock info
     return response()->json($products);
+}
+
+
+
+public function index()
+{
+    // Fetch all units with all fields
+    $units = Unit::all();
+    
+    // Return as JSON response
+    return response()->json($units);
 }
 }
