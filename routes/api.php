@@ -44,13 +44,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/user-block-unblock', [AuthController::class, 'userBlockUnblock']);
     // for promote/demote users
     Route::post('/user-promote-demote', [AuthController::class, 'UserPromoteDemote']);
-<<<<<<< Updated upstream
     Route::get('/products/stock/{cid}', [HelperController::class, 'getProductStock']);
-=======
     Route::post('/transactions-by-cid', [PurchaseController::class, 'getTransactionsByCid']);
     Route::post('/purchases-by-transaction-id', [PurchaseController::class, 'getPurchaseDetailsByTransaction']);
 
->>>>>>> Stashed changes
 });
 Route::get('/widget/total-purchases/{cid}', [WidgetController::class, 'getTotalPurchases']);
 Route::post('/register', [AuthController::class, 'register']);
