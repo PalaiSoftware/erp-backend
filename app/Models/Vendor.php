@@ -7,11 +7,19 @@ use Illuminate\Database\Eloquent\Model;
 
 class Vendor extends Model
 {
-    use HasFactory;
-
     protected $fillable = [
-        'vendor_name', 'contact_person', 'email', 'phone', 'address', 'gst_no', 'pan','uid'
+        'vendor_name',
+        'contact_person',
+        'email',
+        'phone',
+        'address',
+        'gst_no',
+        'pan',
+        'uid',
+        'cids',
     ];
 
-    public $timestamps = false; // Since created_at has a default in SQL
+    protected $casts = [
+        'cids' => 'array',
+    ];
 }

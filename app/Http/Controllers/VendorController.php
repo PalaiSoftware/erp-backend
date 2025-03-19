@@ -9,62 +9,148 @@ class VendorController extends Controller
 {
     public function __construct()
     {
-        $this->middleware('auth:sanctum'); // Protect this route
+        $this->middleware('auth:sanctum');
     }
 
     public function store(Request $request)
     {
         $user = Auth::user();
 
-        // Only allow users with a specific role (e.g., admin)
         if ($user->rid !== 1) {
             return response()->json(['message' => 'Unauthorized to create a vendor'], 403);
         }
 
-        // Validate request
-        $request->validate([
-            'vendor_name' => 'required|string|max:255',
-            'contact_person' => 'nullable|string|max:255',
-            'email' => 'nullable|email|unique:vendors,email',
-            'phone' => 'nullable|string|max:20',
-            'address' => 'nullable|string',
-            'gst_no' => 'nullable|string|max:255',
-            'pan' => 'nullable|string|max:20',
-            'uid' => 'required|integer',
+    $validated = $request->validate([
+        'vendor_name' => 'required|string|max:255',
+        'contact_person' => 'nullable|string|max:255',
+        'email' => 'nullable|email|unique:vendors,email',
+        'phone' => 'nullable|string|max:20',
+        'address' => 'nullable|string',
+        'gst_no' => 'nullable|string|max:255',
+        'pan' => 'nullable|string|max:255',
+        'uid' => 'nullable|integer',
+        'cid' => 'required|integer',
+    ]);
 
-        ]);
+    $vendor = Vendor::create([
+        'vendor_name' => $validated['vendor_name'],
+        'contact_person' => $validated['contact_person'],
+        'email' => $validated['email'],
+        'phone' => $validated['phone'],
+        'address' => $validated['address'],
+        'gst_no' => $validated['gst_no'],
+        'pan' => $validated['pan'],
+        'uid' => $validated['uid'],
+        'cids' => [$validated['cid']],
+    ]);
 
-        // Create a new vendor
-        $vendor = Vendor::create([
-            'vendor_name' => $request->vendor_name,
-            'contact_person' => $request->contact_person,
-            'email' => $request->email,
-            'phone' => $request->phone,
-            'address' => $request->address,
-            'gst_no' => $request->gst_no,
-            'pan' => $request->pan,
-            'uid' => $request->uid,
-
-        ]);
-
-        return response()->json([
-            'message' => 'Vendor created successfully',
-            'vendor' => $vendor
-        ], 201);
+    return response()->json([
+        'message' => 'Vendor created successfully',
+        'vendor' => $vendor
+    ], 201);
     }
-    public function index()
+    public function checkVendor(Request $request)
     {
-        $user = Auth::user(); //Get authenticated user
-
-        if (!$user) {
-            return response()->json(['message' => 'Unauthorized'], 401);
+        
+        $validated = $request->validate([
+            'gstno' => 'required|string',
+            'pannumber' => 'required|string',
+            'cid' => 'required|integer',
+        ]);
+    
+        
+        $vendor = Vendor::where('gst_no', $validated['gstno'])
+                        ->where('pan', $validated['pannumber'])
+                        ->first();
+    
+        
+        if (!$vendor) {
+            return response()->json([
+                'message' => 'Please add this vendor as this vendor is not present in the vendors table.'
+            ], 404);
         }
+    
+        
+        $cids = $vendor->cids ?? [];
+    
+        if (in_array($validated['cid'], $cids)) {
+            return response()->json([
+                'message' => 'This vendor already exists in your company.'
+            ], 200);
+        } else {
+            return response()->json([
+                'message' => 'Need to add this vendor to your company.'
+            ], 200);
+        }
+    }
 
-        $vendors = Vendor::all();
-
+    public function addVendorToCompany(Request $request)
+    {
+        $validated = $request->validate([
+            'gstno' => 'required|string',
+            'pannumber' => 'required|string',
+            'cid' => 'required|integer',
+        ]);
+    
+        $vendor = Vendor::where('gst_no', $validated['gstno'])
+                        ->where('pan', $validated['pannumber'])
+                        ->first();
+    
+        if (!$vendor) {
+            return response()->json([
+                'message' => 'Vendor not found.'
+            ], 404);
+        }
+    
+        $cids = $vendor->cids ?? []; 
+    
+        if (in_array($validated['cid'], $cids)) {
+            return response()->json([
+                'message' => 'Vendor already exists in your company.'
+            ], 200);
+        }
+    
+    
+        $cids[] = $validated['cid'];
+        $vendor->cids = $cids;
+        $vendor->save();
+    
         return response()->json([
-            'message' => 'Vendors retrieved successfully',
-            'vendors' => $vendors
+            'message' => 'Vendor added to your company successfully.'
         ], 200);
     }
+    
+
+public function index(Request $request)
+{
+    
+    $user = Auth::user();
+    if (!$user) {
+        return response()->json(['message' => 'Unauthorized'], 401);
+    }
+
+
+    $validated = $request->validate([
+        'cid' => 'required|integer', 
+    ]);
+
+    
+    $vendors = Vendor::whereJsonContains('cids', (int)$validated['cid'])
+                     ->select(
+                         'id',
+                         'vendor_name',
+                         'contact_person',
+                         'email',
+                         'phone',
+                         'address',
+                         'gst_no',
+                         'pan'
+                     )
+                     ->get();
+
+    return response()->json([
+        'message' => 'Vendors retrieved successfully',
+        'vendors' => $vendors,
+    ], 200);
+}
 }

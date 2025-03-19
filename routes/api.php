@@ -30,6 +30,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/newuser', [AuthController::class, 'newuser']);
     Route::post('/vendors', [VendorController::class, 'store']);
     Route::get('/vendors', [VendorController::class, 'index']);
+    Route::post('/vendors/check', [VendorController::class, 'checkVendor']);
+    Route::post('/vendors/add-to-company', [VendorController::class, 'addVendorToCompany']);
     Route::post('/products', [ProductController::class, 'store']); 
     Route::get('/products', [ProductController::class, 'index']);
     Route::post('/purchase', [PurchaseController::class, 'store']);
