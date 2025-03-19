@@ -20,6 +20,66 @@ use App\Models\Unit;
 class HelperController extends Controller
 {
 
+// public function getProductStock($cid)
+// {
+//     // Check if user is authenticated
+//     $user = Auth::user();
+//     if (!$user) {
+//         return response()->json(['message' => 'Unauthorized'], 401);
+//     }
+
+//     $uid = Auth::id();
+
+//     // Validate and cast cid to integer
+//     if (!is_numeric($cid) || (int)$cid <= 0) {
+//         return response()->json(['error' => 'Invalid company ID'], 400);
+//     }
+//     $cid = (int)$cid;
+
+//     // Fetch products with stock calculations
+//     $products = DB::table('products as p')
+//         // ->where('p.uid', $uid)
+//         ->select([
+//             'p.id',
+//             'p.name',
+//             'p.description',
+//             'p.category',
+//             'p.hscode',
+//             // Purchase stock subquery
+//             DB::raw("(
+//                 SELECT COALESCE(SUM(pi.quantity), 0)
+//                 FROM purchases pur
+//                 JOIN transaction_purchases tp ON pur.transaction_id = tp.id
+//                 JOIN purchase_items pi ON pur.id = pi.purchase_id
+//                 WHERE pur.product_id = p.id AND tp.cid = $cid
+//             ) as purchase_stock"),
+//             // Sales stock subquery
+//             DB::raw("(
+//                 SELECT COALESCE(SUM(si.quantity), 0)
+//                 FROM sales s
+//                 JOIN transaction_sales ts ON s.transaction_id = ts.id
+//                 JOIN sales_items si ON s.id = si.sale_id
+//                 WHERE s.product_id = p.id AND ts.cid = $cid
+//             ) as sales_stock"),
+//             // Current stock (purchase_stock - sales_stock)
+//             DB::raw("(
+//                 SELECT COALESCE(SUM(pi.quantity), 0)
+//                 FROM purchases pur
+//                 JOIN transaction_purchases tp ON pur.transaction_id = tp.id
+//                 JOIN purchase_items pi ON pur.id = pi.purchase_id
+//                 WHERE pur.product_id = p.id AND tp.cid = $cid
+//             ) - (
+//                 SELECT COALESCE(SUM(si.quantity), 0)
+//                 FROM sales s
+//                 JOIN transaction_sales ts ON s.transaction_id = ts.id
+//                 JOIN sales_items si ON s.id = si.sale_id
+//                 WHERE s.product_id = p.id AND ts.cid = $cid
+//             ) as current_stock")
+//         ])
+//         ->get();
+
+//     return response()->json($products);
+// }
 public function getProductStock($cid)
 {
     // Check if user is authenticated
@@ -36,16 +96,36 @@ public function getProductStock($cid)
     }
     $cid = (int)$cid;
 
-    // Fetch products with stock calculations
+    // Fetch products with stock calculations, only for products with transactions for this cid
     $products = DB::table('products as p')
+<<<<<<< Updated upstream
         // ->where('p.uid', $uid)
+=======
+        ->where(function ($query) use ($cid) {
+            // Products with purchases for this company
+            $query->whereExists(function ($subquery) use ($cid) {
+                $subquery->select(DB::raw(1))
+                         ->from('purchases as pur')
+                         ->join('transaction_purchases as tp', 'pur.transaction_id', '=', 'tp.id')
+                         ->where('pur.product_id', '=', DB::raw('p.id'))
+                         ->where('tp.cid', $cid);
+            })
+            // Or products with sales for this company
+            ->orWhereExists(function ($subquery) use ($cid) {
+                $subquery->select(DB::raw(1))
+                         ->from('sales as s')
+                         ->join('transaction_sales as ts', 's.transaction_id', '=', 'ts.id')
+                         ->where('s.product_id', '=', DB::raw('p.id'))
+                         ->where('ts.cid', $cid);
+            });
+        })
+>>>>>>> Stashed changes
         ->select([
             'p.id',
             'p.name',
             'p.description',
             'p.category',
             'p.hscode',
-            // Purchase stock subquery
             DB::raw("(
                 SELECT COALESCE(SUM(pi.quantity), 0)
                 FROM purchases pur
@@ -53,7 +133,6 @@ public function getProductStock($cid)
                 JOIN purchase_items pi ON pur.id = pi.purchase_id
                 WHERE pur.product_id = p.id AND tp.cid = $cid
             ) as purchase_stock"),
-            // Sales stock subquery
             DB::raw("(
                 SELECT COALESCE(SUM(si.quantity), 0)
                 FROM sales s
@@ -61,7 +140,6 @@ public function getProductStock($cid)
                 JOIN sales_items si ON s.id = si.sale_id
                 WHERE s.product_id = p.id AND ts.cid = $cid
             ) as sales_stock"),
-            // Current stock (purchase_stock - sales_stock)
             DB::raw("(
                 SELECT COALESCE(SUM(pi.quantity), 0)
                 FROM purchases pur
@@ -80,6 +158,8 @@ public function getProductStock($cid)
 
     return response()->json($products);
 }
+
+
 public function getMultipleProductStock(Request $request, $cid)
 {
     // Check if the user is logged in
