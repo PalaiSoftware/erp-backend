@@ -38,7 +38,7 @@ public function getProductStock($cid)
 
     // Fetch products with stock calculations
     $products = DB::table('products as p')
-        ->where('p.uid', $uid)
+        // ->where('p.uid', $uid)
         ->select([
             'p.id',
             'p.name',
