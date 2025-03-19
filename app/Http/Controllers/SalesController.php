@@ -401,7 +401,7 @@ class SalesController extends Controller
         // Fetch product details and current stock in one query
         $stocks = DB::table('products as p')
             ->whereIn('p.id', $productIds)
-            ->where('p.uid', $uid)
+            // ->where('p.uid', $uid)
             ->select([
                 'p.id',
                 'p.name',
