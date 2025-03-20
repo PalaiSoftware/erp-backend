@@ -98,9 +98,6 @@ public function getProductStock($cid)
 
     // Fetch products with stock calculations, only for products with transactions for this cid
     $products = DB::table('products as p')
-<<<<<<< Updated upstream
-        // ->where('p.uid', $uid)
-=======
         ->where(function ($query) use ($cid) {
             // Products with purchases for this company
             $query->whereExists(function ($subquery) use ($cid) {
@@ -119,7 +116,6 @@ public function getProductStock($cid)
                          ->where('ts.cid', $cid);
             });
         })
->>>>>>> Stashed changes
         ->select([
             'p.id',
             'p.name',
