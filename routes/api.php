@@ -49,7 +49,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/products/stock/{cid}', [HelperController::class, 'getProductStock']);
     Route::post('/transactions-by-cid', [PurchaseController::class, 'getTransactionsByCid']);
     Route::post('/purchases-by-transaction-id', [PurchaseController::class, 'getPurchaseDetailsByTransaction']);
-
+    Route::get('/sales/company/{cid}', [SalesController::class, 'getAllInvoicesByCompany']);
 });
 Route::get('/units', [HelperController::class, 'index']);
 Route::get('/widget/total-purchases/{cid}', [WidgetController::class, 'getTotalPurchases']);
