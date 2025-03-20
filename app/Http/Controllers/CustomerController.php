@@ -11,101 +11,149 @@ class CustomerController extends Controller
 {
     public function __construct()
     {
-        $this->middleware('auth:sanctum'); // Protect these routes
+        $this->middleware('auth:sanctum');
     }
-
-    /**
-     * Store a newly created or updated customer.
-     *
-     * Only users with a specific role (e.g., admin) are allowed.
-     * If a customer with the same phone exists, it checks the name:
-     * - If the name is different, update the customer name.
-     * - If the name is the same, return a message that the data already exists.
-     */
     public function store(Request $request)
     {
+        
         $user = Auth::user();
 
-        // Only allow users with a specific role (e.g., admin)
+        
         if ($user->rid !== 1) {
             return response()->json(['message' => 'Unauthorized to create a customer'], 403);
         }
 
-        try {
-            // Validate the request (note: email uniqueness removed)
-            $validated = $request->validate([
-                'cid'     => 'required|integer',
-                'name'    => 'required|string|max:255',
-                'email'   => 'nullable|email',
-                'phone'   => 'required|string|max:20', // No unique rule here
-                'address' => 'nullable|string',
-            ]);
-        } catch (ValidationException $e) {
-            // Return JSON response with validation errors and a 422 status code.
-            return response()->json([
-                'message' => 'Validation failed',
-                'errors'  => $e->errors(),
-            ], 422);
-        }
+        
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'nullable|email|',
+            'phone' => 'required|string|max:20',
+            'address' => 'nullable|string',
+            'cid' => 'required|integer',
+        ]);
 
-        // Check if a customer with the given phone already exists
-        $existingCustomer = Customer::where('phone', $validated['phone'])->first();
+        
+        $customer = Customer::create([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'phone' => $validated['phone'],
+            'address' => $validated['address'],
+            'cids' => [$validated['cid']],
+        ]);
 
-        if ($existingCustomer) {
-            // If the names differ, update the customer's name (and optionally other fields)
-            if ($existingCustomer->name !== $validated['name']) {
-                $existingCustomer->update(['name' => $validated['name']]);
+        
+        return response()->json([
+            'message' => 'Customer created successfully',
+            'customer' => $customer
+        ], 201);
+    }
+   
+    public function checkCustomer(Request $request)
+    {
+        
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'phone' => 'required|string|max:20',
+            'cid' => 'required|integer',
+        ]);
+
+        
+        $customer = Customer::where('name', $validated['name'])
+                           ->where('phone', $validated['phone'])
+                           ->first();
+
+        
+        if ($customer) {
+            $cids = $customer->cids ?? [];
+            if (in_array($validated['cid'], $cids)) {
                 return response()->json([
-                    'message'  => 'Customer updated successfully',
-                    'customer' => $existingCustomer,
+                    'message' => 'This customer already exists in your company.'
                 ], 200);
             } else {
-                // If the name is the same, return that the customer already exists
                 return response()->json([
-                    'message'  => 'Customer data already exists',
-                    'customer' => $existingCustomer,
+                    'message' => 'Need to add this customer to your company.'
                 ], 200);
             }
-        } else {
-            // Otherwise, create a new customer record
-            $customer = Customer::create($validated);
-            return response()->json([
-                'message'  => 'Customer created successfully',
-                'customer' => $customer,
-            ], 201);
         }
-    }
 
-    /**
-     * Display all customers based on cid.
-     * If cid is not provided or no customers match, return an error.
-     */
+        
+        $phoneMatch = Customer::where('phone', $validated['phone'])
+                             ->where('name', '!=', $validated['name'])
+                             ->first();
+
+        if ($phoneMatch) {
+            return response()->json([
+                'message' => 'Phone number matches an existing customer but name does not.New customer creat with new name.,'
+            ], 200);
+        }
+
+        
+        return response()->json([
+            'message' => 'Please add this customer as this customer is not present in the customers table.'
+        ], 404);
+    }
+    public function addCustomerToCompany(Request $request)
+    {
+        
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'phone' => 'required|string|max:20',
+            'cid' => 'required|integer',
+        ]);
+
+    
+        $customer = Customer::where('name', $validated['name'])
+                           ->where('phone', $validated['phone'])
+                           ->first();
+
+        
+        if (!$customer) {
+            return response()->json([
+                'message' => 'Customer not found.'
+            ], 404);
+        }
+
+        
+        $cids = $customer->cids ?? [];
+
+        if (in_array($validated['cid'], $cids)) {
+            return response()->json([
+                'message' => 'Customer already exists in your company.'
+            ], 200);
+        }
+
+    
+        $cids[] = $validated['cid'];
+        $customer->cids = $cids;
+        $customer->save();
+
+        return response()->json([
+            'message' => 'Customer added to your company successfully.'
+        ], 200);
+    }
     public function index(Request $request)
     {
+        
         $user = Auth::user();
         if (!$user) {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        try {
-            $request->validate([
-                'cid' => 'required|integer'
-            ]);
-        } catch (ValidationException $e) {
-            return response()->json([
-                'message' => 'Validation failed, cid is required',
-                'errors' => $e->errors(),
-            ], 422);
-        }
+        
+        $validated = $request->validate([
+            'cid' => 'required|integer',
+        ]);
 
-        $cid = $request->input('cid');
-        $customers = Customer::where('cid', $cid)->get();
-
-        if ($customers->isEmpty()) {
-            return response()->json([
-                'message' => 'No customers found for the given cid'
-            ], 404);
-        }
+        
+        $customers = Customer::whereJsonContains('cids', (int)$validated['cid'])
+                            ->select(
+                                'id',
+                                'name',
+                                'email',
+                                'phone',
+                                'address'
+                            )
+                            ->get();
 
         return response()->json([
             'message' => 'Customers retrieved successfully',

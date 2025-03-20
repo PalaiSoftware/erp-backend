@@ -38,6 +38,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/sales', [SalesController::class, 'store']);
     Route::get('/invoices/{sale_id}', [SalesController::class, 'generateInvoice']);
     Route::post('/customers', [CustomerController::class, 'store']);
+    Route::post('/customers/check', [CustomerController::class, 'checkCustomer']);
+    Route::post('/customer/add-to-company', [CustomerController::class, 'addCustomerToCompany']);
     Route::get('/customers', [CustomerController::class, 'index']);
 
     // New route for geting users
