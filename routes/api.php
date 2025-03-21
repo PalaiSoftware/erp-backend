@@ -52,7 +52,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/transactions-by-cid', [PurchaseController::class, 'getTransactionsByCid']);
     Route::post('/purchases-by-transaction-id', [PurchaseController::class, 'getPurchaseDetailsByTransaction']);
     Route::get('/sales/company/{cid}', [SalesController::class, 'getAllInvoicesByCompany']);
+    Route::get('/companies', [CompanyController::class, 'index']);
+    Route::post('/update-recent-company', [CompanyController::class, 'updateRecentCompany']);
+
 });
+
 Route::get('/units', [HelperController::class, 'index']);
 Route::get('/widget/total-purchases/{cid}', [WidgetController::class, 'getTotalPurchases']);
 Route::post('/register', [AuthController::class, 'register']);
