@@ -34,6 +34,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/vendors/add-to-company', [VendorController::class, 'addVendorToCompany']);
     Route::post('/products', [ProductController::class, 'store']); 
     Route::get('/products', [ProductController::class, 'index']);
+    Route::get('/hscode/products', [ProductController::class, 'checkHscodeProduct']);
+    Route::post('/product/add-to-company', [ProductController::class, 'addCompanyToProduct']);
     Route::post('/purchase', [PurchaseController::class, 'store']);
     Route::post('/sales', [SalesController::class, 'store']);
     Route::get('/invoices/{sale_id}', [SalesController::class, 'generateInvoice']);

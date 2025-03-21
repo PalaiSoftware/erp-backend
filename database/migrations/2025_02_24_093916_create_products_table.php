@@ -14,6 +14,7 @@ return new class extends Migration {
             $table->string('category')->nullable();
             $table->string('hscode')->nullable();
             $table->integer('uid');
+            $table->jsonb('cids')->default('[]'); 
             $table->timestamps();
         });
     }
