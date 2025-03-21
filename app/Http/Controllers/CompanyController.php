@@ -6,140 +6,78 @@ use Illuminate\Http\Request;
 use App\Models\Company;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
-
+use App\Models\UidCid;
 
 class CompanyController extends Controller
 {
-    // public function store(Request $request)
-    // {
-    //     // Get the authenticated user
-    //     $user = Auth::user();
-
-    //     // Check if the user has role ID 1 (allowed to create a company)
-    //     if ($user->rid !== 1) {
-    //         return response()->json([
-    //             'message' => 'You are not allowed to create a company'
-    //         ], 403);
-    //     }
-
-    //     // Validate request data
-    //     $request->validate([
-    //         'name' => 'required|string|max:255',
-    //         'address' => 'nullable|string',
-    //         'phone' => 'nullable|string|max:20',
-    //         'gst_no' => 'nullable|string',
-    //         'pan' => 'nullable|string|max:20',
-    //     ]);
-
-    //     // Create the company
-    //     $company = Company::create([
-    //         'user_id' => $user->id, // Owner ID
-    //         'name' => $request->name,
-    //         'address' => $request->address,
-    //         'phone' => $request->phone,
-    //         'gst_no' => $request->gst_no,
-    //         'pan' => $request->pan,
-    //         'cuid' => null, // Can be updated later
-    //     ]);
-
-    //     return response()->json([
-    //         'message' => 'Company created successfully',
-    //         'company' => $company
-    //     ], 201);
-    // }
-    // public function createCompany(Request $request)
-    // {
-    //     $validator = Validator::make($request->all(), [
-    //         'email' => 'required|string|email|exists:users,email', // Ensure user exists
-    //         'company_name' => 'required|string|max:255',
-    //         'company_address' => 'nullable|string',
-    //         'company_phone' => 'nullable|string|max:20',
-    //         'gst_no' => 'nullable|string|max:255',
-    //         'pan' => 'nullable|string|max:20',
-    //     ]);
+    public function index(Request $request){
+        $uid = $request->header('uid');
+        \Log::info('Received uid from header: ' . $uid);
+        if (!$uid) {
+            return response()->json(['message' => 'User ID is required in headers.'], 400);
+        }
     
-    //     if ($validator->fails()) {
-    //         return response()->json(['errors' => $validator->errors()], 422);
-    //     }
+        // Get the authenticated user's rid from the token
+        $user = auth()->user();
     
-    //     \DB::beginTransaction();
-    
-    //     try {
-    //         // Fetch user by email
-    //         $user = User::where('email', $request->email)->first();
-    
-    //         // Check if user has rid == 1
-    //         if ($user->rid != 1) {
-    //             return response()->json(['message' => 'User is not authorized to create a company'], 403);
-    //         }
-    
-    //         // Create a new company linked to this user
-    //         $company = Company::create([
-    //             'name' => $request->company_name,
-    //             'uid' => $user->id,
-    //             'address' => $request->company_address,
-    //             'phone' => $request->company_phone,
-    //             'gst_no' => $request->gst_no,
-    //             'pan' => $request->pan,
-    //             'cuid' => null,
-    //             'blocked' => 0,
-    //         ]);
-    
-    //         \DB::commit();
-    
-    //         return response()->json([
-    //             'message' => 'Company created successfully',
-    //             'company' => $company
-    //         ], 201);
-    
-    //     } catch (\Exception $e) {
-    //         \DB::rollBack();
-    //         return response()->json([
-    //             'message' => 'Company creation failed',
-    //             'error' => $e->getMessage()
-    //         ], 500);
-    //     }
-    // }
-//     public function createCompany(Request $request)
-// {
-//     // Get the authenticated user from token
-//     $user = auth()->user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized. Token invalid or missing.'], 401);
+        }
+        $companies = Company::where('uid', $uid)->get();
 
-//     // Check if the user has `rid == 1` (Admin Role)
-//     if ($user->rid != 1) {
-//         return response()->json(['message' => 'User is not authorized to create a company'], 403);
-//     }
-
-//     // Validate the company data
-//     $validator = Validator::make($request->all(), [
-//         'company_name' => 'required|string|max:255',
-//         'company_address' => 'nullable|string',
-//         'company_phone' => 'nullable|string|max:20',
-//         'gst_no' => 'nullable|string|max:255',
-//         'pan' => 'nullable|string|max:20',
-//     ]);
-
-//     if ($validator->fails()) {
-//         return response()->json(['errors' => $validator->errors()], 422);
-//     }
-
-//     // Create a new company with the authenticated user as `uid`
-//     $company = Company::create([
-//         'name' => $request->company_name,
-//         'uid' => $user->id,  // Assign current user ID
-//         'address' => $request->company_address,
-//         'phone' => $request->company_phone,
-//         'gst_no' => $request->gst_no,
-//         'pan' => $request->pan,
-//         'cuid' => null, // Can be updated later
-//         'blocked' => 0, // Default to not blocked
-//     ]);
-
-//     return response()->json([
-//         'message' => 'Company created successfully',
-//         'company' => $company
-//     ], 201);
-// }
+        return response()->json([
+            'companies' => $companies
+        ]);
+    }
+    public function updateRecentCompany(Request $request)
+    {
+        // Get values from headers
+        $uid = $request->header('uid');
+        $cid = $request->header('cid'); // Get cid from header
+    
+        // Input validation
+        if (!$uid) {
+            return response()->json(['error' => 'User ID is required in headers'], 400);
+        }
+        if (!$cid) {
+            return response()->json(['error' => 'Company ID is required in headers'], 400);
+        }
+    
+        // Authentication check
+        $user = auth()->user();
+        if (!$user) {
+            return response()->json(['error' => 'Unauthorized'], 401);
+        }
+    
+        // Verify company exists
+        $company = Company::find($cid);
+        if (!$company) {
+            return response()->json(['error' => 'Company not found'], 404);
+        }
+    
+        // Optional: Verify user-company association (if needed)
+        // if (!$user->companies->contains($cid)) {
+        //     return response()->json(['error' => 'User not associated with this company'], 403);
+        // }
+    
+        // Update or create entry
+        $entry = UidCid::updateOrCreate(
+            ['uid' => $uid],
+            ['cid' => $cid]
+        );
+    
+        // Logging
+        \Log::info("User $uid updated recent company to $cid", [
+            'old_cid' => $entry->wasRecentlyCreated ? null : $entry->getOriginal('cid'),
+            'new_cid' => $cid
+        ]);
+    
+        return response()->json([
+            'message' => 'Company updated successfully',
+            'uid' => $uid,
+            'cid' => $cid
+        ], 200);
+    }
     // Debugging: Log uid to check if it's received
     public function createCompany(Request $request)
     {
@@ -190,7 +128,21 @@ class CompanyController extends Controller
             'cuid' => null, // Can be updated later
             'blocked' => 0, // Default to not blocked
         ]);
-    
+    // Debug the operation
+    $existing = UidCid::where('uid', $uid)->first();
+    if ($existing) {
+        \Log::info('Before: uid ' . $uid . ' exists with cid ' . $existing->cid);
+    } else {
+        \Log::info('Before: uid ' . $uid . ' not found');
+    }
+
+    UidCid::updateOrCreate(
+        ['uid' => $uid],
+        ['cid' => $company->id]
+    );
+
+    $updated = UidCid::where('uid', $uid)->first();
+    \Log::info('After: uid ' . $uid . ' has cid ' . $updated->cid);
         return response()->json(['message' => 'Company created successfully', 'company' => $company], 201);
     }
     

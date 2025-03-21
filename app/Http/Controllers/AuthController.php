@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Validator;
 use App\Models\User;
 use App\Models\Company;
 use Illuminate\Support\Facades\Auth; 
-
+use App\Models\UidCid;
 class AuthController extends Controller
 {
 
@@ -65,6 +65,22 @@ public function register(Request $request)
         // Update user with company ID
         $user->cid = $company->id;
         $user->save();
+        // Debug the operation
+        $uid=$user->id;
+        $existing = UidCid::where('uid', $uid)->first();
+        if ($existing) {
+            \Log::info('Before: uid ' . $uid . ' exists with cid ' . $existing->cid);
+        } else {
+            \Log::info('Before: uid ' . $uid . ' not found');
+        }
+
+    UidCid::updateOrCreate(
+        ['uid' => $uid],
+        ['cid' => $company->id]
+    );
+
+    $updated = UidCid::where('uid', $uid)->first();
+    \Log::info('After: uid ' . $uid . ' has cid ' . $updated->cid);
 
         \DB::commit(); // Commit transaction
 
@@ -170,8 +186,13 @@ public function login(Request $request)
     if ($user->blocked) {
         return response()->json(['message' => 'User is blocked'], 403);
     }
+    $uid=$user->id;
+    // iwill chekc 
+    $uidCidEntry = UidCid::where('uid', $uid)->first();
+    $cid = $uidCidEntry ? $uidCidEntry->cid : $user->cid;
 
-    $company = Company::find($user->cid);
+
+    $company = Company::find($cid);
     // if ($company && $company->blocked) {
     //     return response()->json(['message' => 'Company is blocked'], 403);
     // }
