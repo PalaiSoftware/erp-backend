@@ -12,11 +12,11 @@ return new class extends Migration {
     {
         Schema::create('customers', function (Blueprint $table) {
             $table->id();                           // Auto-increment serial primary key
-            $table->unsignedBigInteger('cid');        // Company ID
-            $table->string('name');                   // Customer name
-            $table->string('email')->nullable();      // Email (optional)
-            $table->string('phone', 20);              // Phone number
-            $table->text('address')->nullable();      // Address (optional)
+            $table->json('cids')->default('[]');    // Array of company IDs
+            $table->string('name');                 // Customer name
+            $table->string('email')->nullable();    // Email (optional)
+            $table->string('phone', 20);            // Phone number
+            $table->text('address')->nullable();    // Address (optional)
             $table->timestamp('created_at')->useCurrent();
         });
     }
