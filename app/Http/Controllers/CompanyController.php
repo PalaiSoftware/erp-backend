@@ -48,7 +48,8 @@ class CompanyController extends Controller
         if (!$user) {
             return response()->json(['error' => 'Unauthorized'], 401);
         }
-    
+        $previousLogin = $user->updated_at;
+        $user->touch();
         // Verify company exists
         $company = Company::find($cid);
         if (!$company) {
@@ -74,6 +75,7 @@ class CompanyController extends Controller
     
         return response()->json([
             'message' => 'Company updated successfully',
+            'previous_login' => $previousLogin, // Include the previous login time
             'uid' => $uid,
             'cid' => $cid
         ], 200);
