@@ -15,5 +15,10 @@ class Product extends Model
         'category',
         'hscode',
         'uid',
+        'cids',
     ];
+    protected $casts = [
+        'cids' => 'array',
+    ];
+
 }
