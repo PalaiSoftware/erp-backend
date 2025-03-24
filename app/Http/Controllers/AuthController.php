@@ -187,6 +187,11 @@ public function login(Request $request)
         return response()->json(['message' => 'User is blocked'], 403);
     }
     $uid=$user->id;
+
+    $previousLogin = $user->updated_at;
+
+    // Update the updated_at field to the current timestamp
+    $user->touch(); // This sets updated_at to the current time
     // iwill chekc 
     $uidCidEntry = UidCid::where('uid', $uid)->first();
     $cid = $uidCidEntry ? $uidCidEntry->cid : $user->cid;
@@ -205,6 +210,7 @@ public function login(Request $request)
         'user' => $user,
         'token' => $token,
         'company' => $company,
+        'previous_login' => $previousLogin, // Include the previous login time
     ]);
 }
 
