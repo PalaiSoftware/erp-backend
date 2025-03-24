@@ -243,4 +243,30 @@ public function index()
     // Return as JSON response
     return response()->json($units);
 }
+public function addUnit(Request $request)
+    {
+        // Validate the request data
+        $request->validate([
+            'name' => 'required|string|max:50',
+        ]);
+
+        try {
+            // Create a new unit
+            $unit = Unit::create([
+                'name' => $request->name,
+            ]);
+
+            // Return success response
+            return response()->json([
+                'message' => 'Unit created successfully',
+                'unit' => $unit,
+            ], 201);
+        } catch (\Exception $e) {
+            // Return error response if an exception occurs
+            return response()->json([
+                'message' => 'Failed to create unit',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }

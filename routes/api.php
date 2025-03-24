@@ -60,6 +60,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 });
 
 Route::get('/units', [HelperController::class, 'index']);
+Route::post('/add-unit', [HelperController::class, 'addUnit']);
 Route::get('/widget/total-purchases/{cid}', [WidgetController::class, 'getTotalPurchases']);
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
