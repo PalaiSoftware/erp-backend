@@ -20,7 +20,7 @@ public function register(Request $request)
         'mobile' => 'required|string|max:255|unique:users',
         'country' => 'required|string|max:255',
         'password' => 'required|string|min:6',
-        'rid' => 'required|integer|between:1,6', // Role ID between 1 and 6
+        'rid' => 'required|integer|between:5,10', // Role ID between 5 and 10
         'company_name' => 'required|string|max:255',
         'company_address' => 'nullable|string',
         'company_phone' => 'nullable|string|max:20',
@@ -102,7 +102,7 @@ public function newuser(Request $request)
     $user = Auth::user();
     
     // Check if user has permission to create new users based on their role
-    if (!in_array($user->rid, [1, 2, 3, 4])) {
+    if (!in_array($user->rid, [5, 6, 7, 8])) {
         return response()->json([
             'message' => 'You are not allowed to create a new user for your company'
         ], 403);
@@ -114,7 +114,7 @@ public function newuser(Request $request)
         'mobile' => 'required|string|max:255|unique:users',
         'country' => 'required|string|max:255',
         'password' => 'required|string|min:6',
-        'rid' => 'required|integer|between:1,6',
+        'rid' => 'required|integer|between:6,10',
     ]);
 
     if ($validator->fails()) {
@@ -129,24 +129,7 @@ public function newuser(Request $request)
     }
 
     // Define allowed role IDs based on current user's rid
-    $allowedRoles = [];
-    switch ($user->rid) {
-        case 1:
-            $allowedRoles = [2, 3, 4, 5, 6];
-            break;
-        case 2:
-            $allowedRoles = [3, 4, 5,6];
-            break;
-        case 3:
-            $allowedRoles = [4, 5,6];
-            break;
-        case 4:
-            $allowedRoles = [5,6];
-            break;
-        case 5:
-            $allowedRoles = [];
-            break;
-    }
+    $allowedRoles = range($user->rid + 1, 10);
 
     // Check if the requested rid is allowed for this user
     if (!in_array($request->rid, $allowedRoles)) {
@@ -155,7 +138,7 @@ public function newuser(Request $request)
         ], 403);
     }
 
-    // Create the new user with `cid`
+    // Create the new user with cid
     $newUser = User::create([
         'name' => $request->name,
         'email' => $request->email,
@@ -250,8 +233,8 @@ public function getUsersByRole(Request $request)
     // Define the role hierarchy logic
     $currentRid = $currentUser->rid;
 
-    // Check if current user's rid is 1, 2, 3, or 4
-    if (!in_array($currentRid, [1, 2, 3, 4])) {
+    // Check if current user's rid is 5, 6, 7, or 8
+    if (!in_array($currentRid, [5, 6, 7, 8])) {
         return response()->json([
             'message' => 'You are not authorized to view users with lower roles',
             'users' => []
@@ -287,7 +270,7 @@ public function userBlockUnblock(Request $request)
     }
 
     // Check if current user's rid is 1, 2, 3, or 4
-    if (!in_array($currentUser->rid, [1, 2, 3, 4])) {
+    if (!in_array($currentUser->rid, [5, 6, 7, 8])) {
         return response()->json([
             'message' => 'You are not authorized to block/unblock users'
         ], 403);
@@ -346,8 +329,8 @@ public function UserPromoteDemote(Request $request)
         return response()->json(['message' => 'Unauthorized'], 401);
     }
 
-    // Check if current user's rid is 1, 2, 3, or 4 (only these can promote/demote)
-    if (!in_array($currentUser->rid, [1, 2, 3, 4])) {
+    // Check if current user's rid is 5, 6, 7, or 8 (only these can promote/demote)
+    if (!in_array($currentUser->rid, [5, 6, 7, 8])) {
         return response()->json([
             'message' => 'You are not authorized to promote or demote users'
         ], 403);

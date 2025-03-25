@@ -82,12 +82,16 @@ class HelperController extends Controller
 // }
 public function getProductStock($cid)
 {
-    // Check if user is authenticated
-    $user = Auth::user();
-    if (!$user) {
+    // Get the authenticated user
+     $user = Auth::user();
+     if (!$user) {
         return response()->json(['message' => 'Unauthorized'], 401);
     }
 
+  // Restrict access to users with rid between 5 and 10 inclusive
+   if ($user->rid < 5 || $user->rid > 10) {
+    return response()->json(['message' => 'Forbidden'], 403);
+   }
     $uid = Auth::id();
 
     // Validate and cast cid to integer
