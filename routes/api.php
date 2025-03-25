@@ -56,6 +56,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/sales/company/{cid}', [SalesController::class, 'getAllInvoicesByCompany']);
     Route::get('/companies', [CompanyController::class, 'index']);
     Route::post('/update-recent-company', [CompanyController::class, 'updateRecentCompany']);
+    Route::get('/get-all-companies', [CompanyController::class, 'getAllCompanies']);
+    Route::post('/companies/toggle-block', [CompanyController::class, 'toggleBlockCompany']);
 
 });
 

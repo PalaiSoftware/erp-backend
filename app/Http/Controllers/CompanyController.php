@@ -23,12 +23,52 @@ class CompanyController extends Controller
         if (!$user) {
             return response()->json(['message' => 'Unauthorized. Token invalid or missing.'], 401);
         }
-        $companies = Company::where('uid', $uid)->get();
-
+        // $companies = Company::where('uid', $uid)->get();
+        $companies = Company::where('uid', $uid)->where('blocked', 0)->get();
         return response()->json([
             'companies' => $companies
         ]);
     }
+    public function getAllCompanies(Request $request)
+        {
+            $user = Auth::user();
+
+            if (!$user) {
+                return response()->json(['message' => 'Unauthorized. Token invalid or missing.'], 401);
+            }
+
+            $companies = Company::all();
+
+            return response()->json([
+                'companies' => $companies
+            ]);
+        }
+
+        public function toggleBlockCompany(Request $request)
+        {
+            // Get authenticated user
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json(['message' => 'Unauthorized. Token invalid or missing.'], 401);
+            }
+        
+            // Validate and get cid from query parameters
+            $validated = $request->validate([
+                'cid' => 'required|integer|exists:companies,id'
+            ]);
+            $cid = $validated['cid'];
+        
+            // Find company and toggle status
+            $company = Company::findOrFail($cid);
+            $company->blocked = 1 - $company->blocked;
+            $company->save();
+        
+            return response()->json([
+                'message' => 'Blocked status toggled successfully',
+                'company' => $company,
+                'new_status' => (bool)$company->blocked
+            ]);
+        }
     public function updateRecentCompany(Request $request)
     {
         // Get values from headers
