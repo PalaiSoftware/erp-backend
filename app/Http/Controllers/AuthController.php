@@ -186,23 +186,46 @@ public function login(Request $request)
     if ($user->blocked) {
         return response()->json(['message' => 'User is blocked'], 403);
     }
-    $uid=$user->id;
 
+    $uid = $user->id;
     $previousLogin = $user->updated_at;
 
-    // Update the updated_at field to the current timestamp
-    $user->touch(); // This sets updated_at to the current time
-    // iwill chekc 
+    // $user->touch(); // Update last login time
+
+    // Get initial CID (prioritize uid_cid over user's default cid)
     $uidCidEntry = UidCid::where('uid', $uid)->first();
-    $cid = $uidCidEntry ? $uidCidEntry->cid : $user->cid;
+    $cid = $uidCidEntry?->cid ?? $user->cid;
 
-
+    // Check company status
     $company = Company::find($cid);
-    // if ($company && $company->blocked) {
-    //     return response()->json(['message' => 'Company is blocked'], 403);
-    // }
+    if (!$company) {
+        return response()->json(['message' => 'Company not found'], 404);
+    }
 
-    // Generate Token
+    // Main logic: Check if initial company is blocked
+
+    if ($company->blocked) {
+        // Get the first unblocked company associated with the user
+        $availableCompany = Company::where('uid', $uid)
+            ->where('blocked', 0)
+            ->first();
+    
+        if (!$availableCompany) {
+            return response()->json(['message' => 'All associated companies are blocked'], 403);
+        }
+    
+        // Update uid_cid with the unblocked company
+        $uidCidEntry = UidCid::firstOrNew(['uid' => $uid]);
+        $uidCidEntry->cid = $availableCompany->id;
+        $uidCidEntry->save();
+    
+        // Update company reference
+        $cid = $availableCompany->id;
+        $company = $availableCompany;
+    }
+    // Generate token
+    $user->touch();
+
     $token = $user->createToken('auth_token')->plainTextToken;
 
     return response()->json([
@@ -210,7 +233,7 @@ public function login(Request $request)
         'user' => $user,
         'token' => $token,
         'company' => $company,
-        'previous_login' => $previousLogin, // Include the previous login time
+        'previous_login' => $user->updated_at,
     ]);
 }
 
