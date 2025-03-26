@@ -9,102 +9,16 @@ use App\Models\User;
 use App\Models\Company;
 use Illuminate\Support\Facades\Auth; 
 use App\Models\UidCid;
-class AuthController extends Controller
+class LmAuthController extends Controller
 {
-
-public function register(Request $request)
-{
-    $validator = Validator::make($request->all(), [
-        'name' => 'required|string|max:255',
-        'email' => 'required|string|email|max:255|unique:users',
-        'mobile' => 'required|string|max:255|unique:users',
-        'country' => 'required|string|max:255',
-        'password' => 'required|string|min:6',
-        'rid' => 'required|integer|between:5,10', // Role ID between 5 and 10
-        'company_name' => 'required|string|max:255',
-        'company_address' => 'nullable|string',
-        'company_phone' => 'nullable|string|max:20',
-        'gst_no' => 'nullable|string|max:255',
-        'pan' => 'nullable|string|max:20',
-    ]);
-
-    if ($validator->fails()) {
-        return response()->json(['errors' => $validator->errors()], 422);
-    }
-
-    \DB::beginTransaction(); // Start transaction
-
-    try {
-        // Create user first
-        $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'mobile' => $request->mobile,
-            'country' => $request->country,
-            'password' => Hash::make($request->password),
-            'rid' => $request->rid,
-            'blocked' => 0,
-        ]);
-
-        if (!$user) {
-            throw new \Exception("User creation failed.");
-        }
-
-        // Ensure $user->id exists before creating company
-        $company = new Company();
-        $company->name = $request->company_name;
-        $company->uid = $user->id; // Explicitly setting uid
-        $company->address = $request->company_address;
-        $company->phone = $request->company_phone;
-        $company->gst_no = $request->gst_no;
-        $company->pan = $request->pan;
-        $company->cuid = null;
-        $company->blocked = 0;
-        $company->save(); // Save instead of create()
-
-        // Update user with company ID
-        $user->cid = $company->id;
-        $user->save();
-        // Debug the operation
-        $uid=$user->id;
-        $existing = UidCid::where('uid', $uid)->first();
-        if ($existing) {
-            \Log::info('Before: uid ' . $uid . ' exists with cid ' . $existing->cid);
-        } else {
-            \Log::info('Before: uid ' . $uid . ' not found');
-        }
-
-    UidCid::updateOrCreate(
-        ['uid' => $uid],
-        ['cid' => $company->id]
-    );
-
-    $updated = UidCid::where('uid', $uid)->first();
-    \Log::info('After: uid ' . $uid . ' has cid ' . $updated->cid);
-
-        \DB::commit(); // Commit transaction
-
-        return response()->json([
-            'message' => 'User and company registered successfully',
-            'user' => $user,
-            'company' => $company
-        ], 201);
-    } catch (\Exception $e) {
-        \DB::rollBack(); // Rollback transaction on failure
-        return response()->json([
-            'message' => 'Registration failed',
-            'error' => $e->getMessage()
-        ], 500);
-    }
-}
-public function newuser(Request $request)
+public function Lmnewuser(Request $request)
 {
     $user = Auth::user();
     
     // Check if user has permission to create new users based on their role
-    if (!in_array($user->rid, [5, 6, 7, 8])) {
+    if (!in_array($user->rid, [1, 2, 3])) {
         return response()->json([
-            'message' => 'You are not allowed to create a new user for your company'
+            'message' => 'You are not allowed to create a lm new user'
         ], 403);
     }
 
@@ -114,7 +28,7 @@ public function newuser(Request $request)
         'mobile' => 'required|string|max:255|unique:users',
         'country' => 'required|string|max:255',
         'password' => 'required|string|min:6',
-        'rid' => 'required|integer|between:6,10',
+        'rid' => 'required|integer|between:2,4',
     ]);
 
     if ($validator->fails()) {
@@ -129,12 +43,12 @@ public function newuser(Request $request)
     }
 
     // Define allowed role IDs based on current user's rid
-    $allowedRoles = range($user->rid + 1, 10);
+    $allowedRoles = range($user->rid + 1, 4);
 
     // Check if the requested rid is allowed for this user
     if (!in_array($request->rid, $allowedRoles)) {
         return response()->json([
-            'message' => 'You are not allowed to create a user with this role ID'
+            'message' => 'You are not allowed to create a lm user with this role ID'
         ], 403);
     }
 
@@ -150,78 +64,10 @@ public function newuser(Request $request)
         'blocked' => 0,
     ]);
 
-    return response()->json(['message' => 'User registered successfully'], 201);
+    return response()->json(['message' => ' Lm User registered successfully'], 201);
 }
 
-public function login(Request $request)
-{
-    $credentials = $request->validate([
-        'email' => 'required|string|email',
-        'password' => 'required|string',
-    ]);
-
-    $user = User::where('email', $credentials['email'])->first();
-
-    if (!$user || !Hash::check($credentials['password'], $user->password)) {
-        return response()->json(['message' => 'Invalid credentials'], 401);
-    }
-
-    if ($user->blocked) {
-        return response()->json(['message' => 'User is blocked'], 403);
-    }
-
-    $uid = $user->id;
-    $previousLogin = $user->updated_at;
-
-    // $user->touch(); // Update last login time
-
-    // Get initial CID (prioritize uid_cid over user's default cid)
-    $uidCidEntry = UidCid::where('uid', $uid)->first();
-    $cid = $uidCidEntry?->cid ?? $user->cid;
-
-    // Check company status
-    $company = Company::find($cid);
-    if (!$company) {
-        return response()->json(['message' => 'Company not found'], 404);
-    }
-
-    // Main logic: Check if initial company is blocked
-
-    if ($company->blocked) {
-        // Get the first unblocked company associated with the user
-        $availableCompany = Company::where('uid', $uid)
-            ->where('blocked', 0)
-            ->first();
-    
-        if (!$availableCompany) {
-            return response()->json(['message' => 'All associated companies are blocked'], 403);
-        }
-    
-        // Update uid_cid with the unblocked company
-        $uidCidEntry = UidCid::firstOrNew(['uid' => $uid]);
-        $uidCidEntry->cid = $availableCompany->id;
-        $uidCidEntry->save();
-    
-        // Update company reference
-        $cid = $availableCompany->id;
-        $company = $availableCompany;
-    }
-    // Generate token
-    $user->touch();
-
-    $token = $user->createToken('auth_token')->plainTextToken;
-
-    return response()->json([
-        'message' => 'Login successful',
-        'user' => $user,
-        'token' => $token,
-        'company' => $company,
-        'previous_login' => $user->updated_at,
-    ]);
-}
-
-// Add the new function here for get UsersByRole
-public function getUsersByRole(Request $request)
+public function getLmUsersByRole(Request $request)
 {
     // Get the authenticated user
     $currentUser = Auth::user();
@@ -233,10 +79,10 @@ public function getUsersByRole(Request $request)
     // Define the role hierarchy logic
     $currentRid = $currentUser->rid;
 
-    // Check if current user's rid is 5, 6, 7, or 8
-    if (!in_array($currentRid, [5, 6, 7, 8])) {
+    
+    if (!in_array($currentRid, [1, 2, 3])) {
         return response()->json([
-            'message' => 'You are not authorized to view users with lower roles',
+            'message' => 'You are not authorized to view lm users with lower roles',
             'users' => []
         ], 403);
     }
@@ -256,11 +102,11 @@ public function getUsersByRole(Request $request)
     }
 
     return response()->json([
-        'message' => 'Users retrieved successfully (both blocked and unblocked)',
+        'message' => 'Lm Users retrieved successfully (both blocked and unblocked)',
         'users' => $users
     ], 200);
 }
-public function userBlockUnblock(Request $request)
+public function LmUserBlockUnblock(Request $request)
 {
     // Get the authenticated user
     $currentUser = Auth::user();
@@ -269,8 +115,7 @@ public function userBlockUnblock(Request $request)
         return response()->json(['message' => 'Unauthorized'], 401);
     }
 
-    // Check if current user's rid is 1, 2, 3, or 4
-    if (!in_array($currentUser->rid, [5, 6, 7, 8])) {
+    if (!in_array($currentUser->rid, [1, 2,3])) {
         return response()->json([
             'message' => 'You are not authorized to block/unblock users'
         ], 403);
@@ -320,7 +165,7 @@ public function userBlockUnblock(Request $request)
     ], 200);
 }
 
-public function UserPromoteDemote(Request $request)
+public function LmUserPromoteDemote(Request $request)
 {
     // Get the authenticated user
     $currentUser = Auth::user();
@@ -330,18 +175,18 @@ public function UserPromoteDemote(Request $request)
     }
 
     // Check if current user's rid is 5, 6, 7, or 8 (only these can promote/demote)
-    if (!in_array($currentUser->rid, [5, 6, 7, 8])) {
+    if (!in_array($currentUser->rid, [1, 2,])) {
         return response()->json([
-            'message' => 'You are not authorized to promote or demote users'
+            'message' => 'You are not authorized to promote or demote lm users'
         ], 403);
     }
+
     $validator = Validator::make($request->all(), [
         'user_id' => 'required|integer|exists:users,id',
-        'rid' => 'required|integer|min:5|max:10'
+        'rid' => 'required|integer|min:1|max:4'
     ], [
-        'rid.max' => 'Cannot demote beyond the lowest role (rid=10).'
+        'rid.max' => 'Cannot demote beyond the lowest role (rid=4).'
     ]);
-
     if ($validator->fails()) {
         return response()->json(['errors' => $validator->errors()], 422);
     }
@@ -363,12 +208,12 @@ public function UserPromoteDemote(Request $request)
     // Prevent modifying users with equal or higher roles
     if ($targetUser->rid < $minRidToModify) {
         return response()->json([
-            'message' => 'You cannot modify users with equal or higher roles'
+            'message' => 'You cannot modify lm users with equal or higher roles'
         ], 403);
     }
 
     // Prevent promoting to equal or higher roles than current user (except for rid=1)
-    if ($currentUser->rid > 5 && $request->rid <= $currentUser->rid) {
+    if ($currentUser->rid > 1 && $request->rid <= $currentUser->rid) {
         return response()->json([
             'message' => 'You cannot set a role equal to or higher than yours'
         ], 400);

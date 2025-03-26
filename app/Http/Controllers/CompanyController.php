@@ -41,6 +41,10 @@ class CompanyController extends Controller
                 return response()->json(['message' => 'Unauthorized. Token invalid or missing.'], 401);
             }
 
+            if (!in_array($user->rid, [1,2,3,4])) {
+               return response()->json(['message' => 'Unauthorized to get all companies'], 403);
+            }
+
             $companies = Company::all();
 
             return response()->json([
@@ -55,6 +59,9 @@ class CompanyController extends Controller
             if (!$user) {
                 return response()->json(['message' => 'Unauthorized. Token invalid or missing.'], 401);
             }
+            if (!in_array($user->rid, [1,2])) {
+                return response()->json(['message' => 'Unauthorized to block  companies'], 403);
+             }
         
             // Validate and get cid from query parameters
             $validated = $request->validate([
