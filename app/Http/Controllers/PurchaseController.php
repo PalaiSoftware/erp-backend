@@ -255,4 +255,39 @@ class PurchaseController extends Controller
             ]
         ], 200);
     }
+
+    // In your controller (e.g., PurchaseController.php)
+public function getPurchaseWidget(Request $request)
+{
+    // Authentication check
+    $user = Auth::user();
+    if (!$user) {
+        return response()->json(['message' => 'Unauthorized'], 401);
+    }
+
+    // Validate request data
+    $validated = $request->validate([
+        'cid' => 'required|integer|exists:companies,id'
+    ]);
+    $cid = $validated['cid'];
+
+    // Get purchase count
+    $purchaseCount = TransactionPurchase::where('cid', $cid)->count();
+    $vendorCount = PurchaseItem::join('purchases', 'purchase_items.purchase_id', '=', 'purchases.id')
+        ->join('transaction_purchases', 'purchases.transaction_id', '=', 'transaction_purchases.id')
+        ->where('transaction_purchases.cid', $cid)
+        ->distinct('purchase_items.vendor_id')
+        ->count('purchase_items.vendor_id');
+    $totalAmount = PurchaseItem::join('purchases', 'purchase_items.purchase_id', '=', 'purchases.id')
+        ->join('transaction_purchases', 'purchases.transaction_id', '=', 'transaction_purchases.id')
+        ->where('transaction_purchases.cid', $cid)
+        ->sum(DB::raw('purchase_items.quantity * purchase_items.per_item_cost'));
+    return response()->json([
+        // 'cid' => $cid,
+        'total_purchase_order' => $purchaseCount,
+        'total_vendor'=>$vendorCount,
+        'total_purchase_amount' => $totalAmount
+
+    ], 200);
+}
 }
