@@ -11,6 +11,8 @@ use App\Http\Controllers\SalesController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\WidgetController;
 use App\Http\Controllers\HelperController;
+use App\Http\Controllers\LmAuthController;
+
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -61,6 +63,10 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/total-sale/{cid}', [SalesController::class, 'getTotalSaleAmount']);
     Route::post('/purchase-widget', [PurchaseController::class, 'getPurchaseWidget']);
     Route::post('/customer-stats', [SalesController::class, 'getCustomerStats']);
+    Route::post('/lm-newuser', [LmAuthController::class, 'Lmnewuser']);
+    Route::get('/lm-users', [LmAuthController::class, 'getLmUsersByRole']);
+    Route::post('/lm-user-block-unblock', [LmAuthController::class, 'LmUserBlockUnblock']);
+    Route::post('/lm-user-promote-demote', [LmAuthController::class, 'LmUserPromoteDemote']);
 
 });
 
