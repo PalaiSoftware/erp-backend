@@ -23,6 +23,10 @@ class CompanyController extends Controller
         if (!$user) {
             return response()->json(['message' => 'Unauthorized. Token invalid or missing.'], 401);
         }
+        // Restrict access to users with rid=5
+        if ($user->rid !== 5) {
+            return response()->json(['message' => 'Forbidden. Only users with role ID 5 can access this resource.'], 403);
+        }
         // $companies = Company::where('uid', $uid)->get();
         $companies = Company::where('uid', $uid)->where('blocked', 0)->get();
         return response()->json([
@@ -141,9 +145,9 @@ class CompanyController extends Controller
             return response()->json(['message' => 'Unauthorized. Token invalid or missing.'], 401);
         }
     
-        // Check if the user has rid == 1
-        if ($user->rid !== 1) {
-            return response()->json(['message' => 'Unauthorized. Only role ID 1 can create companies.'], 403);
+        // Check if the user has rid == 5
+        if ($user->rid !== 5) {
+            return response()->json(['message' => 'Unauthorized. Only role ID 5 can create companies.'], 403);
         }
     
         // Validate request data

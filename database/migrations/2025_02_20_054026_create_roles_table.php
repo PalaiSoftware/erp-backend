@@ -15,12 +15,16 @@ return new class extends Migration {
 
         // Insert predefined roles
         DB::table('roles')->insert([
+            ['role' => 'Sudo Superuser'],
+            ['role' => 'Sudo Moderator'],
+            ['role' => 'Sudo Trusted'],
+            ['role' => 'Sudo Authenticated'],
+            ['role' => 'Superuser'],
             ['role' => 'Admin'],
             ['role' => 'Moderator'],
             ['role' => 'Trusted'],
             ['role' => 'Authenticated'],
             ['role' => 'Anonymous'],
-            ['role' => 'Superuser']
         ]);
     }
 

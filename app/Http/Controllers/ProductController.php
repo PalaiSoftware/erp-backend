@@ -11,15 +11,18 @@ class ProductController extends Controller
 {
     public function store(Request $request)
     {
-        $user = Auth::user();
-
-        
-        if ($user->rid !== 1) {
-            return response()->json([
-                'message' => 'You are not allowed to create products'
-            ], 403);
-        }
-
+         // Get the authenticated user
+    $user = Auth::user();
+    
+    // Check if user is authenticated
+    if (!$user) {
+        return response()->json(['message' => 'Unauthenticated'], 401);
+    }
+    
+    // Restrict to rid 5, 6, 7, or 8 only
+    if (!in_array($user->rid, [5, 6, 7, 8])) {
+        return response()->json(['message' => 'Unauthorized to add product to company'], 403);
+    }
         
         $validatedData = $request->validate([
             'products' => 'required|array', 
@@ -55,12 +58,16 @@ class ProductController extends Controller
     public function index(Request $request)
     {
         
-        $user = Auth::user();
-        if (!$user) {
-            return response()->json(['message' => 'Unauthorized'], 401);
-        }
+    // Get the authenticated user
+    $user = Auth::user();
+    if (!$user) {
+        return response()->json(['message' => 'Unauthorized'], 401);
+    }
 
-        
+    // Restrict access to users with rid between 5 and 10 inclusive
+    if ($user->rid < 5 || $user->rid > 10) {
+        return response()->json(['message' => 'Forbidden'], 403);
+    }
         $validated = $request->validate([
             'cid' => 'required|integer',
         ]);
@@ -81,6 +88,18 @@ class ProductController extends Controller
     }
     public function checkHscodeProduct(Request $request)
     {
+    // Get the authenticated user
+    $user = Auth::user();
+    
+    // Check if user is authenticated
+    if (!$user) {
+        return response()->json(['message' => 'Unauthenticated'], 401);
+    }
+    
+    // Restrict to rid 5, 6, 7, or 8 only
+    if (!in_array($user->rid, [5, 6, 7, 8])) {
+        return response()->json(['message' => 'Unauthorized to check product'], 403);
+    }
         
         $user = Auth::user();
         if (!$user) {
@@ -115,6 +134,18 @@ class ProductController extends Controller
     }
     public function addCompanyToProduct(Request $request)
     {
+     // Get the authenticated user
+    $user = Auth::user();
+    
+    // Check if user is authenticated
+    if (!$user) {
+        return response()->json(['message' => 'Unauthenticated'], 401);
+    }
+    
+    // Restrict to rid 5, 6, 7, or 8 only
+    if (!in_array($user->rid, [5, 6, 7, 8])) {
+        return response()->json(['message' => 'Unauthorized to add this product to company'], 403);
+    }
         
         $validated = $request->validate([
             'product_id' => 'required|integer|exists:products,id', 

@@ -22,11 +22,19 @@ class SalesController extends Controller
     {
         Log::info('API endpoint reached', ['request' => $request->all()]);
     
-        $user = Auth::user();
-        if (!$user) {
-            Log::warning('User not authenticated');
-            return response()->json(['message' => 'Unauthorized'], 401);
+        // Get the authenticated user
+       $user = Auth::user();
+    
+       // Check if user is authenticated
+       if (!$user) {
+          return response()->json(['message' => 'Unauthenticated'], 401);
         }
+
+        // Restrict to rid 5, 6, 7,8 or 9 only
+        if (!in_array($user->rid, [5, 6, 7,8,9])) {
+           return response()->json(['message' => 'Unauthorized to sale product'], 403);
+        }
+    
     
         try {
             $request->validate([
@@ -165,10 +173,16 @@ class SalesController extends Controller
 {
     Log::info("Generating invoice for transaction_id: {$transactionId}");
 
-    $user = Auth::user();
-    if (!$user) {
-        return response()->json(['message' => 'Unauthorized'], 401);
-    }
+      // Get the authenticated user
+       $user = Auth::user();
+      if (!$user) {
+           return response()->json(['message' => 'Unauthorized'], 401);
+       }
+
+   // Restrict access to users with rid between 5 and 10 inclusive
+   if ($user->rid < 5 || $user->rid > 10) {
+       return response()->json(['message' => 'Forbidden'], 403);
+   }
 
     try {
         $transaction = TransactionSales::findOrFail($transactionId);
@@ -280,10 +294,16 @@ private function getInvoiceData($transactionId)
 
 public function getAllInvoicesByCompany($cid)
 {
-    $user = Auth::user();
-    if (!$user) {
+     // Get the authenticated user
+     $user = Auth::user();
+     if (!$user) {
         return response()->json(['message' => 'Unauthorized'], 401);
     }
+
+  // Restrict access to users with rid between 5 and 10 inclusive
+   if ($user->rid < 5 || $user->rid > 10) {
+    return response()->json(['message' => 'Forbidden'], 403);
+   }
 
     try {
         $transactionIds = TransactionSales::where('cid', $cid)->pluck('id')->toArray();

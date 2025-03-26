@@ -14,11 +14,19 @@ class PurchaseController extends Controller
 {
     public function store(Request $request)
     {
-        $user = Auth::user();
-        if (!$user) {
-            Log::warning('User not authenticated');
-            return response()->json(['message' => 'Unauthorized'], 401);
+       // Get the authenticated user
+       $user = Auth::user();
+    
+       // Check if user is authenticated
+       if (!$user) {
+          return response()->json(['message' => 'Unauthenticated'], 401);
         }
+
+        // Restrict to rid 5, 6, 7
+        if (!in_array($user->rid, [5, 6, 7])) {
+           return response()->json(['message' => 'Unauthorized to purchase product'], 403);
+        }
+    
 
         // Log the incoming request before validation
         Log::info('Incoming purchase request', ['request_data' => $request->all()]);
@@ -112,11 +120,16 @@ class PurchaseController extends Controller
     }
     public function getTransactionsByCid(Request $request)
     {
-        $user = Auth::user();
-        if (!$user) {
-            Log::warning('User not authenticated');
+         // Get the authenticated user
+         $user = Auth::user();
+         if (!$user) {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
+
+      // Restrict access to users with rid between 5 and 10 inclusive
+       if ($user->rid < 5 || $user->rid > 10) {
+        return response()->json(['message' => 'Forbidden'], 403);
+       }
 
         try {
             $request->validate([
@@ -169,11 +182,16 @@ class PurchaseController extends Controller
 
     public function getPurchaseDetailsByTransaction(Request $request)
     {
+        // Get the authenticated user
         $user = Auth::user();
         if (!$user) {
-            Log::warning('User not authenticated');
-            return response()->json(['message' => 'Unauthorized'], 401);
-        }
+           return response()->json(['message' => 'Unauthorized'], 401);
+       }
+
+     // Restrict access to users with rid between 5 and 10 inclusive
+      if ($user->rid < 5 || $user->rid > 10) {
+       return response()->json(['message' => 'Forbidden'], 403);
+      }
 
         try {
             $request->validate([

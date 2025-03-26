@@ -16,9 +16,15 @@ class VendorController extends Controller
     {
         $user = Auth::user();
 
-        if ($user->rid !== 1) {
-            return response()->json(['message' => 'Unauthorized to create a vendor'], 403);
-        }
+    // Check if the user is authenticated
+    if (!$user) {
+        return response()->json(['message' => 'Unauthenticated'], 401);
+    }
+
+    // Check if the user's rid is one of 5, 6, 7, or 8
+    if (!in_array($user->rid, [5, 6, 7, 8])) {
+        return response()->json(['message' => 'Unauthorized to create a vendor'], 403);
+    }
 
     $validated = $request->validate([
         'vendor_name' => 'required|string|max:255',
@@ -51,6 +57,16 @@ class VendorController extends Controller
     }
     public function checkVendor(Request $request)
     {
+    // Get the authenticated user
+    $user = Auth::user();
+    if (!$user) {
+        return response()->json(['message' => 'Unauthorized'], 401);
+    }
+
+    // Restrict access to users with rid between 5 and 10 inclusive
+    if ($user->rid < 5 || $user->rid > 10) {
+        return response()->json(['message' => 'Forbidden'], 403);
+    }
         
         $validated = $request->validate([
             'gstno' => 'required|string',
@@ -86,6 +102,18 @@ class VendorController extends Controller
 
     public function addVendorToCompany(Request $request)
     {
+        // Get the authenticated user
+    $user = Auth::user();
+    
+    // Check if user is authenticated
+    if (!$user) {
+        return response()->json(['message' => 'Unauthenticated'], 401);
+    }
+    
+    // Restrict to rid 5, 6, 7, or 8 only
+    if (!in_array($user->rid, [5, 6, 7, 8])) {
+        return response()->json(['message' => 'Unauthorized to add vendor to company'], 403);
+    }
         $validated = $request->validate([
             'gstno' => 'required|string',
             'pannumber' => 'required|string',
@@ -123,12 +151,16 @@ class VendorController extends Controller
 
 public function index(Request $request)
 {
-    
-    $user = Auth::user();
-    if (!$user) {
-        return response()->json(['message' => 'Unauthorized'], 401);
-    }
+   // Get the authenticated user
+   $user = Auth::user();
+   if (!$user) {
+       return response()->json(['message' => 'Unauthorized'], 401);
+   }
 
+   // Restrict access to users with rid between 5 and 10 inclusive
+   if ($user->rid < 5 || $user->rid > 10) {
+       return response()->json(['message' => 'Forbidden'], 403);
+   }
 
     $validated = $request->validate([
         'cid' => 'required|integer', 
