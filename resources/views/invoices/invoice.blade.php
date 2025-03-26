@@ -2,11 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
     <title>Invoice</title>
     <style>
         /* General Styles */
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI Emoji', 'Arial Unicode MS', sans-serif;
             margin: 0;
             padding: 0;
             background-color: #f9f9f9;
@@ -34,10 +35,10 @@
         }
         .header-table td {
             vertical-align: top;
-            padding: 0; /* No padding to avoid extra space */
+            padding: 0;
         }
         .company-info, .billing-info {
-            width: 50%; /* Split into two equal columns */
+            width: 50%;
         }
         .company-info img {
             max-width: 120px;
@@ -92,6 +93,12 @@
             font-size: 16px;
             color: #000;
         }
+
+        /* Currency styling */
+        .currency-symbol {
+            font-family: 'Segoe UI Emoji', 'Arial Unicode MS', sans-serif;
+            margin-right: 2px;
+        }
     </style>
 </head>
 <body>
@@ -99,7 +106,7 @@
         <!-- Title -->
         <h1 class="invoice-title">Invoice</h1>
 
-        <!-- Header Section (Using Table) -->
+        <!-- Header Section -->
         <table class="header-table">
             <tr>
                 <!-- Company Info -->
@@ -147,7 +154,7 @@
                     <th>S.No.</th>
                     <th>Item</th>
                     <th>Quantity</th>
-                    <th>Unit</th> <!-- Add Unit column -->
+                    <th>Unit</th>
                     <th>Price/Unit</th>
                     <th>Discount (%)</th>
                     <th>Total</th>
@@ -159,14 +166,14 @@
                         <td>{{ $loop->index + 1 }}</td>
                         <td>{{ $item['product_name'] }}</td>
                         <td>{{ $item['quantity'] }}</td>
-                        <td>{{ $item['unit'] }}</td> <!-- Display unit -->
-                        <td>{{ number_format($item['per_item_cost'], 2) }}</td>
+                        <td>{{ $item['unit'] }}</td>
+                        <td><span class="currency-symbol">Rs. </span> {{ number_format($item['per_item_cost'], 2) }}</td>
                         <td>{{ $item['discount'] }}</td>
-                        <td>{{ number_format($item['total'], 2) }}</td>
+                        <td><span class="currency-symbol">Rs.  </span> {{ number_format($item['total'], 2) }}</td>
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="6">No items found for this sale.</td>
+                        <td colspan="7">No items found for this sale.</td>
                     </tr>
                 @endforelse
             </tbody>
@@ -174,7 +181,7 @@
 
         <!-- Footer Section -->
         <div class="footer-section">
-            <p><strong>Total Amount:</strong> {{ number_format($total_amount, 2) }}</p>
+            <p><strong>Total Amount:</strong> <span class="currency-symbol">Rs.</span> {{ number_format($total_amount, 2) }}</p>
         </div>
     </div>
 </body>
