@@ -60,6 +60,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/companies/toggle-block', [CompanyController::class, 'toggleBlockCompany']);
     Route::get('/total-sale/{cid}', [SalesController::class, 'getTotalSaleAmount']);
     Route::post('/purchase-widget', [PurchaseController::class, 'getPurchaseWidget']);
+    Route::post('/customer-stats', [SalesController::class, 'getCustomerStats']);
+
 });
 
 Route::get('/units', [HelperController::class, 'index']);
@@ -67,4 +69,3 @@ Route::post('/add-unit', [HelperController::class, 'addUnit']);
 Route::get('/widget/total-purchases/{cid}', [WidgetController::class, 'getTotalPurchases']);
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
-Route::post('/company-stats', [HelperController::class, 'getCompanyStats']);
