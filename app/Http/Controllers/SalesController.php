@@ -353,4 +353,40 @@ public function getTotalSaleAmount($cid)
         return response()->json(['error' => 'Failed to fetch invoices'], 500);
     }
 }
+public function getCustomerStats(Request $request)
+{
+    // Validate request
+    $user = Auth::user();
+    if (!$user) {
+        return response()->json(['message' => 'Unauthorized'], 401);
+    }
+    $validated = $request->validate(['cid' => 'required|integer']);
+    $cid = $validated['cid'];
+
+    // Get customer stats using direct table joins
+    $customers = DB::table('customers')
+        ->join('transaction_sales', 'customers.id', '=', 'transaction_sales.customer_id')
+        ->leftJoin('sales', 'transaction_sales.id', '=', 'sales.transaction_id')
+        ->leftJoin('sales_items', 'sales.id', '=', 'sales_items.sale_id')
+        ->where('transaction_sales.cid', $cid)
+        ->select(
+            'customers.name',
+            'customers.email',
+            'customers.phone',
+            'customers.address',
+            DB::raw('MAX(transaction_sales.created_at) as last_purchase'),
+            DB::raw('COUNT(DISTINCT transaction_sales.id) as purchase_count'),
+            DB::raw('COALESCE(SUM(sales_items.quantity * sales_items.per_item_cost), 0) as total_transactions')
+        )
+        ->groupBy(
+            'customers.id',
+            'customers.name',
+            'customers.email',
+            'customers.phone',
+            'customers.address'
+        )
+        ->get();
+
+    return response()->json($customers);
+}
 }

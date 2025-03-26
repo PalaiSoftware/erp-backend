@@ -60,6 +60,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/companies/toggle-block', [CompanyController::class, 'toggleBlockCompany']);
     Route::get('/total-sale/{cid}', [SalesController::class, 'getTotalSaleAmount']);
     Route::post('/purchase-widget', [PurchaseController::class, 'getPurchaseWidget']);
+    Route::post('/customer-stats', [SalesController::class, 'getCustomerStats']);
+
 });
 
 Route::get('/units', [HelperController::class, 'index']);
