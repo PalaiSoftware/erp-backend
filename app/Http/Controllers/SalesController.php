@@ -319,4 +319,38 @@ public function getAllInvoicesByCompany($cid)
         return response()->json(['error' => 'Failed to fetch invoices'], 500);
     }
 }
+
+
+
+public function getTotalSaleAmount($cid)
+{
+    $user = Auth::user();
+    if (!$user) {
+        return response()->json(['message' => 'Unauthorized'], 401);
+    }
+
+    try {
+        $transactionIds = TransactionSales::where('cid', $cid)->pluck('id')->toArray();
+        $invoices = [];
+        $grandTotal = 0;
+        $distinctCustomers = TransactionSales::where('cid', $cid)
+        ->distinct('customer_id')
+        ->count('customer_id');   
+        foreach ($transactionIds as $tid) {
+            $invoiceData = $this->getInvoiceData($tid);
+            $invoices[] = $invoiceData;
+            $grandTotal += $invoiceData['total_amount']; // Add each invoice's total_amount
+        }
+        $transactionCount = count($invoices); // Number of invoices
+        return response()->json([
+            // 'invoices' => $invoices,
+            'grand_total' => $grandTotal, // Include the sum in the response
+            'total_sale_order' => $transactionCount,
+            'total_customer' => $distinctCustomers
+        ]);
+    } catch (\Exception $e) {
+        Log::error('Failed to fetch invoices', ['cid' => $cid, 'error' => $e->getMessage()]);
+        return response()->json(['error' => 'Failed to fetch invoices'], 500);
+    }
+}
 }

@@ -58,6 +58,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/update-recent-company', [CompanyController::class, 'updateRecentCompany']);
     Route::get('/get-all-companies', [CompanyController::class, 'getAllCompanies']);
     Route::post('/companies/toggle-block', [CompanyController::class, 'toggleBlockCompany']);
+    Route::get('/total-sale/{cid}', [SalesController::class, 'getTotalSaleAmount']);
+
 
 });
 
@@ -66,3 +68,4 @@ Route::post('/add-unit', [HelperController::class, 'addUnit']);
 Route::get('/widget/total-purchases/{cid}', [WidgetController::class, 'getTotalPurchases']);
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/company-stats', [HelperController::class, 'getCompanyStats']);
