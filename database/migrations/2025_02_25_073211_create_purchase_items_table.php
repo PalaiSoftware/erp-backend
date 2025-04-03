@@ -13,7 +13,7 @@ class CreatePurchaseItemsTable extends Migration
             $table->unsignedBigInteger('purchase_id'); // Links to purchases.id
             $table->unsignedBigInteger('vendor_id');
             $table->integer('quantity')->check('quantity > 0');
-            $table->decimal('per_item_cost', 10, 2)->check('per_item_cost >= 0');
+            $table->decimal('per_item_cost', 22, 3)->check('per_item_cost >= 0');
             $table->unsignedBigInteger('unit_id'); // Links to units.id
             $table->timestamp('created_at')->useCurrent();
             
