@@ -102,6 +102,7 @@ public function getProductStock($cid)
 
     // Fetch products with stock calculations, only for products with transactions for this cid
     $products = DB::table('products as p')
+        ->join('categories as c','p.category_id','=','c.id')
         ->where(function ($query) use ($cid) {
             // Products with purchases for this company
             $query->whereExists(function ($subquery) use ($cid) {
@@ -124,7 +125,8 @@ public function getProductStock($cid)
             'p.id',
             'p.name',
             'p.description',
-            'p.category',
+            // 'p.category',
+            'c.name as category',
             'p.hscode',
             DB::raw("(
                 SELECT COALESCE(SUM(pi.quantity), 0)

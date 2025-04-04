@@ -201,6 +201,12 @@ public function LmUserPromoteDemote(Request $request)
             'message' => 'User not found in your company'
         ], 404);
     }
+     // Check if the target user is blocked
+     if ($targetUser->blocked == 1) {
+        return response()->json([
+            'message' => 'Cannot promote or demote a blocked user'
+        ], 403);
+    }
 
     // Define minimum rid that can be modified based on current user's rid
     $minRidToModify = $currentUser->rid + 1; // One level below current user

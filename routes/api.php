@@ -12,6 +12,8 @@ use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\WidgetController;
 use App\Http\Controllers\HelperController;
 use App\Http\Controllers\LmAuthController;
+use App\Http\Controllers\CategoryController;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -67,7 +69,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/lm-users', [LmAuthController::class, 'getLmUsersByRole']);
     Route::post('/lm-user-block-unblock', [LmAuthController::class, 'LmUserBlockUnblock']);
     Route::post('/lm-user-promote-demote', [LmAuthController::class, 'LmUserPromoteDemote']);
-
+    
 });
 
 Route::get('/units', [HelperController::class, 'index']);
@@ -76,3 +78,5 @@ Route::get('/widget/total-purchases/{cid}', [WidgetController::class, 'getTotalP
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/company-stats', [HelperController::class, 'getCompanyStats']);
+Route::post('/categories', [CategoryController::class, 'addCategory']);
+Route::get('/categories', [CategoryController::class, 'getCategories']);
