@@ -28,7 +28,7 @@ class ProductController extends Controller
             'products' => 'required|array', 
             'products.*.name' => 'required|string|max:255',
             'products.*.description' => 'nullable|string',
-            'products.*.category' => 'nullable|string', 
+            'products.*.category_id' => 'required|integer|exists:categories,id', 
             'products.*.hscode' => 'required|string|max:255', 
             'products.*.uid' => 'required|integer', 
             'products.*.cid' => 'required|integer', 
@@ -40,7 +40,7 @@ class ProductController extends Controller
             $product = Product::create([
                 'name' => $productData['name'],
                 'description' => $productData['description'] ?? null,
-                'category' => $productData['category'] ?? null,
+                'category_id' => $productData['category_id'], 
                 'hscode' => $productData['hscode'],
                 'uid' => $productData['uid'],
                 'cids' => [$productData['cid']], 
@@ -77,7 +77,7 @@ class ProductController extends Controller
 
         
         $products = Product::whereJsonContains('cids', (int)$validated['cid'])
-                           ->select('id','name', 'description', 'category', 'hscode')
+                           ->select('id','name', 'description', 'category_id', 'hscode')
                            ->get();
 
         
@@ -116,7 +116,7 @@ class ProductController extends Controller
 
         
         $products = Product::where('hscode', $hscode)
-                           ->select('id','name', 'description', 'category', 'hscode')
+                           ->select('id','name', 'description', 'category_id', 'hscode')
                            ->get();
 
         
@@ -205,11 +205,11 @@ class ProductController extends Controller
                 'p.id',
                 'p.name',
                 'p.description',
-                'p.category',
+                'p.category_id',
                 'p.hscode',
                 DB::raw('COALESCE(SUM(pi.quantity), 0) as total_stock')
             )
-            ->groupBy('p.id', 'p.name', 'p.description', 'p.category', 'p.hscode')
+            ->groupBy('p.id', 'p.name', 'p.description', 'p.category_id', 'p.hscode')
             ->get();
 
         

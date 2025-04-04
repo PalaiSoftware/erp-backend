@@ -12,7 +12,7 @@ class Product extends Model
     protected $fillable = [
         'name',
         'description',
-        'category',
+        'category_id',
         'hscode',
         'uid',
         'cids',
@@ -20,5 +20,11 @@ class Product extends Model
     protected $casts = [
         'cids' => 'array',
     ];
+
+    // Define the relationship with Category
+    public function category()
+    {
+        return $this->belongsTo(Category::class, 'category_id');
+    }
 
 }

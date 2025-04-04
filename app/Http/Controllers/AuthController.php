@@ -259,6 +259,7 @@ public function getUsersByRole(Request $request)
         'message' => 'Users retrieved successfully (both blocked and unblocked)',
         'users' => $users
     ], 200);
+
 }
 public function userBlockUnblock(Request $request)
 {
@@ -355,6 +356,12 @@ public function UserPromoteDemote(Request $request)
         return response()->json([
             'message' => 'User not found in your company'
         ], 404);
+    }
+    // Check if the target user is blocked
+    if ($targetUser->blocked == 1) {
+        return response()->json([
+            'message' => 'Cannot promote or demote a blocked user'
+        ], 403);
     }
 
     // Define minimum rid that can be modified based on current user's rid
