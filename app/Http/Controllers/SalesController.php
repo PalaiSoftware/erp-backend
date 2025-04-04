@@ -208,7 +208,9 @@ class SalesController extends Controller
             $salesItem = $sale->salesItem;
 
             if ($salesItem) {
-                $itemTotal = $salesItem->quantity * ($salesItem->per_item_cost - $salesItem->discount);
+                // $itemTotal = $salesItem->quantity * ($salesItem->per_item_cost - $salesItem->discount);
+                $itemTotal = $salesItem->quantity * ($salesItem->per_item_cost * (1 - $salesItem->discount / 100));
+
                 $items[] = [
                     'product_name' => $product ? $product->name : 'Unknown Product',
                     'quantity' => $salesItem->quantity,
@@ -267,7 +269,8 @@ private function getInvoiceData($transactionId)
         $product = Product::find($sale->product_id);
         $salesItem = $sale->salesItem;
         if ($salesItem) {
-            $itemTotal = $salesItem->quantity * ($salesItem->per_item_cost - $salesItem->discount);
+            // $itemTotal = $salesItem->quantity * ($salesItem->per_item_cost - $salesItem->discount);
+            $itemTotal = $salesItem->quantity * ($salesItem->per_item_cost * (1 - $salesItem->discount / 100));
             $items[] = [
                 'product_name' => $product ? $product->name : 'Unknown Product',
                 'quantity' => $salesItem->quantity,
