@@ -69,7 +69,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/lm-users', [LmAuthController::class, 'getLmUsersByRole']);
     Route::post('/lm-user-block-unblock', [LmAuthController::class, 'LmUserBlockUnblock']);
     Route::post('/lm-user-promote-demote', [LmAuthController::class, 'LmUserPromoteDemote']);
-    
+    Route::put('/customer/{id}', [CustomerController::class, 'update']);
 });
 
 Route::get('/units', [HelperController::class, 'index']);

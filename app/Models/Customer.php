@@ -12,17 +12,22 @@ class Customer extends Model
     // Optional: specify the table name if not following Laravel conventions
     protected $table = 'customers';
 
-    // Mass assignable attributes
-    protected $fillable = [
-        'cids',
-        'name',
-        'email',
-        'phone',
-        'address'
-    ];
-    protected $casts = [
-        'cids' => 'array',
-    ];
+   // Mass assignable attributes
+   protected $fillable = [
+    'cid',
+    'first_name',
+    'last_name',
+    'email',
+    'phone',
+    'gst',
+    'pan',
+    'address'
+];
+
+// Casts for type conversion
+protected $casts = [
+    'cid' => 'integer',
+];
 
     public $timestamps = false;
 }
