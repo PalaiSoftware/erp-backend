@@ -17,10 +17,10 @@ class Vendor extends Model
         'gst_no',
         'pan',
         'uid',
-        'cids',
+        'cid',
     ];
 
-    protected $casts = [
-        'cids' => 'array',
-    ];
+    // protected $casts = [
+    //     'cids' => 'array',
+    // ];
 }

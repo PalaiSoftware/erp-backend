@@ -35,11 +35,11 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/vendors', [VendorController::class, 'store']);
     Route::get('/vendors', [VendorController::class, 'index']);
     Route::post('/vendors/check', [VendorController::class, 'checkVendor']);
-    Route::post('/vendors/add-to-company', [VendorController::class, 'addVendorToCompany']);
+    Route::put('/vendors/{id}', [VendorController::class, 'update']);    
     Route::post('/products', [ProductController::class, 'store']); 
     Route::get('/products', [ProductController::class, 'index']);
-    Route::get('/hscode/products', [ProductController::class, 'checkHscodeProduct']);
-    Route::post('/product/add-to-company', [ProductController::class, 'addCompanyToProduct']);
+    Route::put('/products/{id}', [ProductController::class, 'update']);
+    Route::post('/hscode/products', [ProductController::class, 'checkHscodeProduct']);
     Route::post('/purchase', [PurchaseController::class, 'store']);
     Route::post('/sales', [SalesController::class, 'store']);
     Route::get('/invoices/{sale_id}', [SalesController::class, 'generateInvoice']);
