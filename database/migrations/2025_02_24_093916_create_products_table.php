@@ -14,7 +14,9 @@ return new class extends Migration {
             $table->unsignedBigInteger('category_id');
             $table->string('hscode')->nullable();
             $table->integer('uid');
-            $table->jsonb('cids')->default('[]'); 
+            // $table->jsonb('cids')->default('[]'); 
+            $table->integer('cid')->nullable();
+
             $table->timestamps();
 
             $table->foreign('category_id')->references('id')->on('categories')->onDelete('restrict');

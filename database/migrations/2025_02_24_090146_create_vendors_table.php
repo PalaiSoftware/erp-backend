@@ -17,7 +17,8 @@ return new class extends Migration {
             $table->string('gst_no')->nullable();
             $table->string('pan', 20)->nullable();
             $table->integer('uid')->nullable();
-            $table->jsonb('cids')->default('[]');
+            // $table->jsonb('cids')->default('[]');
+            $table->integer('cid')->nullable();
             $table->timestamps();
         });
     }

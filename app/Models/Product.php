@@ -15,11 +15,11 @@ class Product extends Model
         'category_id',
         'hscode',
         'uid',
-        'cids',
+        'cid',
     ];
-    protected $casts = [
-        'cids' => 'array',
-    ];
+    // protected $casts = [
+    //     'cids' => 'array',
+    // ];
 
     // Define the relationship with Category
     public function category()
