@@ -12,10 +12,13 @@ return new class extends Migration {
     {
         Schema::create('customers', function (Blueprint $table) {
             $table->id();                           // Auto-increment serial primary key
-            $table->json('cids')->default('[]');    // Array of company IDs
-            $table->string('name');                 // Customer name
+            $table->integer('cid');                 // Single company ID (required, integer)
+            $table->string('first_name');           // First name (required)
+            $table->string('last_name')->nullable(); // Last name (optional)
             $table->string('email')->nullable();    // Email (optional)
-            $table->string('phone', 20);            // Phone number
+            $table->string('phone', 20)->nullable(); // Phone number (optional)
+            $table->string('gst')->nullable();      // GST number (optional)
+            $table->string('pan')->nullable();      // PAN number (optional)
             $table->text('address')->nullable();    // Address (optional)
             $table->timestamp('created_at')->useCurrent();
         });
