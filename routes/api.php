@@ -70,6 +70,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/lm-user-block-unblock', [LmAuthController::class, 'LmUserBlockUnblock']);
     Route::post('/lm-user-promote-demote', [LmAuthController::class, 'LmUserPromoteDemote']);
     Route::put('/customer/{id}', [CustomerController::class, 'update']);
+    Route::put('/sales/{transactionId}', [SalesController::class, 'update']);
+    Route::get('/sales/{transactionId}', [SalesController::class, 'getTransaction']);
 });
 
 Route::get('/units', [HelperController::class, 'index']);
