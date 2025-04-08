@@ -39,6 +39,7 @@ class PurchaseController extends Controller
                 'products.*.vendor_id' => 'required|integer',
                 'products.*.quantity' => 'required|integer|min:1',
                 'products.*.per_item_cost' => 'required|numeric|min:0',
+                'products.*.discount' => 'nullable|numeric|min:0|max:100',
                 'products.*.unit_id' => 'required|integer|exists:units,id', // Unit validation
                 'cid' => 'required|integer',
                 'payment_mode' => 'required|string|max:50',
@@ -86,6 +87,7 @@ class PurchaseController extends Controller
                     'vendor_id' => $product['vendor_id'],
                     'quantity' => $product['quantity'],
                     'per_item_cost' => $product['per_item_cost'],
+                    'discount' => $product['discount'] ?? 0,
                     'unit_id' => $product['unit_id'], // Saving unit_id
                     'created_at' => now(),
                 ]);
@@ -93,7 +95,9 @@ class PurchaseController extends Controller
                     'purchase_id' => $purchaseId,
                     'vendor_id' => $product['vendor_id'],
                     'quantity' => $product['quantity'],
-                    'unit_id' => $product['unit_id']
+                    'unit_id' => $product['unit_id'],
+                    'discount' => $product['discount'] ?? 0,
+
                 ]);
             }
 
@@ -233,7 +237,9 @@ class PurchaseController extends Controller
             'pi.per_item_cost',
             'pi.unit_id',
             'tp.payment_mode',
-            DB::raw('pi.quantity * pi.per_item_cost as per_product_total')
+            'pi.discount',
+            DB::raw('pi.quantity * pi.per_item_cost * (1 - pi.discount / 100) as per_product_total')
+            // DB::raw('pi.quantity * pi.per_item_cost as per_product_total')
         )
         ->where('p.transaction_id', $transactionId)
         ->get();
@@ -282,7 +288,9 @@ public function getPurchaseWidget(Request $request)
     $totalAmount = PurchaseItem::join('purchases', 'purchase_items.purchase_id', '=', 'purchases.id')
         ->join('transaction_purchases', 'purchases.transaction_id', '=', 'transaction_purchases.id')
         ->where('transaction_purchases.cid', $cid)
-        ->sum(DB::raw('purchase_items.quantity * purchase_items.per_item_cost'));
+       // ->sum(DB::raw('purchase_items.quantity * purchase_items.per_item_cost'));
+        ->sum(DB::raw('purchase_items.quantity * purchase_items.per_item_cost * (1 - purchase_items.discount / 100)'));
+
     return response()->json([
         // 'cid' => $cid,
         'total_purchase_order' => $purchaseCount,
@@ -315,6 +323,8 @@ public function updateTransactionById(Request $request, $transaction_id)
             'products.*.per_item_cost' => 'required_with:products|numeric|min:0',
             'products.*.unit_id' => 'required_with:products|integer|exists:units,id',
             'products.*.vendor_id' => 'required_with:products|integer|exists:vendors,id',
+            'products.*.discount' => 'nullable|numeric|min:0|max:100',
+
         ]);
         Log::info('Validation passed successfully for updateTransactionById', ['transaction_id' => $transaction_id]);
     } catch (\Illuminate\Validation\ValidationException $e) {
@@ -386,6 +396,7 @@ public function updateTransactionById(Request $request, $transaction_id)
                     'quantity' => $product['quantity'],
                     'per_item_cost' => $product['per_item_cost'],
                     'unit_id' => $product['unit_id'],
+                    'discount' => $product['discount'] ?? 0,
                     'created_at' => now(),
                 ]);
             }
