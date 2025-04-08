@@ -12,6 +12,7 @@ class PurchaseItem extends Model
         'vendor_id',
         'quantity',
         'per_item_cost',
+        'discount',
         'unit_id',
         'created_at',
     ];
