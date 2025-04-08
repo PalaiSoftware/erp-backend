@@ -392,4 +392,268 @@ public function getCustomerStats(Request $request)
 
     return response()->json($customers);
 }
+
+
+public function update(Request $request, $transactionId)
+{
+    Log::info('Update API endpoint reached', [
+        'transaction_id' => $transactionId,
+        'request' => $request->all()
+    ]);
+
+    // Get the authenticated user
+    $user = Auth::user();
+    if (!$user) {
+        return response()->json(['message' => 'Unauthenticated'], 401);
+    }
+
+    // Restrict to rid 5, 6, 7, 8, or 9 only
+    if (!in_array($user->rid, [5, 6, 7, 8, 9])) {
+        return response()->json(['message' => 'Unauthorized to update sale'], 403);
+    }
+
+    // Check if the transaction exists and belongs to the user's company
+    $transaction = TransactionSales::where('id', $transactionId)
+        ->where('uid', $user->id)
+        ->first();
+    if (!$transaction) {
+        return response()->json(['message' => 'Transaction not found or unauthorized'], 404);
+    }
+
+    // Validate the request
+    try {
+        $request->validate([
+            'products' => 'required|array',
+            'products.*.product_id' => 'required|integer|exists:products,id',
+            'products.*.quantity' => 'required|integer|min:1',
+            'products.*.discount' => 'nullable|numeric|min:0',
+            'products.*.per_item_cost' => 'required|numeric|min:0',
+            'products.*.unit_id' => 'required|integer|exists:units,id',
+            'cid' => 'required|integer',
+            'customer_id' => 'required|integer',
+            'payment_mode' => 'required|string|max:50',
+        ]);
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        Log::error('Validation failed', ['errors' => $e->errors()]);
+        return response()->json([
+            'message' => 'Validation failed',
+            'errors' => $e->errors()
+        ], 422);
+    }
+
+    $cid = (int)$request->cid;
+    $productIds = array_column($request->products, 'product_id');
+
+    // Fetch current stock for all products
+    $stocks = DB::table('products as p')
+        ->whereIn('p.id', $productIds)
+        ->select([
+            'p.id',
+            'p.name',
+            DB::raw("(
+                SELECT COALESCE(SUM(pi.quantity), 0)
+                FROM purchases pur
+                JOIN transaction_purchases tp ON pur.transaction_id = tp.id
+                JOIN purchase_items pi ON pur.id = pi.purchase_id
+                WHERE pur.product_id = p.id AND tp.cid = $cid
+            ) - (
+                SELECT COALESCE(SUM(si.quantity), 0)
+                FROM sales s
+                JOIN transaction_sales ts ON s.transaction_id = ts.id
+                JOIN sales_items si ON s.id = si.sale_id
+                WHERE s.product_id = p.id AND ts.cid = $cid AND ts.id != $transactionId
+            ) + (
+                SELECT COALESCE(SUM(si.quantity), 0)
+                FROM sales s
+                JOIN sales_items si ON s.id = si.sale_id
+                WHERE s.transaction_id = $transactionId AND s.product_id = p.id
+            ) as current_stock")
+        ])
+        ->get()
+        ->keyBy('id');
+
+    // Check stock availability
+    $errors = [];
+    foreach ($request->products as $product) {
+        $productId = $product['product_id'];
+        $requestedQuantity = $product['quantity'];
+
+        if (!isset($stocks[$productId])) {
+            $errors[] = [
+                'product_id' => $productId,
+                'product_name' => 'Unknown',
+                'current_stock' => 0,
+                'requested_stock' => $requestedQuantity
+            ];
+            continue;
+        }
+
+        $stock = $stocks[$productId];
+        $currentStock = $stock->current_stock;
+
+        if ($requestedQuantity > $currentStock) {
+            $errors[] = [
+                'product_id' => $productId,
+                'product_name' => $stock->name,
+                'current_stock' => $currentStock,
+                'requested_stock' => $requestedQuantity
+            ];
+        }
+    }
+
+    if (!empty($errors)) {
+        return response()->json([
+            'message' => 'Stock check failed',
+            'errors' => $errors
+        ], 422);
+    }
+
+    // Start transaction
+    DB::beginTransaction();
+    try {
+        // Update the TransactionSales record
+        $transaction->update([
+            'cid' => $request->cid,
+            'customer_id' => $request->customer_id,
+            'payment_mode' => $request->payment_mode,
+            'updated_at' => now(),
+        ]);
+
+        // Fetch existing sales for this transaction
+        $existingSales = Sale::where('transaction_id', $transactionId)->get()->keyBy('product_id');
+        $newProductIds = array_column($request->products, 'product_id');
+
+        // Delete sales that are no longer in the updated product list
+        foreach ($existingSales as $sale) {
+            if (!in_array($sale->product_id, $newProductIds)) {
+                SalesItem::where('sale_id', $sale->id)->delete();
+                $sale->delete();
+                Log::info('Deleted sale', ['sale_id' => $sale->id]);
+            }
+        }
+
+        // Update or create sales and sales items
+        foreach ($request->products as $product) {
+            $productId = $product['product_id'];
+
+            if (isset($existingSales[$productId])) {
+                // Update existing sale
+                $sale = $existingSales[$productId];
+                $salesItem = SalesItem::where('sale_id', $sale->id)->first();
+                $salesItem->update([
+                    'quantity' => $product['quantity'],
+                    'discount' => $product['discount'] ?? 0,
+                    'per_item_cost' => $product['per_item_cost'],
+                    'unit_id' => $product['unit_id'],
+                ]);
+                Log::info('Updated sale item', ['sale_id' => $sale->id]);
+            } else {
+                // Create new sale
+                $sale = Sale::create([
+                    'transaction_id' => $transactionId,
+                    'product_id' => $productId,
+                ]);
+                SalesItem::create([
+                    'sale_id' => $sale->id,
+                    'quantity' => $product['quantity'],
+                    'discount' => $product['discount'] ?? 0,
+                    'per_item_cost' => $product['per_item_cost'],
+                    'unit_id' => $product['unit_id'],
+                ]);
+                Log::info('Created new sale', ['sale_id' => $sale->id]);
+            }
+        }
+
+        DB::commit();
+        Log::info('Sale updated successfully', ['transaction_id' => $transactionId]);
+
+        return response()->json([
+            'message' => 'Sale updated successfully',
+            'transaction_id' => $transactionId,
+        ], 200);
+    } catch (\Exception $e) {
+        DB::rollBack();
+        Log::error('Sale update failed', ['error' => $e->getMessage()]);
+        return response()->json([
+            'message' => 'Sale update failed',
+            'error' => $e->getMessage(),
+        ], 500);
+    }
+}
+public function getTransaction($transactionId)
+    {
+        Log::info('Get transaction API endpoint reached', ['transaction_id' => $transactionId]);
+
+        // Get the authenticated user
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
+        }
+
+        // Restrict to rid 5, 6, 7, 8, or 9 only (consistent with store and update)
+        if (!in_array($user->rid, [5, 6, 7, 8, 9])) {
+            return response()->json(['message' => 'Unauthorized to view transaction'], 403);
+        }
+
+        // Fetch the transaction and ensure it belongs to the user
+        $transaction = TransactionSales::where('id', $transactionId)
+            ->where('uid', $user->id)
+            ->first();
+        if (!$transaction) {
+            return response()->json(['message' => 'Transaction not found or unauthorized'], 404);
+        }
+
+        try {
+            // Fetch associated sales and sales items with units
+            $sales = Sale::where('transaction_id', $transactionId)
+                ->with('salesItem.unit')
+                ->get();
+
+            if ($sales->isEmpty()) {
+                Log::warning("No sales records found for transaction_id: {$transactionId}");
+                return response()->json(['message' => 'No sales records found for this transaction'], 404);
+            }
+
+            // Prepare the products array
+            $products = [];
+            foreach ($sales as $sale) {
+                $salesItem = $sale->salesItem;
+                if ($salesItem) {
+                    $products[] = [
+                        'product_id' => $sale->product_id,
+                        'quantity' => $salesItem->quantity,
+                        'discount' => $salesItem->discount,
+                        'per_item_cost' => $salesItem->per_item_cost,
+                        'unit_id' => $salesItem->unit_id,
+                        'unit_name' => $salesItem->unit ? $salesItem->unit->name : 'N/A', // Optional: include unit name
+                    ];
+                }
+            }
+
+            // Construct the response data
+            $transactionData = [
+                'transaction_id' => $transaction->id,
+                'cid' => $transaction->cid,
+                'customer_id' => $transaction->customer_id,
+                'payment_mode' => $transaction->payment_mode,
+                'created_at' => Carbon::parse($transaction->created_at)->format('Y-m-d H:i:s'),
+                'updated_at' => $transaction->updated_at ? Carbon::parse($transaction->updated_at)->format('Y-m-d H:i:s') : null,
+                'products' => $products,
+            ];
+
+            Log::info('Transaction data retrieved successfully', ['transaction_id' => $transactionId]);
+            return response()->json($transactionData, 200);
+
+        } catch (\Exception $e) {
+            Log::error('Failed to fetch transaction data', [
+                'transaction_id' => $transactionId,
+                'error' => $e->getMessage()
+            ]);
+            return response()->json([
+                'message' => 'Failed to fetch transaction data',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
 }
