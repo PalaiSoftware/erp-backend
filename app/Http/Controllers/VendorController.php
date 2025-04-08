@@ -29,7 +29,7 @@ class VendorController extends Controller
         $validated = $request->validate([
             'vendor_name' => 'required|string|max:255',
             'contact_person' => 'nullable|string|max:255',
-            'email' => 'nullable|email|unique:vendors,email',
+            'email' => 'nullable|email',
             'phone' => 'nullable|string|max:20',
             'address' => 'nullable|string',
             'gst_no' => 'nullable|string|max:255',
