@@ -72,6 +72,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::put('/customer/{id}', [CustomerController::class, 'update']);
     Route::put('/sales/{transactionId}', [SalesController::class, 'update']);
     Route::get('/sales/{transactionId}', [SalesController::class, 'getTransaction']);
+    Route::put('/transactions/{transaction_id}', [PurchaseController::class, 'updateTransactionById']);
 });
 
 Route::get('/units', [HelperController::class, 'index']);
