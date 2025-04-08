@@ -11,7 +11,7 @@ return new class extends Migration {
             $table->bigIncrements('id');
             $table->string('vendor_name');
             $table->string('contact_person')->nullable();
-            $table->string('email')->unique()->nullable();
+            $table->string('email')->nullable();
             $table->string('phone', 20)->nullable();
             $table->text('address')->nullable();
             $table->string('gst_no')->nullable();
