@@ -220,7 +220,7 @@ public function login(Request $request)
     ]);
 }
 
-// Add the new function here for get UsersByRole
+//Add the new function here for get UsersByRole
 public function getUsersByRole(Request $request)
 {
     // Get the authenticated user
@@ -240,27 +240,43 @@ public function getUsersByRole(Request $request)
             'users' => []
         ], 403);
     }
-
-    // Fetch users with rid greater than the current user's rid, within the same company
-    // No filter on 'blocked' to include both blocked and unblocked users
-    $users = User::where('cid', $currentUser->cid) // Same company
-                 ->where('rid', '>', $currentRid) // Only users with lower roles (higher rid numbers)
-                 ->select('id', 'name', 'email', 'mobile', 'country', 'rid', 'blocked') // Select relevant fields
-                 ->get();
-
-    if ($users->isEmpty()) {
+            
+    // Validate the cid from the request body
+    try {
+        $request->validate([
+            'cid' => 'required|integer|exists:companies,id', // Ensure cid is provided and exists
+        ]);
+    } catch (\Illuminate\Validation\ValidationException $e) {
         return response()->json([
-            'message' => 'No users found with lower roles in your company',
-            'users' => []
-        ], 200);
+            'message' => 'Validation failed',
+            'errors' => $e->errors(),
+        ], 422);
     }
 
-    return response()->json([
-        'message' => 'Users retrieved successfully (both blocked and unblocked)',
-        'users' => $users
-    ], 200);
+    // Get the cid from the request
+    $cid = $request->input('cid');
+
+      // Fetch users with rid greater than the current user's rid, within the same company
+      // No filter on 'blocked' to include both blocked and unblocked users
+        $users = User::where('cid', $cid) // Use provided cid
+            ->where('rid', '>', $currentRid) // Only users with lower roles (higher rid numbers)
+            ->select('id', 'name', 'email', 'mobile', 'country', 'rid', 'blocked') // Select relevant fields
+            ->get();
+
+        if ($users->isEmpty()) {
+             return response()->json([
+               'message' => 'No users found with lower roles for the provided company ID',
+               'users' => []
+             ], 200);
+        }
+
+        return response()->json([
+           'message' => 'Users retrieved successfully (both blocked and unblocked)',
+           'users' => $users
+        ], 200);
 
 }
+
 public function userBlockUnblock(Request $request)
 {
     // Get the authenticated user

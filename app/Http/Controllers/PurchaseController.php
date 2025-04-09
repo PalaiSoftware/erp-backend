@@ -191,7 +191,17 @@ class PurchaseController extends Controller
     if (!$user) {
         return response()->json(['message' => 'Unauthorized'], 401);
     }
+{
+    // Get the authenticated user
+    $user = Auth::user();
+    if (!$user) {
+        return response()->json(['message' => 'Unauthorized'], 401);
+    }
 
+    // Restrict access to users with rid between 5 and 10 inclusive
+    if ($user->rid < 5 || $user->rid > 10) {
+        return response()->json(['message' => 'Forbidden'], 403);
+    }
     // Restrict access to users with rid between 5 and 10 inclusive
     if ($user->rid < 5 || $user->rid > 10) {
         return response()->json(['message' => 'Forbidden'], 403);
@@ -212,13 +222,39 @@ class PurchaseController extends Controller
             'errors' => $e->errors(),
         ], 422);
     }
+    try {
+        $request->validate([
+            'transaction_id' => 'required|integer'
+        ]);
+        Log::info('Validation passed successfully for getPurchaseDetailsByTransaction', ['transaction_id' => $request->transaction_id]);
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        Log::error('Validation failed for getPurchaseDetailsByTransaction', [
+            'errors' => $e->errors(),
+            'request_data' => $request->all()
+        ]);
+        return response()->json([
+            'message' => 'Validation failed',
+            'errors' => $e->errors(),
+        ], 422);
+    }
 
+    $transactionId = $request->input('transaction_id');
     $transactionId = $request->input('transaction_id');
 
     $transactionExists = DB::table('transaction_purchases')
         ->where('id', $transactionId)
         ->exists();
+    $transactionExists = DB::table('transaction_purchases')
+        ->where('id', $transactionId)
+        ->exists();
 
+    if (!$transactionExists) {
+        Log::info('Transaction not found', ['transaction_id' => $transactionId]);
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Transaction not found'
+        ], 404);
+    }
     if (!$transactionExists) {
         Log::info('Transaction not found', ['transaction_id' => $transactionId]);
         return response()->json([
@@ -251,9 +287,26 @@ class PurchaseController extends Controller
             'message' => 'No purchase details found for this transaction ID'
         ], 404);
     }
+    if ($purchaseDetails->isEmpty()) {
+        Log::info('No purchase details found for transaction', ['transaction_id' => $transactionId]);
+        return response()->json([
+            'status' => 'error',
+            'message' => 'No purchase details found for this transaction ID'
+        ], 404);
+    }
 
     $totalAmount = $purchaseDetails->sum('per_product_total');
+    $totalAmount = $purchaseDetails->sum('per_product_total');
 
+    Log::info('Purchase details retrieved successfully', ['transaction_id' => $transactionId]);
+    return response()->json([
+        'status' => 'success',
+        'data' => [
+            'products' => $purchaseDetails,
+            'total_amount' => $totalAmount
+        ]
+    ], 200);
+}
     Log::info('Purchase details retrieved successfully', ['transaction_id' => $transactionId]);
     return response()->json([
         'status' => 'success',
