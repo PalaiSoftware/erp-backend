@@ -6,7 +6,8 @@ use Illuminate\Http\Request;
 use App\Models\Customer;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
-
+use Illuminate\Support\Facades\Log;
+use Carbon\Carbon; 
 class CustomerController extends Controller
 {
     public function __construct()
@@ -190,4 +191,58 @@ class CustomerController extends Controller
             'customer' => $customer
         ], 200);
     }
+    public function getCustomer($customerId)
+        {
+            Log::info('Get customer API endpoint reached', ['customer_id' => $customerId]);
+
+            // Get the authenticated user
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json(['message' => 'Unauthenticated'], 401);
+            }
+
+            // Restrict to rid 5, 6, 7, 8, 9 only (matching your transaction endpoint)
+            if (!in_array($user->rid, [5, 6, 7, 8, 9])) {
+                return response()->json(['message' => 'Unauthorized to view customer data'], 403);
+            }
+
+            try {
+                // Fetch the customer by ID
+                $customer = \App\Models\Customer::where('id', $customerId)->first();
+
+                if (!$customer) {
+                    Log::warning("Customer not found", ['customer_id' => $customerId]);
+                    return response()->json(['message' => 'Customer not found'], 404);
+                }
+
+                // Prepare customer data
+                $customerData = [
+                    'id' => $customer->id,
+                    'first_name' => $customer->first_name,
+                    'last_name' => $customer->last_name ?? null,
+                    'email' => $customer->email ?? null,
+                    'phone' => $customer->phone ?? null,
+                    'pan' => $customer->pan ?? null,
+                    'gst' => $customer->gst ?? null,
+                    'address' => $customer->address ?? null,
+
+                    'created_at' => Carbon::parse($customer->created_at)->format('Y-m-d H:i:s'),
+                    'updated_at' => $customer->updated_at ? Carbon::parse($customer->updated_at)->format('Y-m-d H:i:s') : null,
+                    // Add any other customer fields you want to include
+                ];
+
+                Log::info('Customer data retrieved successfully', ['customer_id' => $customerId]);
+                return response()->json($customerData, 200);
+
+            } catch (\Exception $e) {
+                Log::error('Failed to fetch customer data', [
+                    'customer_id' => $customerId,
+                    'error' => $e->getMessage()
+                ]);
+                return response()->json([
+                    'message' => 'Failed to fetch customer data',
+                    'error' => $e->getMessage()
+                ], 500);
+            }
+}
 }
