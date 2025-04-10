@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Vendor;
 use Illuminate\Support\Facades\Auth;
-
+use Illuminate\Support\Facades\DB; // Added this line
 class VendorController extends Controller
 {
     public function __construct()
@@ -232,5 +232,44 @@ class VendorController extends Controller
                     'message' => 'Vendor updated successfully',
                     'vendor' => $vendor
                 ], 200);
-            }
+            } 
+        public function getVendorById($vendorId)
+            {
+                // Get the authenticated user
+                $user = Auth::user();
+                if (!$user) {
+                    return response()->json(['message' => 'Unauthorized'], 401);
+                }
+            
+                // Restrict access to users with rid between 5 and 10 inclusive
+                if ($user->rid < 5 || $user->rid > 10) {
+                    return response()->json(['message' => 'Forbidden'], 403);
+                }
+            
+                // Validate vendor_id (basic check since it's a route parameter)
+                if (!is_numeric($vendorId) || $vendorId <= 0) {
+                    return response()->json([
+                        'message' => 'Validation failed',
+                        'errors' => ['vendor_id' => ['The vendor_id must be a positive integer.']]
+                    ], 422);
+                }
+            
+                // Fetch vendor details
+                $vendor = DB::table('vendors')
+                    ->where('id', $vendorId)
+                    ->select('id', 'vendor_name', 'contact_person', 'email', 'phone', 'address', 'gst_no', 'pan', 'uid', 'cid', 'created_at', 'updated_at')
+                    ->first();
+            
+                if (!$vendor) {
+                    return response()->json([
+                        'status' => 'error',
+                        'message' => 'Vendor not found'
+                    ], 404);
+                }
+            
+                return response()->json([
+                    'status' => 'success',
+                    'data' => $vendor
+                ], 200);
+            }                
 }

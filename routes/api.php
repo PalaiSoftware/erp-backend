@@ -74,6 +74,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/sales/{transactionId}', [SalesController::class, 'getTransaction']);
     Route::put('/transactions/{transaction_id}', [PurchaseController::class, 'updateTransactionById']);
     Route::get('/customers/{customerId}', [CustomerController::class, 'getCustomer']);
+    Route::get('/vendor/{vendorId}', [VendorController::class, 'getVendorById']);
 });
 
 Route::get('/units', [HelperController::class, 'index']);
