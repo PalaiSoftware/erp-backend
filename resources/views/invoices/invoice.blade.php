@@ -128,8 +128,8 @@
 
                     <h4>Billed To</h4>
                     @isset($customer)
-                        @if(!is_null($customer->name))
-                            <p><strong>Customer Name:</strong> {{ $customer->name }}</p>
+                        @if(!is_null($customer->first_name))
+                            <p><strong>Customer Name:</strong> {{ $customer->first_name }} {{ $customer->last_name ? $customer->last_name : '' }}</p>
                         @endif
                         @if(!is_null($customer->phone))
                             <p><strong>Phone:</strong> {{ $customer->phone }}</p>
@@ -139,6 +139,12 @@
                         @endif
                         @if(!is_null($customer->email))
                             <p><strong>Email:</strong> {{ $customer->email }}</p>
+                        @endif
+                        @if($customer->gst)
+                        <p><strong>GST:</strong> {{ $customer->gst }}</p>
+                        @endif
+                        @if($customer->pan)
+                        <p><strong>PAN:</strong> {{ $customer->pan }}</p>
                         @endif
                     @else
                         <p>No customer information available</p>
