@@ -374,6 +374,7 @@ public function getPurchaseDetailsByTransaction(Request $request)
         ->join('purchase_items as pi', 'p.id', '=', 'pi.purchase_id')
         ->join('transaction_purchases as tp', 'p.transaction_id', '=', 'tp.id')
         ->select(
+            'p.product_id', // Added product_id
             'prod.name as product_name',
             'pi.quantity',
             'pi.per_item_cost',
@@ -452,126 +453,135 @@ public function getPurchaseWidget(Request $request)
 
     ], 200);
 }
-public function updateTransactionById(Request $request, $transaction_id)
-{
-    // Get the authenticated user
-    $user = Auth::user();
-    if (!$user) {
-        return response()->json(['message' => 'Unauthorized'], 401);
-    }
 
-    // Restrict access to users with rid between 5 and 10 inclusive
-    if ($user->rid < 5 || $user->rid > 10) {
-        return response()->json(['message' => 'Forbidden'], 403);
-    }
-
-    try {
-        // Updated validation rules
-        $request->validate([
-            'transaction_id' => 'sometimes|integer|in:' . $transaction_id,
-            'payment_mode' => 'nullable|string|in:cash,credit_card,online',
-            'products' => 'nullable|array',
-            'products.*.product_id' => 'required_with:products|integer|exists:products,id',
-            'products.*.quantity' => 'required_with:products|integer|min:1',
-            'products.*.per_item_cost' => 'required_with:products|numeric|min:0',
-            'products.*.unit_id' => 'required_with:products|integer|exists:units,id',
-            'products.*.vendor_id' => 'required_with:products|integer|exists:vendors,id',
-            'products.*.discount' => 'nullable|numeric|min:0|max:100',
-
-        ]);
-        Log::info('Validation passed successfully for updateTransactionById', ['transaction_id' => $transaction_id]);
-    } catch (\Illuminate\Validation\ValidationException $e) {
-        Log::error('Validation failed for updateTransactionById', [
-            'errors' => $e->errors(),
-            'request_data' => $request->all()
-        ]);
-        return response()->json([
-            'message' => 'Validation failed',
-            'errors' => $e->errors(),
-        ], 422);
-    }
-
-    // Check if the transaction exists
-    $transaction = DB::table('transaction_purchases')
-        ->where('id', $transaction_id)
-        ->first();
-
-    if (!$transaction) {
-        Log::info('Transaction not found', ['transaction_id' => $transaction_id]);
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Transaction not found'
-        ], 404);
-    }
-
-    DB::beginTransaction();
-    try {
-        // Update transaction_purchases table (e.g., payment_mode)
-        $updateData = [];
-        if ($request->has('payment_mode')) {
-            $updateData['payment_mode'] = $request->input('payment_mode');
-        }
-        if (!empty($updateData)) {
-            DB::table('transaction_purchases')
-                ->where('id', $transaction_id)
-                ->update($updateData);
+    public function updateTransactionById(Request $request, $transaction_id)
+    {
+        // Get the authenticated user
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        // Update purchase details if products are provided
-        if ($request->has('products')) {
-            // Delete existing purchase items for this transaction
-            $purchaseIds = DB::table('purchases')
-                ->where('transaction_id', $transaction_id)
-                ->pluck('id');
+        // Restrict access to users with rid between 5 and 10 inclusive
+        if ($user->rid < 5 || $user->rid > 10) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
 
-            if ($purchaseIds->isNotEmpty()) {
-                DB::table('purchase_items')
-                    ->whereIn('purchase_id', $purchaseIds)
-                    ->delete();
-                DB::table('purchases')
+        try {
+            // Updated validation rules
+            $request->validate([
+                'transaction_id' => 'sometimes|integer|in:' . $transaction_id,
+                'payment_mode' => 'nullable|string|in:cash,credit_card,online',
+                'vendor_id' => 'nullable|integer|exists:vendors,id', // Top-level vendor_id
+                'products' => 'nullable|array',
+                'products.*.product_id' => 'required_with:products|integer|exists:products,id',
+                'products.*.quantity' => 'required_with:products|integer|min:1',
+                'products.*.per_item_cost' => 'required_with:products|numeric|min:0',
+                'products.*.unit_id' => 'required_with:products|integer|exists:units,id',
+                'products.*.discount' => 'nullable|numeric|min:0|max:100', // No vendor_id in products
+            ]);
+            Log::info('Validation passed successfully for updateTransactionById', ['transaction_id' => $transaction_id]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::error('Validation failed for updateTransactionById', [
+                'errors' => $e->errors(),
+                'request_data' => $request->all()
+            ]);
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+            ], 422);
+        }
+
+        // Check if the transaction exists
+        $transaction = DB::table('transaction_purchases')
+            ->where('id', $transaction_id)
+            ->first();
+
+        if (!$transaction) {
+            Log::info('Transaction not found', ['transaction_id' => $transaction_id]);
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Transaction not found'
+            ], 404);
+        }
+
+        DB::beginTransaction();
+        try {
+            // Update transaction_purchases table (payment_mode only)
+            $updateData = [];
+            if ($request->has('payment_mode')) {
+                $updateData['payment_mode'] = $request->input('payment_mode');
+            }
+            if (!empty($updateData)) {
+                DB::table('transaction_purchases')
+                    ->where('id', $transaction_id)
+                    ->update($updateData);
+            }
+
+            // Update purchase details if products are provided
+            if ($request->has('products')) {
+                // Require vendor_id if products are being updated
+                if (!$request->has('vendor_id')) {
+                    return response()->json([
+                        'message' => 'Validation failed',
+                        'errors' => ['vendor_id' => ['The vendor_id field is required when products are provided.']]
+                    ], 422);
+                }
+
+                // Delete existing purchase items for this transaction
+                $purchaseIds = DB::table('purchases')
                     ->where('transaction_id', $transaction_id)
-                    ->delete();
+                    ->pluck('id');
+
+                if ($purchaseIds->isNotEmpty()) {
+                    DB::table('purchase_items')
+                        ->whereIn('purchase_id', $purchaseIds)
+                        ->delete();
+                    DB::table('purchases')
+                        ->where('transaction_id', $transaction_id)
+                        ->delete();
+                }
+
+                // Insert new purchase and purchase_items records with single vendor_id
+                $vendorId = $request->input('vendor_id');
+                foreach ($request->input('products') as $product) {
+                    // Insert into purchases table
+                    $purchaseId = DB::table('purchases')->insertGetId([
+                        'transaction_id' => $transaction_id,
+                        'product_id' => $product['product_id'],
+                        'created_at' => now(),
+                    ]);
+
+                    // Insert into purchase_items table with top-level vendor_id
+                    DB::table('purchase_items')->insert([
+                        'purchase_id' => $purchaseId,
+                        'vendor_id' => $vendorId, // Use single vendor_id from request
+                        'quantity' => $product['quantity'],
+                        'per_item_cost' => $product['per_item_cost'],
+                        'unit_id' => $product['unit_id'],
+                        'discount' => $product['discount'] ?? 0,
+                        'created_at' => now(),
+                    ]);
+                }
             }
 
-            // Insert new purchase and purchase_items records
-            foreach ($request->input('products') as $product) {
-                // Insert into purchases table
-                $purchaseId = DB::table('purchases')->insertGetId([
-                    'transaction_id' => $transaction_id,
-                    'product_id' => $product['product_id'],
-                    'created_at' => now(),
-                ]);
-
-                // Insert into purchase_items table with vendor_id from request
-                DB::table('purchase_items')->insert([
-                    'purchase_id' => $purchaseId,
-                    'vendor_id' => $product['vendor_id'],
-                    'quantity' => $product['quantity'],
-                    'per_item_cost' => $product['per_item_cost'],
-                    'unit_id' => $product['unit_id'],
-                    'discount' => $product['discount'] ?? 0,
-                    'created_at' => now(),
-                ]);
-            }
+            DB::commit();
+            Log::info('Transaction updated successfully', ['transaction_id' => $transaction_id]);
+            return response()->json([
+                'status' => 'success',
+                'message' => 'Transaction updated successfully'
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Failed to update transaction', [
+                'transaction_id' => $transaction_id,
+                'error' => $e->getMessage()
+            ]);
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to update transaction',
+                'error' => $e->getMessage()
+            ], 500);
         }
-
-        DB::commit();
-        Log::info('Transaction updated successfully', ['transaction_id' => $transaction_id]);
-        return response()->json([
-            'status' => 'success',
-            'message' => 'Transaction updated successfully'
-        ], 200);
-    } catch (\Exception $e) {
-        DB::rollBack();
-        Log::error('Failed to update transaction', [
-            'transaction_id' => $transaction_id,
-            'error' => $e->getMessage()
-        ]);
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Failed to update transaction',
-            'error' => $e->getMessage()
-        ], 500);
     }
-}
 }
