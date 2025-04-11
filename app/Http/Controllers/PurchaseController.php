@@ -123,68 +123,94 @@ class PurchaseController extends Controller
         }
     }
     public function getTransactionsByCid(Request $request)
-    {
-         // Get the authenticated user
-         $user = Auth::user();
-         if (!$user) {
-            return response()->json(['message' => 'Unauthorized'], 401);
-        }
-
-      // Restrict access to users with rid between 5 and 10 inclusive
-       if ($user->rid < 5 || $user->rid > 10) {
-        return response()->json(['message' => 'Forbidden'], 403);
-       }
-
-        try {
-            $request->validate([
-                'cid' => 'required|integer'
-            ]);
-            Log::info('Validation passed successfully for getTransactionsByCid', ['cid' => $request->cid]);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            Log::error('Validation failed for getTransactionsByCid', [
-                'errors' => $e->errors(),
-                'request_data' => $request->all()
-            ]);
-            return response()->json([
-                'message' => 'Validation failed',
-                'errors' => $e->errors(),
-            ], 422);
-        }
-
-        $cid = $request->input('cid');
-
-        $transactions = DB::table('transaction_purchases as tp')
-            ->select(
-                'tp.id as transaction_id',
-                'v.vendor_name',
-                'pi.vendor_id', // Add vendor_id from purchase_items
-                'tp.payment_mode',
-                'tp.created_at as date',
-                'u.name as purchased_by'
-            )
-            ->leftJoin('purchases as p', 'tp.id', '=', 'p.transaction_id')
-            ->leftJoin('purchase_items as pi', 'p.id', '=', 'pi.purchase_id')
-            ->leftJoin('vendors as v', 'pi.vendor_id', '=', 'v.id')
-            ->leftJoin('users as u', 'tp.uid', '=', 'u.id')
-            ->where('tp.cid', $cid)
-            ->groupBy('tp.id', 'v.vendor_name', 'pi.vendor_id', 'tp.payment_mode', 'tp.created_at', 'u.name') // Add pi.vendor_id to groupBy
-            ->get();
-
-        if ($transactions->isEmpty()) {
-            Log::info('No transactions found for cid', ['cid' => $cid]);
-            return response()->json([
-                'status' => 'error',
-                'message' => 'No transactions found for this customer ID'
-            ], 404);
-        }
-
-        Log::info('Transactions retrieved successfully', ['cid' => $cid, 'count' => $transactions->count()]);
-        return response()->json([
-            'status' => 'success',
-            'data' => $transactions
-        ], 200);
+{
+    // Get the authenticated user
+    $user = Auth::user();
+    if (!$user) {
+        return response()->json(['message' => 'Unauthorized'], 401);
     }
 
+    // Extract uid from the authenticated user
+    $uid = $user->id;
+
+    // Restrict access to users with rid between 5 and 10 inclusive
+    if ($user->rid < 5 || $user->rid > 10) {
+        return response()->json(['message' => 'Forbidden'], 403);
+    }
+
+    try {
+        // Validate the request data
+        $request->validate([
+            'cid' => 'required|integer'
+        ]);
+        Log::info('Validation passed successfully for getTransactionsByCid', ['cid' => $request->cid]);
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        Log::error('Validation failed for getTransactionsByCid', [
+            'errors' => $e->errors(),
+            'request_data' => $request->all()
+        ]);
+        return response()->json([
+            'message' => 'Validation failed',
+            'errors' => $e->errors(),
+        ], 422);
+    }
+
+    // Extract cid from the request
+    $cid = $request->input('cid');
+
+    // Start building the query
+    $query = DB::table('transaction_purchases as tp')
+        ->select(
+            'tp.id as transaction_id',
+            'v.vendor_name',
+            'pi.vendor_id', // Add vendor_id from purchase_items
+            'tp.payment_mode',
+            'tp.created_at as date',
+            'u.name as purchased_by'
+        )
+        ->leftJoin('purchases as p', 'tp.id', '=', 'p.transaction_id')
+        ->leftJoin('purchase_items as pi', 'p.id', '=', 'pi.purchase_id')
+        ->leftJoin('vendors as v', 'pi.vendor_id', '=', 'v.id')
+        ->leftJoin('users as u', 'tp.uid', '=', 'u.id')
+        ->where('tp.cid', $cid);
+
+    // Apply additional restrictions based on the user's rid
+    if ($user->rid === 5) {
+        // RID 5: Allow all transactions for the company (cid)
+        $query->where('tp.cid', $cid);
+    } elseif ($user->rid === 6) {
+        // RID 6: Allow admin to see their own transactions and lower role (7, 8, 9) transactions
+        $query->where(function ($q) use ($uid) {
+            $q->where('tp.uid', $uid) // Their own transactions
+              ->orWhereIn('u.rid', [7, 8, 9]); // Transactions of lower-role users
+        });
+    } else {
+        // RID 7, 8, 9: Restrict to transactions where uid matches the authenticated user's ID
+        $query->where('tp.uid', $uid);
+    }
+
+    // Group by necessary columns
+    $query->groupBy('tp.id', 'v.vendor_name', 'pi.vendor_id', 'tp.payment_mode', 'tp.created_at', 'u.name');
+
+    // Execute the query
+    $transactions = $query->get();
+
+    // Check if any transactions were found
+    if ($transactions->isEmpty()) {
+        Log::info('No transactions found for cid', ['cid' => $cid]);
+        return response()->json([
+            'status' => 'error',
+            'message' => 'No transactions found for this customer ID'
+        ], 404);
+    }
+
+    // Log success and return the transactions
+    Log::info('Transactions retrieved successfully', ['cid' => $cid, 'count' => $transactions->count()]);
+    return response()->json([
+        'status' => 'success',
+        'data' => $transactions
+    ], 200);
+}
 //     public function getPurchaseDetailsByTransaction(Request $request)
 // {
 //     // Get the authenticated user
