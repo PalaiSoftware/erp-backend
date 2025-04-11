@@ -58,6 +58,57 @@ class CustomerController extends Controller
         ], 201);
     }
 
+    // public function checkCustomer(Request $request)
+    // {
+    //     // Check if the user is authenticated
+    //     $user = Auth::user();
+    //     if (!$user) {
+    //         return response()->json(['message' => 'Unauthorized'], 401);
+    //     }
+
+    //     // Check if the user's role ID (rid) is between 5 and 10
+    //     if ($user->rid < 5 || $user->rid > 10) {
+    //         return response()->json(['message' => 'Forbidden'], 403);
+    //     }
+
+    //     // Validate the request input
+    //     $validated = $request->validate([
+    //         'cid' => 'required|integer',
+    //         'first_name' => 'sometimes|string|max:255',
+    //         'last_name' => 'sometimes|string|max:255',
+    //         'phone' => 'sometimes|string|max:20',
+    //         'gst' => 'sometimes|string',
+    //         'pan' => 'sometimes|string',
+    //     ]);
+
+    //     // Define the possible search fields
+    //     $searchFields = ['first_name', 'last_name', 'phone', 'gst', 'pan'];
+        
+    //     // Check if at least one search field is provided
+    //     $providedSearchFields = array_intersect_key($validated, array_flip($searchFields));
+    //     if (empty($providedSearchFields)) {
+    //         return response()->json(['message' => 'At least one search field is required'], 422);
+    //     }
+
+    //     // Build the query
+    //     $query = Customer::where('cid', $validated['cid']);
+    //     foreach ($providedSearchFields as $field => $value) {
+    //         $query->where($field, $value);
+    //     }
+
+    //     // Execute the query
+    //     $customers = $query->get();
+
+    //     // Return the response
+    //     if ($customers->isEmpty()) {
+    //         return response()->json(['message' => 'No customers found matching the criteria'], 404);
+    //     }
+
+    //     return response()->json([
+    //         'message' => 'Customers found',
+    //         'customers' => $customers
+    //     ], 200);
+    // }
     public function checkCustomer(Request $request)
     {
         // Check if the user is authenticated
@@ -65,12 +116,12 @@ class CustomerController extends Controller
         if (!$user) {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
-
+    
         // Check if the user's role ID (rid) is between 5 and 10
         if ($user->rid < 5 || $user->rid > 10) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
-
+    
         // Validate the request input
         $validated = $request->validate([
             'cid' => 'required|integer',
@@ -80,7 +131,7 @@ class CustomerController extends Controller
             'gst' => 'sometimes|string',
             'pan' => 'sometimes|string',
         ]);
-
+    
         // Define the possible search fields
         $searchFields = ['first_name', 'last_name', 'phone', 'gst', 'pan'];
         
@@ -89,27 +140,27 @@ class CustomerController extends Controller
         if (empty($providedSearchFields)) {
             return response()->json(['message' => 'At least one search field is required'], 422);
         }
-
+    
         // Build the query
         $query = Customer::where('cid', $validated['cid']);
         foreach ($providedSearchFields as $field => $value) {
-            $query->where($field, $value);
+            // Use LIKE with wildcards for pattern matching
+            $query->where($field, 'LIKE', "%{$value}%");
         }
-
+    
         // Execute the query
         $customers = $query->get();
-
+    
         // Return the response
         if ($customers->isEmpty()) {
             return response()->json(['message' => 'No customers found matching the criteria'], 404);
         }
-
+    
         return response()->json([
             'message' => 'Customers found',
             'customers' => $customers
         ], 200);
     }
-
     public function index(Request $request)
     {
         // Get the authenticated user

@@ -103,60 +103,110 @@ class VendorController extends Controller
     //             ], 200);
     //         }
     // }
+    // public function checkVendor(Request $request)
+    // {
+    // // Authentication and authorization checks
+    //         $user = Auth::user();
+    //         if (!$user) return response()->json(['message' => 'Unauthorized'], 401);
+    //         if ($user->rid < 5 || $user->rid > 10) return response()->json(['message' => 'Forbidden'], 403);
+
+    //         // Validate the request
+    //         $validated = $request->validate([
+    //             'gstno' => 'nullable|string|required_without_all:pannumber,phone,email,name',
+    //             'pannumber' => 'nullable|string|required_without_all:gstno,phone,email,name',
+    //             'phone' => 'nullable|string|required_without_all:gstno,pannumber,email,name',
+    //             'email' => 'nullable|email|required_without_all:gstno,pannumber,phone,name',
+    //             'name' => 'nullable|string|required_without_all:gstno,pannumber,phone,email',
+    //             'cid' => 'required|integer',
+    //         ]);
+
+    //         // Build the query dynamically
+    //         $query = Vendor::query();
+
+    //         if (isset($validated['gstno'])) {
+    //             $query->where('gst_no', $validated['gstno']);
+    //         }
+    //         if (isset($validated['pannumber'])) {
+    //             $query->where('pan', $validated['pannumber']);
+    //         }
+    //         if (isset($validated['phone'])) {
+    //             $query->where('phone', $validated['phone']);
+    //         }
+    //         if (isset($validated['email'])) {
+    //             $query->where('email', $validated['email']);
+    //         }
+    //         if (isset($validated['name'])) {
+    //             $query->where('vendor_name', $validated['name']);
+    //         }
+
+    //         // Add the cid condition to the query
+    //         $query->where('cid', $validated['cid']);
+
+    //         $vendor = $query->get();
+
+    //         // Return response based on vendor existence
+    //         if ($vendor) {
+    //             return response()->json([
+    //                 'message' => 'Vendor found in your company.',
+    //                 'vendor' => $vendor
+    //             ], 200);
+    //         } else {
+    //             return response()->json([
+    //                 'message' => 'Vendor not found in your company. Please add them.',
+    //             ], 404);
+    //         }
+    // }
     public function checkVendor(Request $request)
     {
-    // Authentication and authorization checks
-            $user = Auth::user();
-            if (!$user) return response()->json(['message' => 'Unauthorized'], 401);
-            if ($user->rid < 5 || $user->rid > 10) return response()->json(['message' => 'Forbidden'], 403);
-
-            // Validate the request
-            $validated = $request->validate([
-                'gstno' => 'nullable|string|required_without_all:pannumber,phone,email,name',
-                'pannumber' => 'nullable|string|required_without_all:gstno,phone,email,name',
-                'phone' => 'nullable|string|required_without_all:gstno,pannumber,email,name',
-                'email' => 'nullable|email|required_without_all:gstno,pannumber,phone,name',
-                'name' => 'nullable|string|required_without_all:gstno,pannumber,phone,email',
-                'cid' => 'required|integer',
-            ]);
-
-            // Build the query dynamically
-            $query = Vendor::query();
-
-            if (isset($validated['gstno'])) {
-                $query->where('gst_no', $validated['gstno']);
-            }
-            if (isset($validated['pannumber'])) {
-                $query->where('pan', $validated['pannumber']);
-            }
-            if (isset($validated['phone'])) {
-                $query->where('phone', $validated['phone']);
-            }
-            if (isset($validated['email'])) {
-                $query->where('email', $validated['email']);
-            }
-            if (isset($validated['name'])) {
-                $query->where('vendor_name', $validated['name']);
-            }
-
-            // Add the cid condition to the query
-            $query->where('cid', $validated['cid']);
-
-            $vendor = $query->get();
-
-            // Return response based on vendor existence
-            if ($vendor) {
-                return response()->json([
-                    'message' => 'Vendor found in your company.',
-                    'vendor' => $vendor
-                ], 200);
-            } else {
-                return response()->json([
-                    'message' => 'Vendor not found in your company. Please add them.',
-                ], 404);
-            }
+        // Authentication and authorization checks
+        $user = Auth::user();
+        if (!$user) return response()->json(['message' => 'Unauthorized'], 401);
+        if ($user->rid < 5 || $user->rid > 10) return response()->json(['message' => 'Forbidden'], 403);
+    
+        // Validate the request
+        $validated = $request->validate([
+            'gstno' => 'nullable|string|required_without_all:pannumber,phone,email,name',
+            'pannumber' => 'nullable|string|required_without_all:gstno,phone,email,name',
+            'phone' => 'nullable|string|required_without_all:gstno,pannumber,email,name',
+            'email' => 'nullable|email|required_without_all:gstno,pannumber,phone,name',
+            'name' => 'nullable|string|required_without_all:gstno,pannumber,phone,email',
+            'cid' => 'required|integer',
+        ]);
+    
+        // Build the query dynamically with pattern matching
+        $query = Vendor::query();
+    
+        // Add pattern matching conditions
+        if (isset($validated['gstno'])) {
+            $query->where('gst_no', 'LIKE', "%{$validated['gstno']}%");
+        }
+        if (isset($validated['pannumber'])) {
+            $query->where('pan', 'LIKE', "%{$validated['pannumber']}%");
+        }
+        if (isset($validated['phone'])) {
+            $query->where('phone', 'LIKE', "%{$validated['phone']}%");
+        }
+        if (isset($validated['email'])) {
+            $query->where('email', 'LIKE', "%{$validated['email']}%");
+        }
+        if (isset($validated['name'])) {
+            $query->where('vendor_name', 'LIKE', "%{$validated['name']}%");
+        }
+    
+        // Exact match for company ID
+        $query->where('cid', $validated['cid']);
+    
+        // Execute the query
+        $vendors = $query->get();
+    
+        // Return response based on results
+        return $vendors->isEmpty()
+            ? response()->json(['message' => 'Vendor not found in your company. Please add them.'], 404)
+            : response()->json([
+                'message' => 'Vendor found in your company.',
+                'vendors' => $vendors
+            ], 200);
     }
-
     public function index(Request $request)
         {
             // Get the authenticated user
