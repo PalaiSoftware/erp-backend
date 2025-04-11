@@ -56,32 +56,41 @@ class ProductController extends Controller
     }
 
     public function index(Request $request)
-    {
+{
     // Authentication and authorization checks
-            $user = Auth::user();
-            if (!$user) {
-                return response()->json(['message' => 'Unauthorized'], 401);
-            }
-            if ($user->rid < 5 || $user->rid > 10) {
-                return response()->json(['message' => 'Forbidden'], 403);
-            }
-
-            // Validate the request
-            $validated = $request->validate([
-                'cid' => 'required|integer',
-            ]);
-
-            // Fetch products by cid
-            $products = Product::where('cid', $validated['cid'])
-                            ->select('id', 'name', 'description', 'category_id', 'hscode', 'cid') // Include 'cid' if needed
-                            ->get();
-
-            // Return response
-            return response()->json([
-                'message' => 'Products retrieved successfully',
-                'products' => $products,
-            ], 200);
+    $user = Auth::user();
+    if (!$user) {
+        return response()->json(['message' => 'Unauthorized'], 401);
     }
+    if ($user->rid < 5 || $user->rid > 10) {
+        return response()->json(['message' => 'Forbidden'], 403);
+    }
+
+    // Validate the request
+    $validated = $request->validate([
+        'cid' => 'required|integer',
+    ]);
+
+    // Fetch products by cid with category name
+    $products = Product::where('products.cid', $validated['cid'])
+        ->leftJoin('categories', 'products.category_id', '=', 'categories.id') // Join with categories table
+        ->select(
+            'products.id',
+            'products.name as product_name', // Rename columns for clarity
+            'products.description',
+            'products.category_id',
+            'categories.name as category_name', // Include category name
+            'products.hscode',
+            'products.cid'
+        )
+        ->get();
+
+    // Return response
+    return response()->json([
+        'message' => 'Products retrieved successfully',
+        'products' => $products,
+    ], 200);
+}
     public function checkHscodeProduct(Request $request)
     {
         // Authentication and authorization checks
@@ -154,6 +163,56 @@ class ProductController extends Controller
                     'message' => 'Product updated successfully',
                     'product' => $product
                 ], 200);
+        }
+        public function getProductById($product_id)
+        {
+            // Authentication check
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json(['message' => 'Unauthorized'], 401);
+            }
+    
+            // Authorization check (e.g., restrict access based on role or cid)
+            if ($user->rid < 5 || $user->rid > 10) {
+                return response()->json(['message' => 'Forbidden'], 403);
+            }
+    
+            // Validate that the product_id is numeric
+            if (!is_numeric($product_id)) {
+                return response()->json(['message' => 'Invalid product ID'], 422);
+            }
+    
+            // Fetch the product by product_id
+            $product = Product::where('products.id', $product_id)
+    ->leftJoin('categories', 'products.category_id', '=', 'categories.id') // Join with categories table
+    ->select(
+        'products.id as product_id',
+        'products.name as product_name',
+        'products.description',
+        'products.category_id',
+        'categories.name as category_name', // Include category name
+        'products.hscode',
+        'products.cid'
+    )
+    ->first();
+    
+            // Check if the product exists
+            if (!$product) {
+                return response()->json([
+                    'message' => 'Product not found',
+                ], 404);
+            }
+    
+            // Ensure the product belongs to the user's company (cid)
+            if ($product->cid !== $user->cid) {
+                return response()->json(['message' => 'Access denied'], 403);
+            }
+    
+            // Return the product details
+            return response()->json([
+                'message' => 'Product retrieved successfully',
+                'product' => $product,
+            ], 200);
         }
    
 }
