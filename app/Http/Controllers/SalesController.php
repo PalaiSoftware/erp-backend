@@ -295,33 +295,42 @@ private function getInvoiceData($transactionId)
     ];
 }
 
-public function getAllInvoicesByCompany($cid)
-{
-     // Get the authenticated user
-     $user = Auth::user();
-     if (!$user) {
-        return response()->json(['message' => 'Unauthorized'], 401);
-    }
+    public function getAllInvoicesByCompany($cid)
+        {
+            // Get the authenticated user
+            $user = Auth::user();
+            if (!$user) { 
+                return response()->json(['message' => 'Unauthorized'], 401);
+            }
+            $uid = $user->id;
+            // Restrict access to users with rid between 5 and 10 inclusive
+            if ($user->rid < 5 || $user->rid > 10) {
+                return response()->json(['message' => 'Forbidden'], 403);
+            }
 
-  // Restrict access to users with rid between 5 and 10 inclusive
-   if ($user->rid < 5 || $user->rid > 10) {
-    return response()->json(['message' => 'Forbidden'], 403);
-   }
+            try {
 
-    try {
-        $transactionIds = TransactionSales::where('cid', $cid)->pluck('id')->toArray();
-        $invoices = [];
+                if($user->rid ==5){
+                    $transactionIds = TransactionSales::where('cid', $cid)->pluck('id')->toArray();
+                }
+                else if($user->rid ==6){
+                    $uids = User::where('rid', '>', 6)->pluck('id')->push($user->id)->unique()->toArray();
+                    $transactionIds = TransactionSales::where('cid', $cid)->whereIn('uid', $uids)->pluck('id')->toArray();
+                }else{
+                    $transactionIds = TransactionSales::where('cid', $cid)->where('uid', $uid)->pluck('id')->toArray();
+                }
+                $invoices = [];
 
-        foreach ($transactionIds as $tid) {
-            $invoices[] = $this->getInvoiceData($tid);
+                foreach ($transactionIds as $tid) {
+                    $invoices[] = $this->getInvoiceData($tid);
+                }
+
+                return response()->json(['invoices' => $invoices]);
+            } catch (\Exception $e) {
+                Log::error('Failed to fetch invoices', ['cid' => $cid, 'error' => $e->getMessage()]);
+                return response()->json(['error' => 'Failed to fetch invoices'], 500);
+            }
         }
-
-        return response()->json(['invoices' => $invoices]);
-    } catch (\Exception $e) {
-        Log::error('Failed to fetch invoices', ['cid' => $cid, 'error' => $e->getMessage()]);
-        return response()->json(['error' => 'Failed to fetch invoices'], 500);
-    }
-}
 
 
 

@@ -49,7 +49,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/customers', [CustomerController::class, 'index']);
 
     // New route for geting users
-    Route::get('/users-by-role', [AuthController::class, 'getUsersByRole']);
+    Route::post('/users-by-role', [AuthController::class, 'getUsersByRole']);
     // New route for blocking/unblocking users
     Route::post('/user-block-unblock', [AuthController::class, 'userBlockUnblock']);
     // for promote/demote users
