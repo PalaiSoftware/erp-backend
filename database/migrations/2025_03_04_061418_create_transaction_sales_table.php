@@ -13,7 +13,10 @@ return new class extends Migration {
             $table->unsignedBigInteger('cid')->nullable(); // Company ID, nullable
             $table->unsignedBigInteger('customer_id'); // Customer ID
             $table->string('payment_mode', 50);    // Payment mode
-            $table->timestamp('created_at')->useCurrent();
+            // $table->timestamp('created_at')->useCurrent();
+            // $table->timestamp('updated_at')->nullable()->useCurrentOnUpdate(); // Updated at timestamp
+            $table->timestamp('created_at')->default(DB::raw('CURRENT_TIMESTAMP'));
+            $table->timestamp('updated_at')->default(DB::raw('CURRENT_TIMESTAMP'));
         });
     }
 

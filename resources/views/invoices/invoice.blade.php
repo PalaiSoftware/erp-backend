@@ -124,6 +124,8 @@
                     <h4>Billing Details</h4>
                     <p><strong>Invoice Number:</strong> {{ $invoice->number }}</p>
                     <p><strong>Date:</strong> {{ $invoice->date }}</p>
+                    <p><strong>Date:</strong> {{ $transaction->updated_at }}</p>
+
                     <p><strong>Billing Done By:</strong> {{ $userDetails->name }}</p>
 
                     <h4>Billed To</h4>
