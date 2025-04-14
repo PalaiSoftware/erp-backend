@@ -15,7 +15,7 @@ class TransactionSales extends Model
         'payment_mode'
     ];
 
-    public $timestamps = false;
+    public $timestamps = true;
 
     // Relationship to sales (no foreign key enforced)
     public function sales()

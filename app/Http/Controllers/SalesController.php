@@ -131,7 +131,7 @@ class SalesController extends Controller
                 'cid' => $request->cid,
                 'customer_id' => $request->customer_id,
                 'payment_mode' => $request->payment_mode,
-                'created_at' => now(),
+                // 'created_at' => now(),
             ]);
             $transactionId = $transaction->id;
             Log::info('Created transaction', ['transaction_id' => $transactionId]);
@@ -260,7 +260,7 @@ private function getInvoiceData($transactionId)
 
     $invoice = [
         'number' => 'INV-' . $transactionId,
-        'date' => Carbon::parse($transaction->created_at)->format('Y-m-d'),
+        'date' => Carbon::parse($transaction->updated_at)->format('Y-m-d'),
     ];
 
     $items = [];
@@ -585,9 +585,9 @@ public function update(Request $request, $transactionId)
             'cid' => $request->cid,
             'customer_id' => $request->customer_id,
             'payment_mode' => $request->payment_mode,
-            'updated_at' => now(),
+            // 'updated_at' => now(),
         ]);
-
+        $transaction->touch();
         // Fetch existing sales for this transaction
         $existingSales = Sale::where('transaction_id', $transactionId)->get()->keyBy('product_id');
         $newProductIds = array_column($request->products, 'product_id');
