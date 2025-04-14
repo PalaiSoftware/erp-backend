@@ -17,7 +17,7 @@ public function register(Request $request)
     $validator = Validator::make($request->all(), [
         'name' => 'required|string|max:255',
         'email' => 'required|string|email|max:255|unique:users',
-        'mobile' => 'required|string|max:255|unique:users',
+        'mobile' => 'required|string|max:255',
         'country' => 'required|string|max:255',
         'password' => 'required|string|min:6',
         'rid' => 'required|integer|between:5,10', // Role ID between 5 and 10
@@ -111,7 +111,7 @@ public function newuser(Request $request)
     $validator = Validator::make($request->all(), [
         'name' => 'required|string|max:255',
         'email' => 'required|string|email|max:255|unique:users',
-        'mobile' => 'required|string|max:255|unique:users',
+        'mobile' => 'required|string|max:255',
         'country' => 'required|string|max:255',
         'password' => 'required|string|min:6',
         'rid' => 'required|integer|between:6,10',
