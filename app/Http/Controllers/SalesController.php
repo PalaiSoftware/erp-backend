@@ -334,37 +334,97 @@ private function getInvoiceData($transactionId)
 
 
 
-public function getTotalSaleAmount($cid)
-{
-    $user = Auth::user();
-    if (!$user) {
-        return response()->json(['message' => 'Unauthorized'], 401);
-    }
+// public function getTotalSaleAmount($cid)
+// {
+//     $user = Auth::user();
+//     if (!$user) {
+//         return response()->json(['message' => 'Unauthorized'], 401);
+//     }
 
-    try {
-        $transactionIds = TransactionSales::where('cid', $cid)->pluck('id')->toArray();
-        $invoices = [];
-        $grandTotal = 0;
-        $distinctCustomers = TransactionSales::where('cid', $cid)
-        ->distinct('customer_id')
-        ->count('customer_id');   
-        foreach ($transactionIds as $tid) {
-            $invoiceData = $this->getInvoiceData($tid);
-            $invoices[] = $invoiceData;
-            $grandTotal += $invoiceData['total_amount']; // Add each invoice's total_amount
+//     try {
+//         $transactionIds = TransactionSales::where('cid', $cid)->pluck('id')->toArray();
+//         $invoices = [];
+//         $grandTotal = 0;
+//         $distinctCustomers = TransactionSales::where('cid', $cid)
+//         ->distinct('customer_id')
+//         ->count('customer_id');   
+//         foreach ($transactionIds as $tid) {
+//             $invoiceData = $this->getInvoiceData($tid);
+//             $invoices[] = $invoiceData;
+//             $grandTotal += $invoiceData['total_amount']; // Add each invoice's total_amount
+//         }
+//         $transactionCount = count($invoices); // Number of invoices
+//         return response()->json([
+//             // 'invoices' => $invoices,
+//             'grand_total' => $grandTotal, // Include the sum in the response
+//             'total_sale_order' => $transactionCount,
+//             'total_customer' => $distinctCustomers
+//         ]);
+//     } catch (\Exception $e) {
+//         Log::error('Failed to fetch invoices', ['cid' => $cid, 'error' => $e->getMessage()]);
+//         return response()->json(['error' => 'Failed to fetch invoices'], 500);
+//     }
+// }
+
+    public function getTotalSaleAmount($cid)
+        {
+            // Authentication check
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json(['message' => 'Unauthorized'], 401);
+            }
+
+            // Validate request data
+            // $validated = $request->validate([
+            //     'cid' => 'required|integer|exists:companies,id'
+            // ]);
+            // $cid = $validated['cid'];
+            $rid = $user->rid;
+            $uid = $user->id;
+
+            try {
+                // Grand Total Calculation
+                $grandTotal = DB::table('sales_items')
+                    ->join('sales', 'sales_items.sale_id', '=', 'sales.id')
+                    ->join('transaction_sales', 'sales.transaction_id', '=', 'transaction_sales.id')
+                    ->where('transaction_sales.cid', $cid)
+                    ->when(!in_array($rid, [5, 6]), function ($query) use ($uid) {
+                        $query->where('transaction_sales.uid', $uid);
+                    })
+                    ->sum(DB::raw('sales_items.quantity * sales_items.per_item_cost * (1 - sales_items.discount/100)'));
+
+                // Total Sale Orders
+                $totalSaleOrder = DB::table('transaction_sales')
+                    ->where('cid', $cid)
+                    ->when(!in_array($rid, [5, 6]), function ($query) use ($uid) {
+                        $query->where('uid', $uid);
+                    })
+                    ->count();
+
+                // Total Customers
+                $distinctCustomers = TransactionSales::where('cid', $cid)
+                ->distinct('customer_id')
+                ->count('customer_id'); 
+
+                return response()->json([
+                    'grand_total' => (float) $grandTotal,
+                    'total_sale_order' => $totalSaleOrder,
+                    'total_customer' => $distinctCustomers
+                ], 200);
+
+            } catch (\Exception $e) {
+                Log::error('Sales widget error', [
+                    'cid' => $cid,
+                    'user_id' => $uid,
+                    'error' => $e->getMessage()
+                ]);
+                
+                return response()->json([
+                    'error' => 'Failed to retrieve sales data'
+                ], 500);
+            }
         }
-        $transactionCount = count($invoices); // Number of invoices
-        return response()->json([
-            // 'invoices' => $invoices,
-            'grand_total' => $grandTotal, // Include the sum in the response
-            'total_sale_order' => $transactionCount,
-            'total_customer' => $distinctCustomers
-        ]);
-    } catch (\Exception $e) {
-        Log::error('Failed to fetch invoices', ['cid' => $cid, 'error' => $e->getMessage()]);
-        return response()->json(['error' => 'Failed to fetch invoices'], 500);
-    }
-}
+
 public function getCustomerStats(Request $request)
 {
     // Validate request
