@@ -47,6 +47,8 @@ class SalesController extends Controller
                 'cid' => 'required|integer',
                 'customer_id' => 'required|integer',
                 'payment_mode' => 'required|string|max:50',
+                'updated_at' => 'nullable|date', // Add validation for updated_at
+
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             Log::error('Validation failed', ['errors' => $e->errors()]);
@@ -126,12 +128,13 @@ class SalesController extends Controller
         // Proceed with the transaction if all stock checks pass
         DB::beginTransaction();
         try {
+            $updatedAt = $request->has('updated_at') ? Carbon::parse($request->updated_at) : now();
             $transaction = TransactionSales::create([
                 'uid' => $user->id,
                 'cid' => $request->cid,
                 'customer_id' => $request->customer_id,
                 'payment_mode' => $request->payment_mode,
-                // 'created_at' => now(),
+                'updated_at' => $updatedAt, // Use the manually passed updated_at value
             ]);
             $transactionId = $transaction->id;
             Log::info('Created transaction', ['transaction_id' => $transactionId]);
