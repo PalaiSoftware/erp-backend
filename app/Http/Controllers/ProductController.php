@@ -83,6 +83,7 @@ class ProductController extends Controller
             'products.hscode',
             'products.cid'
         )
+        ->orderBy('products.id', 'desc')
         ->get();
 
     // Return response

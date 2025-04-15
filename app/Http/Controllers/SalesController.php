@@ -311,13 +311,13 @@ private function getInvoiceData($transactionId)
             try {
 
                 if($user->rid ==5){
-                    $transactionIds = TransactionSales::where('cid', $cid)->pluck('id')->toArray();
+                    $transactionIds = TransactionSales::where('cid', $cid)->orderBy('id', 'asc')->pluck('id')->toArray();
                 }
                 else if($user->rid ==6){
                     $uids = User::where('rid', '>', 6)->pluck('id')->push($user->id)->unique()->toArray();
-                    $transactionIds = TransactionSales::where('cid', $cid)->whereIn('uid', $uids)->pluck('id')->toArray();
+                    $transactionIds = TransactionSales::where('cid', $cid)->whereIn('uid', $uids)->orderBy('id', 'asc')->pluck('id')->toArray();
                 }else{
-                    $transactionIds = TransactionSales::where('cid', $cid)->where('uid', $uid)->pluck('id')->toArray();
+                    $transactionIds = TransactionSales::where('cid', $cid)->where('uid', $uid)->orderBy('id', 'asc')->pluck('id')->toArray();
                 }
                 $invoices = [];
 

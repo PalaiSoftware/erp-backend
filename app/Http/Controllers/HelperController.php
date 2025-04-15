@@ -156,6 +156,7 @@ public function getProductStock($cid)
                 WHERE s.product_id = p.id AND ts.cid = $cid
             ) as current_stock")
         ])
+        ->orderBy('p.id', 'desc')
         ->get();
 
     return response()->json($products);
