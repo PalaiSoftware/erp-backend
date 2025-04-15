@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 
 class Purchase extends Model
 {
-    protected $fillable = ['transaction_id', 'product_id'];
+    protected $fillable = ['transaction_id', 'product_id','created_at',];
     public $timestamps = false;
 
     public function transaction()
