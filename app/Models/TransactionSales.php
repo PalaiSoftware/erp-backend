@@ -12,7 +12,8 @@ class TransactionSales extends Model
         'uid',
         'cid',
         'customer_id',
-        'payment_mode'
+        'payment_mode',
+        'updated_at'
     ];
 
     public $timestamps = true;

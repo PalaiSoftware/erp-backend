@@ -501,6 +501,7 @@ public function update(Request $request, $transactionId)
             'cid' => 'required|integer',
             'customer_id' => 'required|integer',
             'payment_mode' => 'required|string|max:50',
+            'updated_at' => 'nullable|date_format:Y-m-d H:i:s', // Add this line
         ]);
     } catch (\Illuminate\Validation\ValidationException $e) {
         Log::error('Validation failed', ['errors' => $e->errors()]);
@@ -585,9 +586,10 @@ public function update(Request $request, $transactionId)
             'cid' => $request->cid,
             'customer_id' => $request->customer_id,
             'payment_mode' => $request->payment_mode,
+            'updated_at' => $request->updated_at ?? now(),
+            // 'updated_at' => $request->updated_at ? Carbon::parse($request->updated_at) : now(),
             // 'updated_at' => now(),
         ]);
-        $transaction->touch();
         // Fetch existing sales for this transaction
         $existingSales = Sale::where('transaction_id', $transactionId)->get()->keyBy('product_id');
         $newProductIds = array_column($request->products, 'product_id');
