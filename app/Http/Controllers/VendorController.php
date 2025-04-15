@@ -226,6 +226,7 @@ class VendorController extends Controller
 
                 
                 $vendors = Vendor::where('cid', $validated['cid'])
+                                ->orderBy('id')
                                 ->select(
                                     'id',
                                     'vendor_name',
