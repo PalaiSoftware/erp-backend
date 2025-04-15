@@ -14,7 +14,9 @@ class CreateTransactionPurchasesTable extends Migration
             $table->unsignedBigInteger('cid')->nullable(); // Company ID
             // $table->decimal('total_amount', 10, 2);
             $table->string('payment_mode', 50);
-            $table->timestamp('created_at')->useCurrent();
+            $table->timestamps();
+
+
         });
     }
 
