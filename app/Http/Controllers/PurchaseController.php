@@ -170,7 +170,7 @@ class PurchaseController extends Controller
             'v.vendor_name',
             'pi.vendor_id', // Add vendor_id from purchase_items
             'tp.payment_mode',
-            'tp.created_at as date',
+            'tp.updated_at as date',
             'u.name as purchased_by'
         )
         ->leftJoin('purchases as p', 'tp.id', '=', 'p.transaction_id')
