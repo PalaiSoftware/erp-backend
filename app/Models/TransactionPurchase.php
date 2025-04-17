@@ -14,6 +14,8 @@ class TransactionPurchase extends Model
         'cid',
         // 'total_amount',
         'payment_mode',
+        'absolute_discount',
+        'paid_amount',
         'created_at',
         'updated_at',
     ];

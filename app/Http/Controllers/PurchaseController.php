@@ -44,6 +44,8 @@ class PurchaseController extends Controller
                 'cid' => 'required|integer',
                 'payment_mode' => 'required|string|max:50',
                 'purchase_date' => 'required|date_format:Y-m-d H:i:s', // Add this line
+                'absolute_discount' => 'nullable|numeric|min:0',
+                'paid_amount' => 'nullable|numeric|min:0',
 
             ]);
             Log::info('Validation passed successfully');
@@ -69,6 +71,8 @@ class PurchaseController extends Controller
                 'cid' => $request->cid,
                 'total_amount' => 0, // Placeholder, update later if needed
                 'payment_mode' => $request->payment_mode,
+                'absolute_discount' => $request->absolute_discount ?? 0,
+                'paid_amount' => $request->paid_amount ?? 0,
                'created_at' => $purchaseDate,
                'updated_at' =>  $purchaseDate, // Optional: Set updated_at if needed
             ]);
@@ -386,12 +390,15 @@ public function getPurchaseDetailsByTransaction(Request $request)
 
     $transactionId = $request->input('transaction_id');
 
-    // Check if the transaction exists
-    $transactionExists = DB::table('transaction_purchases')
-        ->where('id', $transactionId)
-        ->exists();
+    // Fetch the transaction using the model
+    $transaction = TransactionPurchase::find($transactionId);
+    Log::info('Transaction data retrieved via model', ['transaction' => $transaction ? $transaction->toArray() : null]);
 
-    if (!$transactionExists) {
+    // Fallback: Fetch directly from DB to confirm data
+    $rawTransaction = DB::table('transaction_purchases')->where('id', $transactionId)->first();
+    Log::info('Raw transaction data retrieved via DB', ['raw_transaction' => $rawTransaction]);
+
+    if (!$transaction) {
         Log::info('Transaction not found', ['transaction_id' => $transactionId]);
         return response()->json([
             'status' => 'error',
@@ -399,21 +406,25 @@ public function getPurchaseDetailsByTransaction(Request $request)
         ], 404);
     }
 
+    // Extract absolute_discount and paid_amount, defaulting to 0 if null
+    $absoluteDiscount = $transaction->absolute_discount ?? 0;
+    $paidAmount = $transaction->paid_amount ?? 0;
+
     // Fetch purchase details with vendor_id
     $purchaseDetails = DB::table('purchases as p')
         ->join('products as prod', 'p.product_id', '=', 'prod.id')
         ->join('purchase_items as pi', 'p.id', '=', 'pi.purchase_id')
         ->join('transaction_purchases as tp', 'p.transaction_id', '=', 'tp.id')
         ->select(
-            'p.product_id', // Added product_id
+            'p.product_id',
             'prod.name as product_name',
             'pi.quantity',
             'pi.per_item_cost',
             'pi.unit_id',
-            'pi.vendor_id', // Add vendor_id
+            'pi.vendor_id',
             'tp.payment_mode',
             'pi.discount',
-            DB::raw('ROUND(pi.quantity * pi.per_item_cost * (1 - pi.discount / 100), 2) as per_product_total') // Rounded to 2 decimals
+            DB::raw('ROUND(pi.quantity * pi.per_item_cost * (1 - pi.discount / 100), 2) as per_product_total')
         )
         ->where('p.transaction_id', $transactionId)
         ->get();
@@ -429,6 +440,10 @@ public function getPurchaseDetailsByTransaction(Request $request)
     // Calculate total amount
     $totalAmount = $purchaseDetails->sum('per_product_total');
 
+    // Calculate payable_amount and due_amount
+    $payableAmount = $totalAmount - $absoluteDiscount;
+    $dueAmount = max(0, $payableAmount - $paidAmount);
+
     // Get unique vendor_ids from the purchase details
     $vendorIds = $purchaseDetails->pluck('vendor_id')->unique()->values();
 
@@ -437,22 +452,31 @@ public function getPurchaseDetailsByTransaction(Request $request)
         ->whereIn('id', $vendorIds)
         ->select('id', 'vendor_name', 'contact_person', 'email', 'phone', 'address', 'gst_no', 'pan')
         ->get();
-    $date = DB::table('transaction_purchases')
-        ->where('id', $transactionId)
-        ->select('updated_at')
-        ->first();
 
-    Log::info('Purchase details retrieved successfully', ['transaction_id' => $transactionId]);
+    Log::info('Purchase details retrieved successfully', [
+        'transaction_id' => $transactionId,
+        'total_amount' => $totalAmount,
+        'absolute_discount' => $absoluteDiscount,
+        'payable_amount' => $payableAmount,
+        'paid_amount' => $paidAmount,
+        'due_amount' => $dueAmount
+    ]);
+
     return response()->json([
         'status' => 'success',
         'data' => [
             'products' => $purchaseDetails,
-            'vendors' => $vendors, // Add vendors array
-            'total_amount' => $totalAmount,
-             'updated_at'=>$date->updated_at
-        ]
+            'vendors' => $vendors,
+            'total_amount' => round($totalAmount, 2),
+            'absolute_discount' => round($absoluteDiscount, 2),
+            'payable_amount' => round($payableAmount, 2),
+            'paid_amount' => round($paidAmount, 2),
+            'due_amount' => round($dueAmount, 2),
+            'updated_at' => $transaction->updated_at->format('Y-m-d H:i:s')
+            ]
     ], 200);
 }
+
     // In your controller (e.g., PurchaseController.php)
 // public function getPurchaseWidget(Request $request)
 // {
@@ -555,7 +579,9 @@ public function getPurchaseDetailsByTransaction(Request $request)
             'products.*.per_item_cost' => 'required_with:products|numeric|min:0',
             'products.*.unit_id' => 'required_with:products|integer|exists:units,id',
             'products.*.discount' => 'nullable|numeric|min:0|max:100',
-            'updated_at' => 'nullable|date_format:Y-m-d H:i:s'
+            'updated_at' => 'nullable|date_format:Y-m-d H:i:s',
+            'absolute_discount' => 'nullable|numeric|min:0',
+            'paid_amount' => 'nullable|numeric|min:0',
         ]);
         Log::info('Validation passed successfully for updateTransactionById', ['transaction_id' => $transaction_id]);
     } catch (\Illuminate\Validation\ValidationException $e) {
@@ -590,6 +616,16 @@ public function getPurchaseDetailsByTransaction(Request $request)
         ];
         if ($request->has('payment_mode')) {
             $updateData['payment_mode'] = $request->input('payment_mode');
+        }
+         // Update absolute_discount if provided and not null
+         if ($request->has('absolute_discount') && $request->input('absolute_discount') !== null) {
+            $updateData['absolute_discount'] = (float)$request->input('absolute_discount');
+        }
+        // Update paid_amount by adding to existing value if provided and not null
+        if ($request->has('paid_amount') && $request->input('paid_amount') !== null) {
+            $currentPaidAmount = (float)($transaction->paid_amount ?? 0);
+            $additionalPaidAmount = (float)$request->input('paid_amount');
+            $updateData['paid_amount'] = $currentPaidAmount + $additionalPaidAmount;
         }
         if (!empty($updateData)) {
             DB::table('transaction_purchases')
