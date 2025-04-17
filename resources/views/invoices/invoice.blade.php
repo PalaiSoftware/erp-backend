@@ -189,7 +189,12 @@
 
         <!-- Footer Section -->
         <div class="footer-section">
-            <p><strong>Total Amount:</strong> <span class="currency-symbol">Rs.</span> {{ number_format($total_amount, 2) }}</p>
+            <p>Extra Discount: <span class="currency-symbol">Rs.</span> {{ number_format($transaction->absolute_discount, 2) }}</p>
+            <p>Paid Amount: <span class="currency-symbol">Rs.</span> {{ number_format($transaction->total_paid, 2) }}</p>
+
+            <p><strong>Total Amount:</strong> <span class="currency-symbol">Rs.</span> {{ number_format($total_amount-$transaction->absolute_discount, 2) }}</p>
+            <p><strong>Due Amount:</strong> <span class="currency-symbol">Rs.</span> {{ number_format($total_amount-$transaction->total_paid, 2) }}</p>
+
         </div>
     </div>
 </body>
