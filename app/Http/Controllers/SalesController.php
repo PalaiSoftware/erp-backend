@@ -682,103 +682,206 @@ public function update(Request $request, $transactionId)
     }
 }
 
-    public function getTransaction($transactionId)
-        {
-            Log::info('Get transaction API endpoint reached', ['transaction_id' => $transactionId]);
+    // public function getTransaction($transactionId)
+    //     {
+    //         Log::info('Get transaction API endpoint reached', ['transaction_id' => $transactionId]);
 
-            // Get the authenticated user
-            $user = Auth::user();
-            if (!$user) {
-                return response()->json(['message' => 'Unauthenticated'], 401);
-            }
+    //         // Get the authenticated user
+    //         $user = Auth::user();
+    //         if (!$user) {
+    //             return response()->json(['message' => 'Unauthenticated'], 401);
+    //         }
 
-            // Restrict to rid 5, 6, 7, 8, 9 only
-            if (!in_array($user->rid, [5, 6, 7, 8, 9])) {
-                return response()->json(['message' => 'Unauthorized to view transaction'], 403);
-            }
+    //         // Restrict to rid 5, 6, 7, 8, 9 only
+    //         if (!in_array($user->rid, [5, 6, 7, 8, 9])) {
+    //             return response()->json(['message' => 'Unauthorized to view transaction'], 403);
+    //         }
 
-            // Fetch the transaction
-            $transaction = TransactionSales::where('id', $transactionId)
-                ->where('uid', $user->id)
-                ->first();
+    //         // Fetch the transaction
+    //         $transaction = TransactionSales::where('id', $transactionId)
+    //             ->where('uid', $user->id)
+    //             ->first();
             
-            if (!$transaction) {
-                return response()->json(['message' => 'Transaction not found or unauthorized'], 404);
-            }
+    //         if (!$transaction) {
+    //             return response()->json(['message' => 'Transaction not found or unauthorized'], 404);
+    //         }
 
-            try {
-                // Fetch associated sales and sales items with units
-                $sales = Sale::where('transaction_id', $transactionId)
-                    ->with('salesItem.unit')
-                    ->get();
+    //         try {
+    //             // Fetch associated sales and sales items with units
+    //             $sales = Sale::where('transaction_id', $transactionId)
+    //                 ->with('salesItem.unit')
+    //                 ->get();
 
-                if ($sales->isEmpty()) {
-                    Log::warning("No sales records found for transaction_id: {$transactionId}");
-                    return response()->json(['message' => 'No sales records found for this transaction'], 404);
-                }
+    //             if ($sales->isEmpty()) {
+    //                 Log::warning("No sales records found for transaction_id: {$transactionId}");
+    //                 return response()->json(['message' => 'No sales records found for this transaction'], 404);
+    //             }
 
-                // Fetch customer data directly using customer_id
-                $customer = \App\Models\Customer::where('id', $transaction->customer_id)->first();
+    //             // Fetch customer data directly using customer_id
+    //             $customer = \App\Models\Customer::where('id', $transaction->customer_id)->first();
                 
-                // Prepare customer data
-                $customerData = $customer ? [
-                    'id' => $customer->id,
-                    'first_name' => $customer->first_name,
-                    'last_name' => $customer->last_name,
+    //             // Prepare customer data
+    //             $customerData = $customer ? [
+    //                 'id' => $customer->id,
+    //                 'first_name' => $customer->first_name,
+    //                 'last_name' => $customer->last_name,
 
-                    'email' => $customer->email ?? null,
-                    'phone' => $customer->phone ?? null,
-                    'gst' => $customer->gst ?? null,
-                    'pan' => $customer->pan ?? null,
-                    'address' => $customer->address ?? null,
+    //                 'email' => $customer->email ?? null,
+    //                 'phone' => $customer->phone ?? null,
+    //                 'gst' => $customer->gst ?? null,
+    //                 'pan' => $customer->pan ?? null,
+    //                 'address' => $customer->address ?? null,
 
 
-                    // Add other fields as needed
-                ] : null;
+    //                 // Add other fields as needed
+    //             ] : null;
 
-                // Prepare the products array
-                $products = [];
-                foreach ($sales as $sale) {
-                    $salesItem = $sale->salesItem;
-                    if ($salesItem) {
-                        $products[] = [
-                            'product_id' => $sale->product_id,
-                            'quantity' => $salesItem->quantity,
-                            'discount' => $salesItem->discount,
-                            'per_item_cost' => $salesItem->per_item_cost,
-                            'unit_id' => $salesItem->unit_id,
-                            'unit_name' => $salesItem->unit ? $salesItem->unit->name : 'N/A',
-                        ];
-                    }
-                }
+    //             // Prepare the products array
+    //             $products = [];
+    //             foreach ($sales as $sale) {
+    //                 $salesItem = $sale->salesItem;
+    //                 if ($salesItem) {
+    //                     $products[] = [
+    //                         'product_id' => $sale->product_id,
+    //                         'quantity' => $salesItem->quantity,
+    //                         'discount' => $salesItem->discount,
+    //                         'per_item_cost' => $salesItem->per_item_cost,
+    //                         'unit_id' => $salesItem->unit_id,
+    //                         'unit_name' => $salesItem->unit ? $salesItem->unit->name : 'N/A',
+    //                     ];
+    //                 }
+    //             }
 
-                // Construct the response data
-                $transactionData = [
-                    'transaction_id' => $transaction->id,
-                    'absolute_discount'=>$transaction->absolute_discount,
-                    'total_paid'=>$transaction->total_paid,
-                    'cid' => $transaction->cid,
-                    'customer_id' => $transaction->customer_id,
-                    'customer' => $customerData, // Added customer data
-                    'payment_mode' => $transaction->payment_mode,
-                    'created_at' => Carbon::parse($transaction->created_at)->format('Y-m-d H:i:s'),
-                    'updated_at' => $transaction->updated_at ? Carbon::parse($transaction->updated_at)->format('Y-m-d H:i:s') : null,
-                    'products' => $products,
-                ];
+    //             // Construct the response data
+    //             $transactionData = [
+    //                 'transaction_id' => $transaction->id,
+    //                 'absolute_discount'=>$transaction->absolute_discount,
+    //                 'total_paid'=>$transaction->total_paid,
+    //                 'cid' => $transaction->cid,
+    //                 'customer_id' => $transaction->customer_id,
+    //                 'customer' => $customerData, // Added customer data
+    //                 'payment_mode' => $transaction->payment_mode,
+    //                 'created_at' => Carbon::parse($transaction->created_at)->format('Y-m-d H:i:s'),
+    //                 'updated_at' => $transaction->updated_at ? Carbon::parse($transaction->updated_at)->format('Y-m-d H:i:s') : null,
+    //                 'products' => $products,
+    //             ];
 
-                Log::info('Transaction data retrieved successfully', ['transaction_id' => $transactionId]);
-                return response()->json($transactionData, 200);
+    //             Log::info('Transaction data retrieved successfully', ['transaction_id' => $transactionId]);
+    //             return response()->json($transactionData, 200);
 
-            } catch (\Exception $e) {
-                Log::error('Failed to fetch transaction data', [
-                    'transaction_id' => $transactionId,
-                    'error' => $e->getMessage()
-                ]);
-                return response()->json([
-                    'message' => 'Failed to fetch transaction data',
-                    'error' => $e->getMessage()
-                ], 500);
-            }
+    //         } catch (\Exception $e) {
+    //             Log::error('Failed to fetch transaction data', [
+    //                 'transaction_id' => $transactionId,
+    //                 'error' => $e->getMessage()
+    //             ]);
+    //             return response()->json([
+    //                 'message' => 'Failed to fetch transaction data',
+    //                 'error' => $e->getMessage()
+    //             ], 500);
+    //         }
+    //     }
+    public function getTransaction($transactionId)
+    {
+        Log::info('Get transaction API endpoint reached', ['transaction_id' => $transactionId]);
+    
+        // Get the authenticated user
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
         }
-
+    
+        // Restrict to rid 5, 6, 7, 8, 9 only
+        if (!in_array($user->rid, [5, 6, 7, 8, 9])) {
+            return response()->json(['message' => 'Unauthorized to view transaction'], 403);
+        }
+    
+        // Fetch the transaction
+        $transaction = TransactionSales::where('id', $transactionId)
+            ->where('uid', $user->id)
+            ->first();
+    
+        if (!$transaction) {
+            return response()->json(['message' => 'Transaction not found or unauthorized'], 404);
+        }
+    
+        try {
+            // Fetch associated sales and sales items with units
+            $sales = Sale::where('transaction_id', $transactionId)
+                ->with('salesItem.unit')
+                ->get();
+    
+            if ($sales->isEmpty()) {
+                Log::warning("No sales records found for transaction_id: {$transactionId}");
+                return response()->json(['message' => 'No sales records found for this transaction'], 404);
+            }
+    
+            // Fetch customer data directly using customer_id
+            $customer = \App\Models\Customer::where('id', $transaction->customer_id)->first();
+    
+            // Prepare customer data
+            $customerData = $customer ? [
+                'id' => $customer->id,
+                'first_name' => $customer->first_name,
+                'last_name' => $customer->last_name,
+                'email' => $customer->email ?? null,
+                'phone' => $customer->phone ?? null,
+                'gst' => $customer->gst ?? null,
+                'pan' => $customer->pan ?? null,
+                'address' => $customer->address ?? null,
+            ] : null;
+    
+            // Calculate total amount
+            $subTotal = 0;
+            $products = [];
+            foreach ($sales as $sale) {
+                $salesItem = $sale->salesItem;
+                if ($salesItem) {
+                    $productTotal = $salesItem->quantity * $salesItem->per_item_cost * (1 - $salesItem->discount / 100);
+                    $subTotal += $productTotal;
+    
+                    $products[] = [
+                        'product_id' => $sale->product_id,
+                        'quantity' => $salesItem->quantity,
+                        'discount' => $salesItem->discount,
+                        'per_item_cost' => $salesItem->per_item_cost,
+                        'unit_id' => $salesItem->unit_id,
+                        'unit_name' => $salesItem->unit ? $salesItem->unit->name : 'N/A',
+                    ];
+                }
+            }
+    
+            // Subtract absolute discount from subtotal
+            $absoluteDiscount = $transaction->absolute_discount ?? 0;
+            $totalAmount = $subTotal - $absoluteDiscount;
+    
+            // Construct the response data
+            $transactionData = [
+                'transaction_id' => $transaction->id,
+                'absolute_discount' => $transaction->absolute_discount,
+                'total_paid' => $transaction->total_paid,
+                'cid' => $transaction->cid,
+                'customer_id' => $transaction->customer_id,
+                'customer' => $customerData, // Added customer data
+                'payment_mode' => $transaction->payment_mode,
+                'created_at' => Carbon::parse($transaction->created_at)->format('Y-m-d H:i:s'),
+                'updated_at' => $transaction->updated_at ? Carbon::parse($transaction->updated_at)->format('Y-m-d H:i:s') : null,
+                'products' => $products,
+                'sub_total' => round($subTotal, 2), // Rounded to 2 decimal places
+                'total_amount' => round($totalAmount, 2), // Rounded to 2 decimal places
+            ];
+    
+            Log::info('Transaction data retrieved successfully', ['transaction_id' => $transactionId]);
+            return response()->json($transactionData, 200);
+    
+        } catch (\Exception $e) {
+            Log::error('Failed to fetch transaction data', [
+                'transaction_id' => $transactionId,
+                'error' => $e->getMessage()
+            ]);
+            return response()->json([
+                'message' => 'Failed to fetch transaction data',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
