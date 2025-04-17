@@ -111,7 +111,7 @@
             <tr>
                 <!-- Company Info -->
                 <td class="company-info">
-                    <img src="{{ public_path('images/logo.png') }}" alt="Company Logo" class="logo">
+                    <!-- <img src="{{ public_path('images/logo.png') }}" alt="Company Logo" class="logo"> -->
                     <p><strong>Name:</strong> {{ $company->name }}</p>
                     <p><strong>Address:</strong> {{ $company->address }}</p>
                     <p><strong>Phone:</strong> +91 {{ $company->phone }}</p>
