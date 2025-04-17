@@ -13,6 +13,8 @@ class TransactionSales extends Model
         'cid',
         'customer_id',
         'payment_mode',
+        'absolute_discount', 
+        'total_paid',       
         'updated_at'
     ];
 

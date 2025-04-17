@@ -47,7 +47,9 @@ class SalesController extends Controller
                 'cid' => 'required|integer',
                 'customer_id' => 'required|integer',
                 'payment_mode' => 'required|string|max:50',
-                'updated_at' => 'nullable|date', // Add validation for updated_at
+                'absolute_discount' => 'nullable|numeric|min:0',
+                'total_paid' => 'required|numeric|min:0',
+                'updated_at' => 'nullable|date', 
 
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -134,6 +136,8 @@ class SalesController extends Controller
                 'cid' => $request->cid,
                 'customer_id' => $request->customer_id,
                 'payment_mode' => $request->payment_mode,
+                'absolute_discount' => $request->absolute_discount,
+                'total_paid' => $request->total_paid,
                 'updated_at' => $updatedAt, // Use the manually passed updated_at value
             ]);
             $transactionId = $transaction->id;
@@ -335,99 +339,120 @@ private function getInvoiceData($transactionId)
             }
         }
 
+    // public function getTotalSaleAmount($cid)
+    //     {
+    //         // Authentication check
+    //         $user = Auth::user();
+    //         if (!$user) {
+    //             return response()->json(['message' => 'Unauthorized'], 401);
+    //         }
 
+    //         // Validate request data
+    //         // $validated = $request->validate([
+    //         //     'cid' => 'required|integer|exists:companies,id'
+    //         // ]);
+    //         // $cid = $validated['cid'];
+    //         $rid = $user->rid;
+    //         $uid = $user->id;
 
-// public function getTotalSaleAmount($cid)
-// {
-//     $user = Auth::user();
-//     if (!$user) {
-//         return response()->json(['message' => 'Unauthorized'], 401);
-//     }
+    //         try {
+    //             // Grand Total Calculation
+    //             $grandTotal = DB::table('sales_items')
+    //                 ->join('sales', 'sales_items.sale_id', '=', 'sales.id')
+    //                 ->join('transaction_sales', 'sales.transaction_id', '=', 'transaction_sales.id')
+    //                 ->where('transaction_sales.cid', $cid)
+    //                 ->when(!in_array($rid, [5, 6]), function ($query) use ($uid) {
+    //                     $query->where('transaction_sales.uid', $uid);
+    //                 })
+    //                 ->sum(DB::raw('sales_items.quantity * sales_items.per_item_cost * (1 - sales_items.discount/100)'));
 
-//     try {
-//         $transactionIds = TransactionSales::where('cid', $cid)->pluck('id')->toArray();
-//         $invoices = [];
-//         $grandTotal = 0;
-//         $distinctCustomers = TransactionSales::where('cid', $cid)
-//         ->distinct('customer_id')
-//         ->count('customer_id');   
-//         foreach ($transactionIds as $tid) {
-//             $invoiceData = $this->getInvoiceData($tid);
-//             $invoices[] = $invoiceData;
-//             $grandTotal += $invoiceData['total_amount']; // Add each invoice's total_amount
-//         }
-//         $transactionCount = count($invoices); // Number of invoices
-//         return response()->json([
-//             // 'invoices' => $invoices,
-//             'grand_total' => $grandTotal, // Include the sum in the response
-//             'total_sale_order' => $transactionCount,
-//             'total_customer' => $distinctCustomers
-//         ]);
-//     } catch (\Exception $e) {
-//         Log::error('Failed to fetch invoices', ['cid' => $cid, 'error' => $e->getMessage()]);
-//         return response()->json(['error' => 'Failed to fetch invoices'], 500);
-//     }
-// }
+    //             // Total Sale Orders
+    //             $totalSaleOrder = DB::table('transaction_sales')
+    //                 ->where('cid', $cid)
+    //                 ->when(!in_array($rid, [5, 6]), function ($query) use ($uid) {
+    //                     $query->where('uid', $uid);
+    //                 })
+    //                 ->count();
 
-    public function getTotalSaleAmount($cid)
-        {
-            // Authentication check
-            $user = Auth::user();
-            if (!$user) {
-                return response()->json(['message' => 'Unauthorized'], 401);
-            }
+    //             // Total Customers
+    //             $distinctCustomers = TransactionSales::where('cid', $cid)
+    //             ->distinct('customer_id')
+    //             ->count('customer_id'); 
 
-            // Validate request data
-            // $validated = $request->validate([
-            //     'cid' => 'required|integer|exists:companies,id'
-            // ]);
-            // $cid = $validated['cid'];
-            $rid = $user->rid;
-            $uid = $user->id;
+    //             return response()->json([
+    //                 'grand_total' => (float) $grandTotal,
+    //                 'total_sale_order' => $totalSaleOrder,
+    //                 'total_customer' => $distinctCustomers
+    //             ], 200);
 
-            try {
-                // Grand Total Calculation
-                $grandTotal = DB::table('sales_items')
-                    ->join('sales', 'sales_items.sale_id', '=', 'sales.id')
-                    ->join('transaction_sales', 'sales.transaction_id', '=', 'transaction_sales.id')
-                    ->where('transaction_sales.cid', $cid)
-                    ->when(!in_array($rid, [5, 6]), function ($query) use ($uid) {
-                        $query->where('transaction_sales.uid', $uid);
-                    })
-                    ->sum(DB::raw('sales_items.quantity * sales_items.per_item_cost * (1 - sales_items.discount/100)'));
-
-                // Total Sale Orders
-                $totalSaleOrder = DB::table('transaction_sales')
-                    ->where('cid', $cid)
-                    ->when(!in_array($rid, [5, 6]), function ($query) use ($uid) {
-                        $query->where('uid', $uid);
-                    })
-                    ->count();
-
-                // Total Customers
-                $distinctCustomers = TransactionSales::where('cid', $cid)
-                ->distinct('customer_id')
-                ->count('customer_id'); 
-
-                return response()->json([
-                    'grand_total' => (float) $grandTotal,
-                    'total_sale_order' => $totalSaleOrder,
-                    'total_customer' => $distinctCustomers
-                ], 200);
-
-            } catch (\Exception $e) {
-                Log::error('Sales widget error', [
-                    'cid' => $cid,
-                    'user_id' => $uid,
-                    'error' => $e->getMessage()
-                ]);
+    //         } catch (\Exception $e) {
+    //             Log::error('Sales widget error', [
+    //                 'cid' => $cid,
+    //                 'user_id' => $uid,
+    //                 'error' => $e->getMessage()
+    //             ]);
                 
-                return response()->json([
-                    'error' => 'Failed to retrieve sales data'
-                ], 500);
-            }
+    //             return response()->json([
+    //                 'error' => 'Failed to retrieve sales data'
+    //             ], 500);
+    //         }
+    //     }
+    public function getTotalSaleAmount($cid)
+    {
+        // Authentication and validation (unchanged)
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
         }
-
+        $rid = $user->rid;
+        $uid = $user->id;
+    
+        try {
+            // Subquery to calculate item totals per transaction
+            $subQuery = DB::table('sales_items as si')
+                ->join('sales as s', 'si.sale_id', '=', 's.id')
+                ->join('transaction_sales as ts', 's.transaction_id', '=', 'ts.id')
+                ->where('ts.cid', $cid)
+                ->when(!in_array($rid, [5, 6]), function ($query) use ($uid) {
+                    $query->where('ts.uid', $uid);
+                })
+                ->select('ts.id')
+                ->selectRaw('SUM(si.quantity * si.per_item_cost * (1 - si.discount/100)) as item_total')
+                ->selectRaw('ts.absolute_discount')
+                ->groupBy('ts.id');
+    
+            // Grand Total: Sum (item_total - absolute_discount) across all transactions
+            $grandTotal = DB::table(DB::raw("({$subQuery->toSql()}) as per_transaction"))
+                ->mergeBindings($subQuery)
+                ->sum(DB::raw('item_total - absolute_discount'));
+    
+            // Total Sale Orders (unchanged)
+            $totalSaleOrder = TransactionSales::where('cid', $cid)
+                ->when(!in_array($rid, [5, 6]), function ($query) use ($uid) {
+                    $query->where('uid', $uid);
+                })
+                ->count();
+    
+            // Total Customers (unchanged)
+            $distinctCustomers = TransactionSales::where('cid', $cid)
+                ->distinct('customer_id')
+                ->count('customer_id');
+    
+            return response()->json([
+                'grand_total' => (float) $grandTotal,
+                'total_sale_order' => $totalSaleOrder,
+                'total_customer' => $distinctCustomers
+            ], 200);
+    
+        } catch (\Exception $e) {
+            Log::error('Sales widget error', [
+                'cid' => $cid,
+                'user_id' => $uid,
+                'error' => $e->getMessage()
+            ]);
+            return response()->json(['error' => 'Failed to retrieve sales data'], 500);
+        }
+    }
 public function getCustomerStats(Request $request)
 {
     // Validate request
@@ -504,7 +529,9 @@ public function update(Request $request, $transactionId)
             'cid' => 'required|integer',
             'customer_id' => 'required|integer',
             'payment_mode' => 'required|string|max:50',
-            'updated_at' => 'nullable|date_format:Y-m-d H:i:s', // Add this line
+            'absolute_discount' => 'nullable|numeric|min:0', 
+            'total_paid' => 'nullable|numeric|min:0',        
+            'updated_at' => 'nullable|date_format:Y-m-d H:i:s', 
         ]);
     } catch (\Illuminate\Validation\ValidationException $e) {
         Log::error('Validation failed', ['errors' => $e->errors()]);
@@ -590,8 +617,8 @@ public function update(Request $request, $transactionId)
             'customer_id' => $request->customer_id,
             'payment_mode' => $request->payment_mode,
             'updated_at' => $request->updated_at ?? now(),
-            // 'updated_at' => $request->updated_at ? Carbon::parse($request->updated_at) : now(),
-            // 'updated_at' => now(),
+            'absolute_discount' => $request->absolute_discount, 
+            'total_paid' => $request->total_paid, 
         ]);
         // Fetch existing sales for this transaction
         $existingSales = Sale::where('transaction_id', $transactionId)->get()->keyBy('product_id');
@@ -654,81 +681,7 @@ public function update(Request $request, $transactionId)
         ], 500);
     }
 }
-    // public function getTransaction($transactionId)
-    //     {
-    //         Log::info('Get transaction API endpoint reached', ['transaction_id' => $transactionId]);
 
-    //         // Get the authenticated user
-    //         $user = Auth::user();
-    //         if (!$user) {
-    //             return response()->json(['message' => 'Unauthenticated'], 401);
-    //         }
-
-    //         // Restrict to rid 5, 6, 7, 8, or 9 only (consistent with store and update)
-    //         if (!in_array($user->rid, [5, 6, 7, 8, 9])) {
-    //             return response()->json(['message' => 'Unauthorized to view transaction'], 403);
-    //         }
-
-    //         // Fetch the transaction and ensure it belongs to the user
-    //         $transaction = TransactionSales::where('id', $transactionId)
-    //             ->where('uid', $user->id)
-    //             ->first();
-    //         if (!$transaction) {
-    //             return response()->json(['message' => 'Transaction not found or unauthorized'], 404);
-    //         }
-
-    //         try {
-    //             // Fetch associated sales and sales items with units
-    //             $sales = Sale::where('transaction_id', $transactionId)
-    //                 ->with('salesItem.unit')
-    //                 ->get();
-
-    //             if ($sales->isEmpty()) {
-    //                 Log::warning("No sales records found for transaction_id: {$transactionId}");
-    //                 return response()->json(['message' => 'No sales records found for this transaction'], 404);
-    //             }
-
-    //             // Prepare the products array
-    //             $products = [];
-    //             foreach ($sales as $sale) {
-    //                 $salesItem = $sale->salesItem;
-    //                 if ($salesItem) {
-    //                     $products[] = [
-    //                         'product_id' => $sale->product_id,
-    //                         'quantity' => $salesItem->quantity,
-    //                         'discount' => $salesItem->discount,
-    //                         'per_item_cost' => $salesItem->per_item_cost,
-    //                         'unit_id' => $salesItem->unit_id,
-    //                         'unit_name' => $salesItem->unit ? $salesItem->unit->name : 'N/A', // Optional: include unit name
-    //                     ];
-    //                 }
-    //             }
-
-    //             // Construct the response data
-    //             $transactionData = [
-    //                 'transaction_id' => $transaction->id,
-    //                 'cid' => $transaction->cid,
-    //                 'customer_id' => $transaction->customer_id,
-    //                 'payment_mode' => $transaction->payment_mode,
-    //                 'created_at' => Carbon::parse($transaction->created_at)->format('Y-m-d H:i:s'),
-    //                 'updated_at' => $transaction->updated_at ? Carbon::parse($transaction->updated_at)->format('Y-m-d H:i:s') : null,
-    //                 'products' => $products,
-    //             ];
-
-    //             Log::info('Transaction data retrieved successfully', ['transaction_id' => $transactionId]);
-    //             return response()->json($transactionData, 200);
-
-    //         } catch (\Exception $e) {
-    //             Log::error('Failed to fetch transaction data', [
-    //                 'transaction_id' => $transactionId,
-    //                 'error' => $e->getMessage()
-    //             ]);
-    //             return response()->json([
-    //                 'message' => 'Failed to fetch transaction data',
-    //                 'error' => $e->getMessage()
-    //             ], 500);
-    //         }
-    //     }
     public function getTransaction($transactionId)
         {
             Log::info('Get transaction API endpoint reached', ['transaction_id' => $transactionId]);
@@ -802,6 +755,8 @@ public function update(Request $request, $transactionId)
                 // Construct the response data
                 $transactionData = [
                     'transaction_id' => $transaction->id,
+                    'absolute_discount'=>$transaction->absolute_discount,
+                    'total_paid'=>$transaction->total_paid,
                     'cid' => $transaction->cid,
                     'customer_id' => $transaction->customer_id,
                     'customer' => $customerData, // Added customer data
