@@ -9,7 +9,7 @@ class SalesItem extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['sale_id', 'quantity', 'discount', 'per_item_cost','unit_id'];
+    protected $fillable = ['sale_id', 'quantity', 'discount','flat_discount', 'per_item_cost','unit_id'];
 
     // Relationship to sale (no foreign key enforced)
     public function unit()
