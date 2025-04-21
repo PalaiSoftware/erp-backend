@@ -26,5 +26,10 @@ class Product extends Model
     {
         return $this->belongsTo(Category::class, 'category_id');
     }
+    public function productValue()
+    {
+        return $this->hasOne(ProductValue::class, 'pid');
+    }
+
 
 }

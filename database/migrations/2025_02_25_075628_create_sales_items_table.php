@@ -12,6 +12,7 @@ return new class extends Migration {
             $table->unsignedBigInteger('sale_id'); // Links to sales.id
             $table->integer('quantity');
             $table->decimal('discount', 10, 2)->default(0);
+            $table->decimal('flat_discount', 10, 2)->default(0);
             $table->decimal('per_item_cost', 22, 3);
             $table->unsignedBigInteger('unit_id'); // Links to units.id
             $table->timestamps();

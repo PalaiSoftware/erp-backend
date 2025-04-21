@@ -22,12 +22,16 @@ class HelperController extends Controller
 
 // public function getProductStock($cid)
 // {
-//     // Check if user is authenticated
-//     $user = Auth::user();
-//     if (!$user) {
+//     // Get the authenticated user
+//      $user = Auth::user();
+//      if (!$user) {
 //         return response()->json(['message' => 'Unauthorized'], 401);
 //     }
 
+//   // Restrict access to users with rid between 5 and 10 inclusive
+//    if ($user->rid < 5 || $user->rid > 10) {
+//     return response()->json(['message' => 'Forbidden'], 403);
+//    }
 //     $uid = Auth::id();
 
 //     // Validate and cast cid to integer
@@ -36,16 +40,34 @@ class HelperController extends Controller
 //     }
 //     $cid = (int)$cid;
 
-//     // Fetch products with stock calculations
+//     // Fetch products with stock calculations, only for products with transactions for this cid
 //     $products = DB::table('products as p')
-//         // ->where('p.uid', $uid)
+//         ->join('categories as c','p.category_id','=','c.id')
+//         ->where(function ($query) use ($cid) {
+//             // Products with purchases for this company
+//             $query->whereExists(function ($subquery) use ($cid) {
+//                 $subquery->select(DB::raw(1))
+//                          ->from('purchases as pur')
+//                          ->join('transaction_purchases as tp', 'pur.transaction_id', '=', 'tp.id')
+//                          ->where('pur.product_id', '=', DB::raw('p.id'))
+//                          ->where('tp.cid', $cid);
+//             })
+//             // Or products with sales for this company
+//             ->orWhereExists(function ($subquery) use ($cid) {
+//                 $subquery->select(DB::raw(1))
+//                          ->from('sales as s')
+//                          ->join('transaction_sales as ts', 's.transaction_id', '=', 'ts.id')
+//                          ->where('s.product_id', '=', DB::raw('p.id'))
+//                          ->where('ts.cid', $cid);
+//             });
+//         })
 //         ->select([
 //             'p.id',
 //             'p.name',
 //             'p.description',
-//             'p.category',
+//             // 'p.category',
+//             'c.name as category',
 //             'p.hscode',
-//             // Purchase stock subquery
 //             DB::raw("(
 //                 SELECT COALESCE(SUM(pi.quantity), 0)
 //                 FROM purchases pur
@@ -53,7 +75,6 @@ class HelperController extends Controller
 //                 JOIN purchase_items pi ON pur.id = pi.purchase_id
 //                 WHERE pur.product_id = p.id AND tp.cid = $cid
 //             ) as purchase_stock"),
-//             // Sales stock subquery
 //             DB::raw("(
 //                 SELECT COALESCE(SUM(si.quantity), 0)
 //                 FROM sales s
@@ -61,7 +82,6 @@ class HelperController extends Controller
 //                 JOIN sales_items si ON s.id = si.sale_id
 //                 WHERE s.product_id = p.id AND ts.cid = $cid
 //             ) as sales_stock"),
-//             // Current stock (purchase_stock - sales_stock)
 //             DB::raw("(
 //                 SELECT COALESCE(SUM(pi.quantity), 0)
 //                 FROM purchases pur
@@ -76,93 +96,156 @@ class HelperController extends Controller
 //                 WHERE s.product_id = p.id AND ts.cid = $cid
 //             ) as current_stock")
 //         ])
+//         ->orderBy('p.id', 'desc')
+//         ->get();
+
+//     return response()->json($products);
+// }
+// public function getProductStock($cid)
+// {
+//     // Get the authenticated user
+//     $user = Auth::user();
+//     if (!$user) {
+//         return response()->json(['message' => 'Unauthorized'], 401);
+//     }
+
+//     // Restrict access to users with rid between 5 and 10 inclusive
+//     if ($user->rid < 5 || $user->rid > 10) {
+//         return response()->json(['message' => 'Forbidden'], 403);
+//     }
+
+//     // Validate and cast cid to integer
+//     if (!is_numeric($cid) || (int)$cid <= 0) {
+//         return response()->json(['error' => 'Invalid company ID'], 400);
+//     }
+//     $cid = (int)$cid;
+
+//     // Fetch products with stock calculations and product_values data
+//     $products = DB::table('products as p')
+//         ->join('categories as c', 'p.category_id', '=', 'c.id')
+//         ->leftJoin('product_values as pv', 'p.id', '=', 'pv.pid') // Join product_values
+//         ->where(function ($query) use ($cid) {
+//             // Products with purchases for this company
+//             $query->whereExists(function ($subquery) use ($cid) {
+//                 $subquery->select(DB::raw(1))
+//                          ->from('purchases as pur')
+//                          ->join('transaction_purchases as tp', 'pur.transaction_id', '=', 'tp.id')
+//                          ->where('pur.product_id', '=', DB::raw('p.id'))
+//                          ->where('tp.cid', $cid);
+//             })
+//             // Or products with sales for this company
+//             ->orWhereExists(function ($subquery) use ($cid) {
+//                 $subquery->select(DB::raw(1))
+//                          ->from('sales as s')
+//                          ->join('transaction_sales as ts', 's.transaction_id', '=', 'ts.id')
+//                          ->where('s.product_id', '=', DB::raw('p.id'))
+//                          ->where('ts.cid', $cid);
+//             });
+//         })
+//         ->select([
+//             'p.id',
+//             'p.name',
+//             'p.description',
+//             'c.name as category',
+//             'p.hscode',
+//             // Include all product_values columns
+//             'pv.sale_discount_percent',
+//             'pv.sale_discount_flat',
+//             'pv.selling_price',
+//             'pv.created_at as product_value_created_at',
+//             'pv.updated_at as product_value_updated_at',
+//             // Stock calculations
+//             DB::raw("(
+//                 SELECT COALESCE(SUM(pi.quantity), 0)
+//                 FROM purchases pur
+//                 JOIN transaction_purchases tp ON pur.transaction_id = tp.id
+//                 JOIN purchase_items pi ON pur.id = pi.purchase_id
+//                 WHERE pur.product_id = p.id AND tp.cid = $cid
+//             ) as purchase_stock"),
+//             DB::raw("(
+//                 SELECT COALESCE(SUM(si.quantity), 0)
+//                 FROM sales s
+//                 JOIN transaction_sales ts ON s.transaction_id = ts.id
+//                 JOIN sales_items si ON s.id = si.sale_id
+//                 WHERE s.product_id = p.id AND ts.cid = $cid
+//             ) as sales_stock"),
+//             DB::raw("(
+//                 SELECT COALESCE(SUM(pi.quantity), 0)
+//                 FROM purchases pur
+//                 JOIN transaction_purchases tp ON pur.transaction_id = tp.id
+//                 JOIN purchase_items pi ON pur.id = pi.purchase_id
+//                 WHERE pur.product_id = p.id AND tp.cid = $cid
+//             ) - (
+//                 SELECT COALESCE(SUM(si.quantity), 0)
+//                 FROM sales s
+//                 JOIN transaction_sales ts ON s.transaction_id = ts.id
+//                 JOIN sales_items si ON s.id = si.sale_id
+//                 WHERE s.product_id = p.id AND ts.cid = $cid
+//             ) as current_stock")
+//         ])
+//         ->orderBy('p.id', 'desc')
 //         ->get();
 
 //     return response()->json($products);
 // }
 public function getProductStock($cid)
 {
-    // Get the authenticated user
-     $user = Auth::user();
-     if (!$user) {
-        return response()->json(['message' => 'Unauthorized'], 401);
-    }
-
-  // Restrict access to users with rid between 5 and 10 inclusive
-   if ($user->rid < 5 || $user->rid > 10) {
-    return response()->json(['message' => 'Forbidden'], 403);
-   }
-    $uid = Auth::id();
-
-    // Validate and cast cid to integer
-    if (!is_numeric($cid) || (int)$cid <= 0) {
-        return response()->json(['error' => 'Invalid company ID'], 400);
-    }
+    // Authentication and validation (unchanged)
+    $user = Auth::user();
+    if (!$user) return response()->json(['message' => 'Unauthorized'], 401);
+    if ($user->rid < 5 || $user->rid > 10) return response()->json(['message' => 'Forbidden'], 403);
+    if (!is_numeric($cid) || (int)$cid <= 0) return response()->json(['error' => 'Invalid company ID'], 400);
     $cid = (int)$cid;
 
-    // Fetch products with stock calculations, only for products with transactions for this cid
+    // Precompute purchase and sales totals using subqueries
+    $purchaseTotals = DB::table('purchases as pur')
+        ->join('transaction_purchases as tp', 'pur.transaction_id', '=', 'tp.id')
+        ->join('purchase_items as pi', 'pur.id', '=', 'pi.purchase_id')
+        ->where('tp.cid', $cid)
+        ->select('pur.product_id', DB::raw('SUM(pi.quantity) as total'))
+        ->groupBy('pur.product_id');
+
+    $salesTotals = DB::table('sales as s')
+        ->join('transaction_sales as ts', 's.transaction_id', '=', 'ts.id')
+        ->join('sales_items as si', 's.id', '=', 'si.sale_id')
+        ->where('ts.cid', $cid)
+        ->select('s.product_id', DB::raw('SUM(si.quantity) as total'))
+        ->groupBy('s.product_id');
+
+    // Main query with optimized joins
     $products = DB::table('products as p')
-        ->join('categories as c','p.category_id','=','c.id')
-        ->where(function ($query) use ($cid) {
-            // Products with purchases for this company
-            $query->whereExists(function ($subquery) use ($cid) {
-                $subquery->select(DB::raw(1))
-                         ->from('purchases as pur')
-                         ->join('transaction_purchases as tp', 'pur.transaction_id', '=', 'tp.id')
-                         ->where('pur.product_id', '=', DB::raw('p.id'))
-                         ->where('tp.cid', $cid);
-            })
-            // Or products with sales for this company
-            ->orWhereExists(function ($subquery) use ($cid) {
-                $subquery->select(DB::raw(1))
-                         ->from('sales as s')
-                         ->join('transaction_sales as ts', 's.transaction_id', '=', 'ts.id')
-                         ->where('s.product_id', '=', DB::raw('p.id'))
-                         ->where('ts.cid', $cid);
-            });
+        ->join('categories as c', 'p.category_id', '=', 'c.id')
+        ->leftJoin('product_values as pv', 'p.id', '=', 'pv.pid')
+        ->leftJoinSub($purchaseTotals, 'pt', function($join) {
+            $join->on('p.id', '=', 'pt.product_id');
+        })
+        ->leftJoinSub($salesTotals, 'st', function($join) {
+            $join->on('p.id', '=', 'st.product_id');
+        })
+        ->where(function($query) {
+            $query->whereNotNull('pt.total')
+                  ->orWhereNotNull('st.total');
         })
         ->select([
             'p.id',
             'p.name',
             'p.description',
-            // 'p.category',
             'c.name as category',
             'p.hscode',
-            DB::raw("(
-                SELECT COALESCE(SUM(pi.quantity), 0)
-                FROM purchases pur
-                JOIN transaction_purchases tp ON pur.transaction_id = tp.id
-                JOIN purchase_items pi ON pur.id = pi.purchase_id
-                WHERE pur.product_id = p.id AND tp.cid = $cid
-            ) as purchase_stock"),
-            DB::raw("(
-                SELECT COALESCE(SUM(si.quantity), 0)
-                FROM sales s
-                JOIN transaction_sales ts ON s.transaction_id = ts.id
-                JOIN sales_items si ON s.id = si.sale_id
-                WHERE s.product_id = p.id AND ts.cid = $cid
-            ) as sales_stock"),
-            DB::raw("(
-                SELECT COALESCE(SUM(pi.quantity), 0)
-                FROM purchases pur
-                JOIN transaction_purchases tp ON pur.transaction_id = tp.id
-                JOIN purchase_items pi ON pur.id = pi.purchase_id
-                WHERE pur.product_id = p.id AND tp.cid = $cid
-            ) - (
-                SELECT COALESCE(SUM(si.quantity), 0)
-                FROM sales s
-                JOIN transaction_sales ts ON s.transaction_id = ts.id
-                JOIN sales_items si ON s.id = si.sale_id
-                WHERE s.product_id = p.id AND ts.cid = $cid
-            ) as current_stock")
+            'pv.sale_discount_percent',
+            'pv.sale_discount_flat',
+            'pv.selling_price',
+            'pv.created_at as product_value_created_at',
+            'pv.updated_at as product_value_updated_at',
+            'pt.total as purchase_stock',
+            'st.total as sales_stock',
+            DB::raw('COALESCE(pt.total, 0) - COALESCE(st.total, 0) as current_stock')
         ])
-        ->orderBy('p.id', 'desc')
+        ->orderByDesc('p.id')
         ->get();
 
     return response()->json($products);
 }
-
-
 public function getMultipleProductStock(Request $request, $cid)
 {
     // Check if the user is logged in

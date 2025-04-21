@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Product;
+use App\Models\ProductValue; 
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log; 
 
@@ -32,6 +33,9 @@ class ProductController extends Controller
                 'products.*.hscode' => 'nullable|string|max:255', 
                 'products.*.uid' => 'required|integer', 
                 'products.*.cid' => 'required|integer', 
+                'products.*.sale_discount_percent' => 'nullable|numeric|min:0|max:100',
+                'products.*.sale_discount_flat' => 'nullable|numeric|min:0',
+                'products.*.selling_price' => 'nullable|numeric|min:0',
             ]);
 
         
@@ -45,7 +49,16 @@ class ProductController extends Controller
                     'uid' => $productData['uid'],
                     'cid' => $productData['cid'], 
                 ]);
-                $createdProducts[] = $product;
+                    // Prepare DefaultValue data (use user input or default to 0)
+                $defaultValueData = [
+                    'sale_discount_percent' => $productData['sale_discount_percent'] ?? 0,
+                    'sale_discount_flat' => $productData['sale_discount_flat'] ?? 0,
+                    'selling_price' => $productData['selling_price'] ?? 0,
+                ];
+
+   
+            $product->productValue()->create($defaultValueData); 
+             $createdProducts[] = $product;
             }
 
             
@@ -55,43 +68,82 @@ class ProductController extends Controller
             ], 201);
     }
 
-    public function index(Request $request)
-{
-    // Authentication and authorization checks
-    $user = Auth::user();
-    if (!$user) {
-        return response()->json(['message' => 'Unauthorized'], 401);
-    }
-    if ($user->rid < 5 || $user->rid > 10) {
-        return response()->json(['message' => 'Forbidden'], 403);
-    }
+//     public function index(Request $request)
+// {
+//     // Authentication and authorization checks
+//     $user = Auth::user();
+//     if (!$user) {
+//         return response()->json(['message' => 'Unauthorized'], 401);
+//     }
+//     if ($user->rid < 5 || $user->rid > 10) {
+//         return response()->json(['message' => 'Forbidden'], 403);
+//     }
 
-    // Validate the request
-    $validated = $request->validate([
-        'cid' => 'required|integer',
-    ]);
+//     // Validate the request
+//     $validated = $request->validate([
+//         'cid' => 'required|integer',
+//     ]);
 
-    // Fetch products by cid with category name
-    $products = Product::where('products.cid', $validated['cid'])
-        ->leftJoin('categories', 'products.category_id', '=', 'categories.id') // Join with categories table
-        ->select(
-            'products.id',
-            'products.name as product_name', // Rename columns for clarity
-            'products.description',
-            'products.category_id',
-            'categories.name as category_name', // Include category name
-            'products.hscode',
-            'products.cid'
-        )
-        ->orderBy('products.id', 'desc')
-        ->get();
+//     // Fetch products by cid with category name
+//     $products = Product::where('products.cid', $validated['cid'])
+//         ->leftJoin('categories', 'products.category_id', '=', 'categories.id') // Join with categories table
+//         ->select(
+//             'products.id',
+//             'products.name as product_name', // Rename columns for clarity
+//             'products.description',
+//             'products.category_id',
+//             'categories.name as category_name', // Include category name
+//             'products.hscode',
+//             'products.cid'
+//         )
+//         ->orderBy('products.id', 'desc')
+//         ->get();
 
-    // Return response
-    return response()->json([
-        'message' => 'Products retrieved successfully',
-        'products' => $products,
-    ], 200);
-}
+//     // Return response
+//     return response()->json([
+//         'message' => 'Products retrieved successfully',
+//         'products' => $products,
+//     ], 200);
+// }
+        public function index(Request $request)
+        {
+            // Authentication and authorization checks
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json(['message' => 'Unauthorized'], 401);
+            }
+            if ($user->rid < 5 || $user->rid > 10) {
+                return response()->json(['message' => 'Forbidden'], 403);
+            }
+
+            // Validate the request
+            $validated = $request->validate([
+                'cid' => 'required|integer',
+            ]);
+
+            $products = Product::where('products.cid', $validated['cid'])
+                ->leftJoin('categories', 'products.category_id', '=', 'categories.id') 
+                ->leftJoin('product_values', 'products.id', '=', 'product_values.pid') 
+                ->select(
+                    'products.id',
+                    'products.name as product_name',
+                    'products.description',
+                    'products.category_id',
+                    'categories.name as category_name',
+                    'products.hscode',
+                    'products.cid',
+                    'product_values.sale_discount_percent',
+                    'product_values.sale_discount_flat',
+                    'product_values.selling_price',
+                )
+                ->orderBy('products.id', 'desc')
+                ->get();
+
+            return response()->json([
+                'message' => 'Products retrieved successfully',
+                'products' => $products,
+            ], 200);
+        }
     public function checkHscodeProduct(Request $request)
     {
         // Authentication and authorization checks
@@ -148,6 +200,9 @@ class ProductController extends Controller
                     'hscode' => 'nullable|string|max:255',
                     'uid' => 'required|integer',
                     'cid' => 'required|integer',
+                    'sale_discount_percent' => 'nullable|numeric|min:0|max:100',
+                    'sale_discount_flat' => 'nullable|numeric|min:0',
+                    'selling_price' => 'nullable|numeric|min:0',
                 ]);
 
                 // Find the product
@@ -158,7 +213,14 @@ class ProductController extends Controller
 
                 // Update the product
                 $product->update($validated);
-
+                $product->productValue()->updateOrCreate(
+                    ['pid' => $product->id], 
+                    [
+                        'sale_discount_percent' => $validated['sale_discount_percent'] ?? 0,
+                        'sale_discount_flat' => $validated['sale_discount_flat'] ?? 0,
+                        'selling_price' => $validated['selling_price'] ?? 0,
+                    ]
+                );
                 // Return response
                 return response()->json([
                     'message' => 'Product updated successfully',
@@ -185,17 +247,21 @@ class ProductController extends Controller
     
             // Fetch the product by product_id
             $product = Product::where('products.id', $product_id)
-    ->leftJoin('categories', 'products.category_id', '=', 'categories.id') // Join with categories table
-    ->select(
-        'products.id as product_id',
-        'products.name as product_name',
-        'products.description',
-        'products.category_id',
-        'categories.name as category_name', // Include category name
-        'products.hscode',
-        'products.cid'
-    )
-    ->first();
+            ->leftJoin('categories', 'products.category_id', '=', 'categories.id') // Join with categories table
+            ->leftJoin('product_values', 'products.id', '=', 'product_values.pid')
+            ->select(
+                'products.id as product_id',
+                'products.name as product_name',
+                'products.description',
+                'products.category_id',
+                'categories.name as category_name', // Include category name
+                'products.hscode',
+                'products.cid',
+                'product_values.sale_discount_percent',
+                'product_values.sale_discount_flat',
+                'product_values.selling_price'
+            )
+            ->first();
     
             // Check if the product exists
             if (!$product) {
