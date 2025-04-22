@@ -36,6 +36,9 @@ class ProductController extends Controller
                 'products.*.sale_discount_percent' => 'nullable|numeric|min:0|max:100',
                 'products.*.sale_discount_flat' => 'nullable|numeric|min:0',
                 'products.*.selling_price' => 'nullable|numeric|min:0',
+                'products.*.purchase_discount_percent' => 'nullable|numeric|min:0|max:100',
+                'products.*.purchase_discount_flat' => 'nullable|numeric|min:0',
+                'products.*.purchase_price' => 'nullable|numeric|min:0',
             ]);
 
         
@@ -54,6 +57,9 @@ class ProductController extends Controller
                     'sale_discount_percent' => $productData['sale_discount_percent'] ?? 0,
                     'sale_discount_flat' => $productData['sale_discount_flat'] ?? 0,
                     'selling_price' => $productData['selling_price'] ?? 0,
+                    'purchase_discount_percent' => $productData['purchase_discount_percent'] ?? 0,
+                    'purchase_discount_flat' => $productData['purchase_discount_flat'] ?? 0,
+                    'purchase_price' => $productData['purchase_price'] ?? 0,
                 ];
 
    
@@ -135,6 +141,9 @@ class ProductController extends Controller
                     'product_values.sale_discount_percent',
                     'product_values.sale_discount_flat',
                     'product_values.selling_price',
+                    'product_values.purchase_discount_percent',
+                    'product_values.purchase_discount_flat',
+                    'product_values.purchase_price',
                 )
                 ->orderBy('products.id', 'desc')
                 ->get();
@@ -203,6 +212,9 @@ class ProductController extends Controller
                     'sale_discount_percent' => 'nullable|numeric|min:0|max:100',
                     'sale_discount_flat' => 'nullable|numeric|min:0',
                     'selling_price' => 'nullable|numeric|min:0',
+                    'purchase_discount_percent' => 'nullable|numeric|min:0|max:100',
+                    'purchase_discount_flat' => 'nullable|numeric|min:0',
+                    'purchase_price' => 'nullable|numeric|min:0',
                 ]);
 
                 // Find the product
@@ -219,6 +231,9 @@ class ProductController extends Controller
                         'sale_discount_percent' => $validated['sale_discount_percent'] ?? 0,
                         'sale_discount_flat' => $validated['sale_discount_flat'] ?? 0,
                         'selling_price' => $validated['selling_price'] ?? 0,
+                        'purchase_discount_percent' => $validated['purchase_discount_percent'] ?? 0,
+                        'purchase_discount_flat' => $validated['purchase_discount_flat'] ?? 0,
+                        'purchase_price' => $validated['purchase_price'] ?? 0,
                     ]
                 );
                 // Return response
@@ -227,7 +242,7 @@ class ProductController extends Controller
                     'product' => $product
                 ], 200);
         }
-        public function getProductById($product_id)
+   public function getProductById($product_id)
         {
             // Authentication check
             $user = Auth::user();
@@ -259,7 +274,10 @@ class ProductController extends Controller
                 'products.cid',
                 'product_values.sale_discount_percent',
                 'product_values.sale_discount_flat',
-                'product_values.selling_price'
+                'product_values.selling_price',
+                'product_values.purchase_discount_percent',
+                'product_values.purchase_discount_flat',
+                'product_values.purchase_price',
             )
             ->first();
     
@@ -280,6 +298,6 @@ class ProductController extends Controller
                 'message' => 'Product retrieved successfully',
                 'product' => $product,
             ], 200);
-        }
+    }
    
 }

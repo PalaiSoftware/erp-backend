@@ -41,6 +41,7 @@ class PurchaseController extends Controller
                 'products.*.per_item_cost' => 'required|numeric|min:0',
                 'products.*.discount' => 'nullable|numeric|min:0|max:100',
                 'products.*.unit_id' => 'required|integer|exists:units,id', // Unit validation
+                'products.*.selling_price' => 'nullable|numeric|min:0',
                 'cid' => 'required|integer',
                 'payment_mode' => 'required|string|max:50',
                 'purchase_date' => 'required|date_format:Y-m-d H:i:s', // Add this line
@@ -108,6 +109,22 @@ class PurchaseController extends Controller
                     'discount' => $product['discount'] ?? 0,
 
                 ]);
+               
+                if (array_key_exists('selling_price', $product) && !is_null($product['selling_price'])) {
+                    $productModel = Product::find($product['product_id']);
+                    
+                    if ($productModel && $productModel->productValue) {
+                        $productModel->productValue->update([
+                            'selling_price' => $product['selling_price'],
+                        ]);
+                        Log::info('Selling price updated', [
+                            'product_id' => $product['product_id'],
+                            'selling_price' => $product['selling_price']
+                        ]);
+                    } else {
+                        Log::warning('Product or ProductValue not found', ['product_id' => $product['product_id']]);
+                    }
+                }
             }
 
             // Step 3: Commit the transaction

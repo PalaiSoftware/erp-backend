@@ -11,6 +11,9 @@ return new class extends Migration {
             $table->decimal('sale_discount_percent', 5, 2)->default(0);
             $table->decimal('sale_discount_flat', 8, 2)->default(0);
             $table->decimal('selling_price', 8, 2)->default(0);
+            $table->decimal('purchase_discount_percent', 5, 2)->default(0);
+            $table->decimal('purchase_discount_flat', 8, 2)->default(0);
+            $table->decimal('purchase_price', 8, 2)->default(0);
             $table->timestamps(); // Optional: Adds created_at/updated_at
             
             // Foreign key to products table
