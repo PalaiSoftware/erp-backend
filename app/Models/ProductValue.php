@@ -17,6 +17,9 @@ class ProductValue extends Model
         'sale_discount_percent',
         'sale_discount_flat',
         'selling_price',
+        'purchase_discount_percent',
+        'purchase_discount_flat',
+        'purchase_price',
     ];
 
     public function product()
