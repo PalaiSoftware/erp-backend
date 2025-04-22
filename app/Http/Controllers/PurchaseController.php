@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\Purchase;
 use App\Models\PurchaseItem;
 use App\Models\TransactionPurchase;
+use App\Models\Product;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -40,8 +41,11 @@ class PurchaseController extends Controller
                 'products.*.quantity' => 'required|integer|min:1',
                 'products.*.per_item_cost' => 'required|numeric|min:0',
                 'products.*.discount' => 'nullable|numeric|min:0|max:100',
+                'products.*.flat_discount' => 'nullable|numeric|min:0',
                 'products.*.unit_id' => 'required|integer|exists:units,id', // Unit validation
                 'products.*.selling_price' => 'nullable|numeric|min:0',
+                'products.*.sale_discount_percent' => 'nullable|numeric|min:0|max:100',
+                'products.*.sale_discount_flat' => 'nullable|numeric|min:0',
                 'cid' => 'required|integer',
                 'payment_mode' => 'required|string|max:50',
                 'purchase_date' => 'required|date_format:Y-m-d H:i:s', // Add this line
@@ -98,6 +102,7 @@ class PurchaseController extends Controller
                     'quantity' => $product['quantity'],
                     'per_item_cost' => $product['per_item_cost'],
                     'discount' => $product['discount'] ?? 0,
+                    'flat_discount' => $product['flat_discount'] ?? 0,
                     'unit_id' => $product['unit_id'], // Saving unit_id
                     'created_at' =>  $purchaseDate,
                 ]);
@@ -110,20 +115,33 @@ class PurchaseController extends Controller
 
                 ]);
                
-                if (array_key_exists('selling_price', $product) && !is_null($product['selling_price'])) {
-                    $productModel = Product::find($product['product_id']);
-                    
-                    if ($productModel && $productModel->productValue) {
-                        $productModel->productValue->update([
-                            'selling_price' => $product['selling_price'],
-                        ]);
-                        Log::info('Selling price updated', [
-                            'product_id' => $product['product_id'],
-                            'selling_price' => $product['selling_price']
-                        ]);
-                    } else {
-                        Log::warning('Product or ProductValue not found', ['product_id' => $product['product_id']]);
+                // Update product_values if it exists
+                $productModel = Product::find($product['product_id']);
+                if ($productModel && $productModel->productValue) {
+                    $updateData = [
+                        'purchase_discount_percent' => $product['discount'] ?? $productModel->productValue->purchase_discount_percent,
+                        'purchase_discount_flat' => $product['flat_discount'] ?? $productModel->productValue->purchase_discount_flat,
+                        'purchase_price' => $product['per_item_cost'],
+                    ];
+
+                    // Only update sales-related fields if provided and not null
+                    if (array_key_exists('sale_discount_percent', $product) && !is_null($product['sale_discount_percent'])) {
+                        $updateData['sale_discount_percent'] = $product['sale_discount_percent'];
                     }
+                    if (array_key_exists('sale_discount_flat', $product) && !is_null($product['sale_discount_flat'])) {
+                        $updateData['sale_discount_flat'] = $product['sale_discount_flat'];
+                    }
+                    if (array_key_exists('selling_price', $product) && !is_null($product['selling_price'])) {
+                        $updateData['selling_price'] = $product['selling_price'];
+                    }
+
+                    $productModel->productValue->update($updateData);
+                    Log::info('Product values updated', [
+                        'product_id' => $product['product_id'],
+                        'updated_fields' => array_keys($updateData)
+                    ]);
+                } else {
+                    Log::warning('Product or ProductValue not found', ['product_id' => $product['product_id']]);
                 }
             }
 
@@ -441,8 +459,8 @@ public function getPurchaseDetailsByTransaction(Request $request)
             'pi.vendor_id',
             'tp.payment_mode',
             'pi.discount',
-            DB::raw('ROUND(pi.quantity * pi.per_item_cost * (1 - pi.discount / 100), 2) as per_product_total')
-        )
+            'pi.flat_discount',
+            DB::raw('ROUND(pi.quantity * (pi.per_item_cost * (1 - COALESCE(pi.discount, 0)/100) - COALESCE(pi.flat_discount, 0)), 2) AS per_product_total')        )
         ->where('p.transaction_id', $transactionId)
         ->get();
 
@@ -596,9 +614,11 @@ public function getPurchaseDetailsByTransaction(Request $request)
             'products.*.per_item_cost' => 'required_with:products|numeric|min:0',
             'products.*.unit_id' => 'required_with:products|integer|exists:units,id',
             'products.*.discount' => 'nullable|numeric|min:0|max:100',
+            'products.*.flat_discount' => 'nullable|numeric|min:0',
             'updated_at' => 'nullable|date_format:Y-m-d H:i:s',
             'absolute_discount' => 'nullable|numeric|min:0',
-            'paid_amount' => 'nullable|numeric|min:0',
+            'add_paid_amount' => 'nullable|numeric|min:0', 
+            'set_paid_amount' => 'nullable|numeric|min:0', 
         ]);
         Log::info('Validation passed successfully for updateTransactionById', ['transaction_id' => $transaction_id]);
     } catch (\Illuminate\Validation\ValidationException $e) {
@@ -639,10 +659,14 @@ public function getPurchaseDetailsByTransaction(Request $request)
             $updateData['absolute_discount'] = (float)$request->input('absolute_discount');
         }
         // Update paid_amount by adding to existing value if provided and not null
-        if ($request->has('paid_amount') && $request->input('paid_amount') !== null) {
+        if ($request->has('set_paid_amount')) {
+            // Replace existing value
+            $updateData['paid_amount'] = (float)$request->input('set_paid_amount');
+        } elseif ($request->has('add_paid_amount')) {
+            // Add to existing value
             $currentPaidAmount = (float)($transaction->paid_amount ?? 0);
-            $additionalPaidAmount = (float)$request->input('paid_amount');
-            $updateData['paid_amount'] = $currentPaidAmount + $additionalPaidAmount;
+            $additionalAmount = (float)$request->input('add_paid_amount');
+            $updateData['paid_amount'] = $currentPaidAmount + $additionalAmount;
         }
         if (!empty($updateData)) {
             DB::table('transaction_purchases')
@@ -707,6 +731,7 @@ public function getPurchaseDetailsByTransaction(Request $request)
                         'per_item_cost' => $product['per_item_cost'],
                         'unit_id' => $product['unit_id'],
                         'discount' => $product['discount'] ?? 0,
+                        'flat_discount' => $product['flat_discount'] ?? 0,
                         'created_at' => now(),
                     ]);
                 }
@@ -723,6 +748,7 @@ public function getPurchaseDetailsByTransaction(Request $request)
                                 'per_item_cost' => $product['per_item_cost'],
                                 'unit_id' => $product['unit_id'],
                                 'discount' => $product['discount'] ?? 0,
+                                'flat_discount' => $product['flat_discount'] ?? 0,
                                 
                             ]);
                     }
