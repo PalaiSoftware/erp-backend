@@ -111,7 +111,7 @@
             <tr>
                 <!-- Company Info -->
                 <td class="company-info">
-                    <!-- <img src="{{ public_path('images/logo.png') }}" alt="Company Logo" class="logo"> -->
+                    <img src="{{ public_path('images/logo.png') }}" alt="Company Logo" class="logo">
                     <p><strong>Name:</strong> {{ $company->name }}</p>
                     <p><strong>Address:</strong> {{ $company->address }}</p>
                     <p><strong>Phone:</strong> +91 {{ $company->phone }}</p>
@@ -165,6 +165,8 @@
                     <th>Unit</th>
                     <th>Price/Unit</th>
                     <th>Discount (%)</th>
+                    <th>Flat Discount</th>
+
                     <th>Total</th>
                 </tr>
             </thead>
@@ -177,6 +179,8 @@
                         <td>{{ $item['unit'] }}</td>
                         <td><span class="currency-symbol">Rs. </span> {{ number_format($item['per_item_cost'], 2) }}</td>
                         <td>{{ $item['discount'] }}</td>
+                        <td>{{ $item['flat_discount'] }}</td>
+
                         <td><span class="currency-symbol">Rs.  </span> {{ number_format($item['total'], 2) }}</td>
                     </tr>
                 @empty
