@@ -32,7 +32,8 @@ class ProductController extends Controller
                 'products.*.category_id' => 'required|integer|exists:categories,id', 
                 'products.*.hscode' => 'nullable|string|max:255', 
                 'products.*.uid' => 'required|integer', 
-                'products.*.cid' => 'required|integer', 
+                'products.*.cid' => 'required|integer',
+                'products.*.unit_id' => 'nullable|integer',  
                 'products.*.sale_discount_percent' => 'nullable|numeric|min:0|max:100',
                 'products.*.sale_discount_flat' => 'nullable|numeric|min:0',
                 'products.*.selling_price' => 'nullable|numeric|min:0',
@@ -54,6 +55,7 @@ class ProductController extends Controller
                 ]);
                     // Prepare DefaultValue data (use user input or default to 0)
                 $defaultValueData = [
+                    'unit_id' => $productData['unit_id'] ?? 0,
                     'sale_discount_percent' => $productData['sale_discount_percent'] ?? 0,
                     'sale_discount_flat' => $productData['sale_discount_flat'] ?? 0,
                     'selling_price' => $productData['selling_price'] ?? 0,
@@ -209,6 +211,7 @@ class ProductController extends Controller
                     'hscode' => 'nullable|string|max:255',
                     'uid' => 'required|integer',
                     'cid' => 'required|integer',
+                    'unit_id'=> 'nullable|integer',
                     'sale_discount_percent' => 'nullable|numeric|min:0|max:100',
                     'sale_discount_flat' => 'nullable|numeric|min:0',
                     'selling_price' => 'nullable|numeric|min:0',
@@ -228,6 +231,7 @@ class ProductController extends Controller
                 $product->productValue()->updateOrCreate(
                     ['pid' => $product->id], 
                     [
+                        'unit_id' => $validated['unit_id'] ?? 0, 
                         'sale_discount_percent' => $validated['sale_discount_percent'] ?? 0,
                         'sale_discount_flat' => $validated['sale_discount_flat'] ?? 0,
                         'selling_price' => $validated['selling_price'] ?? 0,
@@ -272,6 +276,7 @@ class ProductController extends Controller
                 'categories.name as category_name', // Include category name
                 'products.hscode',
                 'products.cid',
+                'product_values.unit_id',
                 'product_values.sale_discount_percent',
                 'product_values.sale_discount_flat',
                 'product_values.selling_price',

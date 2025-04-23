@@ -14,6 +14,7 @@ class ProductValue extends Model
     public $incrementing = false;
 
     protected $fillable = [
+        'unit_id',
         'sale_discount_percent',
         'sale_discount_flat',
         'selling_price',

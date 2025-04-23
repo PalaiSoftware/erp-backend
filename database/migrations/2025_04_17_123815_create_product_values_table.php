@@ -7,7 +7,8 @@ return new class extends Migration {
     public function up()
     {
         Schema::create('product_values', function (Blueprint $table) {
-            $table->unsignedBigInteger('pid')->primary(); // Product ID as primary key
+            $table->unsignedBigInteger('pid')->primary(); 
+            $table->integer('unit_id')->default(0);
             $table->decimal('sale_discount_percent', 5, 2)->default(0);
             $table->decimal('sale_discount_flat', 8, 2)->default(0);
             $table->decimal('selling_price', 8, 2)->default(0);

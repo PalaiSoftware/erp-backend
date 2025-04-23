@@ -232,6 +232,7 @@ public function getProductStock($cid)
             'p.description',
             'c.name as category',
             'p.hscode',
+            'pv.unit_id',
             'pv.sale_discount_percent',
             'pv.sale_discount_flat',
             'pv.selling_price',
