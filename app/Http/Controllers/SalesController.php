@@ -286,6 +286,7 @@ private function getInvoiceData($transactionId)
                 'quantity' => $salesItem->quantity,
                 'unit' => $salesItem->unit ? $salesItem->unit->name : 'N/A',
                 'per_item_cost' => $salesItem->per_item_cost,
+                'flat_discount' => $salesItem->flat_discount,
                 'discount' => $salesItem->discount,
                 'total' => $itemTotal,
             ];
