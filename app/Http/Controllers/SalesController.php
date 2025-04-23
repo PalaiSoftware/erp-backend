@@ -219,13 +219,16 @@ class SalesController extends Controller
                     if ($salesItem) {
                             // $itemTotal = $salesItem->quantity * ($salesItem->per_item_cost - $salesItem->discount);
                         // $itemTotal = $salesItem->quantity * ($salesItem->per_item_cost * (1 - $salesItem->discount / 100));
-                        $itemTotal = ($salesItem->quantity * $salesItem->per_item_cost * (1 - $salesItem->discount / 100)) - $salesItem->flat_discount;
-                            $items[] = [
+                        // $itemTotal = ($salesItem->quantity * $salesItem->per_item_cost * (1 - $salesItem->discount / 100)) - $salesItem->flat_discount;
+                        // $itemTotal = $salesItem->quantity * ((($salesItem->per_item_cost- $salesItem->flat_discount) * (1 - $salesItem->discount / 100)) );   
+                        $itemTotal = $salesItem->quantity * (($salesItem->per_item_cost * (1 - $salesItem->discount / 100)) - $salesItem->flat_discount);
+                        $items[] = [
                                 'product_name' => $product ? $product->name : 'Unknown Product',
                                 'quantity' => $salesItem->quantity,
                                 'unit' => $salesItem->unit ? $salesItem->unit->name : 'N/A', // Add unit name
                                 'per_item_cost' => $salesItem->per_item_cost,
                                 'discount' => $salesItem->discount,
+                                'flat_discount' => $salesItem->flat_discount,
                                 'total' => $itemTotal,
                             ];
                             $totalAmount += $itemTotal;
@@ -280,7 +283,10 @@ private function getInvoiceData($transactionId)
         if ($salesItem) {
             // $itemTotal = $salesItem->quantity * ($salesItem->per_item_cost - $salesItem->discount);
             // $itemTotal = $salesItem->quantity * ($salesItem->per_item_cost * (1 - $salesItem->discount / 100));
-            $itemTotal = ($salesItem->quantity * $salesItem->per_item_cost * (1 - $salesItem->discount / 100)) - $salesItem->flat_discount;
+            // $itemTotal = ($salesItem->quantity * $salesItem->per_item_cost * (1 - $salesItem->discount / 100)) - $salesItem->flat_discount;
+            // $itemTotal = $salesItem->quantity * (($salesItem->per_item_cost * (1 - $salesItem->discount / 100)) - $salesItem->flat_discount);
+            $itemTotal = $salesItem->quantity * (($salesItem->per_item_cost * (1 - $salesItem->discount / 100)) - $salesItem->flat_discount);
+
             $items[] = [
                 'product_name' => $product ? $product->name : 'Unknown Product',
                 'quantity' => $salesItem->quantity,
