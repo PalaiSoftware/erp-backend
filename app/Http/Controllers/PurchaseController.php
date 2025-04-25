@@ -606,7 +606,7 @@ public function getPurchaseDetailsByTransaction(Request $request)
         // Validation rules (unchanged from your code)
         $request->validate([
             'transaction_id' => 'sometimes|integer|in:' . $transaction_id,
-            'payment_mode' => 'nullable|string|in:cash,credit_card,online',
+            'payment_mode' => 'nullable|string',
             'vendor_id' => 'nullable|integer|exists:vendors,id',
             'products' => 'nullable|array',
             'products.*.product_id' => 'required_with:products|integer|exists:products,id',
