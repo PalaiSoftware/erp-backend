@@ -342,7 +342,12 @@ public function addUnit(Request $request)
         ]);
 
         try {
-            // Create a new unit
+            // Check if a unit with the same name already exists
+            if (Unit::where('name', $request->name)->exists()) {
+                return response()->json([
+                    'message' => 'Unit name already exists',
+                ], 409); // 409 Conflict status code
+            }
             $unit = Unit::create([
                 'name' => $request->name,
             ]);
