@@ -130,10 +130,11 @@ class CustomerController extends Controller
             'phone' => 'sometimes|string|max:20',
             'gst' => 'sometimes|string',
             'pan' => 'sometimes|string',
+            'email' => 'sometimes|string',
         ]);
     
         // Define the possible search fields
-        $searchFields = ['first_name', 'last_name', 'phone', 'gst', 'pan'];
+        $searchFields = ['first_name', 'last_name', 'phone', 'gst', 'pan','email'];
         
         // Check if at least one search field is provided
         $providedSearchFields = array_intersect_key($validated, array_flip($searchFields));
