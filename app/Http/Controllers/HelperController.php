@@ -216,6 +216,7 @@ public function getProductStock($cid)
     $products = DB::table('products as p')
         ->join('categories as c', 'p.category_id', '=', 'c.id')
         ->leftJoin('product_values as pv', 'p.id', '=', 'pv.pid')
+        ->leftJoin('units as u', 'pv.unit_id', '=', 'u.id')
         ->leftJoinSub($purchaseTotals, 'pt', function($join) {
             $join->on('p.id', '=', 'pt.product_id');
         })
@@ -233,6 +234,7 @@ public function getProductStock($cid)
             'c.name as category',
             'p.hscode',
             'pv.unit_id',
+            'u.name as unit',
             'pv.sale_discount_percent',
             'pv.sale_discount_flat',
             'pv.selling_price',
