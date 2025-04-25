@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Product;
 use App\Models\ProductValue; 
+use App\Models\Unit;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log; 
 
@@ -113,7 +114,7 @@ class ProductController extends Controller
 //         'products' => $products,
 //     ], 200);
 // }
-        public function index(Request $request)
+    public function index(Request $request)
         {
             // Authentication and authorization checks
             $user = Auth::user();
@@ -132,6 +133,8 @@ class ProductController extends Controller
             $products = Product::where('products.cid', $validated['cid'])
                 ->leftJoin('categories', 'products.category_id', '=', 'categories.id') 
                 ->leftJoin('product_values', 'products.id', '=', 'product_values.pid') 
+                ->leftJoin('units', 'product_values.unit_id', '=', 'units.id')
+
                 ->select(
                     'products.id',
                     'products.name as product_name',
@@ -140,6 +143,8 @@ class ProductController extends Controller
                     'categories.name as category_name',
                     'products.hscode',
                     'products.cid',
+                    'units.name as unit_name',
+                    'product_values.unit_id',
                     'product_values.sale_discount_percent',
                     'product_values.sale_discount_flat',
                     'product_values.selling_price',
@@ -268,6 +273,8 @@ class ProductController extends Controller
             $product = Product::where('products.id', $product_id)
             ->leftJoin('categories', 'products.category_id', '=', 'categories.id') // Join with categories table
             ->leftJoin('product_values', 'products.id', '=', 'product_values.pid')
+            ->leftJoin('units', 'product_values.unit_id', '=', 'units.id')
+
             ->select(
                 'products.id as product_id',
                 'products.name as product_name',
@@ -277,6 +284,7 @@ class ProductController extends Controller
                 'products.hscode',
                 'products.cid',
                 'product_values.unit_id',
+                'units.name as unit_name',
                 'product_values.sale_discount_percent',
                 'product_values.sale_discount_flat',
                 'product_values.selling_price',
