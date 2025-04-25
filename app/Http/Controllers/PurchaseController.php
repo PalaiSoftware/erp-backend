@@ -548,47 +548,96 @@ public function getPurchaseDetailsByTransaction(Request $request)
 
 //     ], 200);
 // }
+    // public function getPurchaseWidget(Request $request)
+    // {
+    //     // Authentication check
+    //     $user = Auth::user();
+    //     if (!$user) {
+    //         return response()->json(['message' => 'Unauthorized'], 401);
+    //     }
+
+    //     // Validate and extract cid from request body
+    //     $validated = $request->validate([
+    //         'cid' => 'required|integer|exists:companies,id'
+    //     ]);
+    //     $cid = $validated['cid'];
+    //     $rid = $user->rid; // Role ID from authenticated user
+    //     $uid = $user->id; // User ID from authenticated user
+
+    //     // Purchase count with conditional uid filtering
+    //     $purchaseCount = TransactionPurchase::where('cid', $cid)
+    //         ->when(!in_array($rid, [5, 6]), fn($q) => $q->where('uid', $uid))
+    //         ->count();
+
+    //     // Vendor count with conditional uid filtering
+    //     $vendorCount = PurchaseItem::join('purchases', 'purchase_items.purchase_id', '=', 'purchases.id')
+    //     ->join('transaction_purchases', 'purchases.transaction_id', '=', 'transaction_purchases.id')
+    //     ->where('transaction_purchases.cid', $cid)
+    //     ->distinct('purchase_items.vendor_id')
+    //     ->count('purchase_items.vendor_id');
+
+    //     // Total amount calculation with conditional uid filtering
+    //     $totalAmount = PurchaseItem::join('purchases', 'purchase_items.purchase_id', '=', 'purchases.id')
+    //         ->join('transaction_purchases', 'purchases.transaction_id', '=', 'transaction_purchases.id')
+    //         ->where('transaction_purchases.cid', $cid)
+    //         ->when(!in_array($rid, [5, 6]), fn($q) => $q->where('transaction_purchases.uid', $uid))
+    //         ->sum(DB::raw('purchase_items.quantity * purchase_items.per_item_cost * (1 - purchase_items.discount / 100)'));
+
+    //     return response()->json([
+    //         'total_purchase_order' => $purchaseCount,
+    //         'total_vendor' => $vendorCount,
+    //         'total_purchase_amount' => $totalAmount
+    //     ], 200);
+    // }
+
     public function getPurchaseWidget(Request $request)
-    {
-        // Authentication check
-        $user = Auth::user();
-        if (!$user) {
-            return response()->json(['message' => 'Unauthorized'], 401);
-        }
+{
+    // Authentication and validation (unchanged)
+    $user = Auth::user();
+    if (!$user) return response()->json(['message' => 'Unauthorized'], 401);
 
-        // Validate and extract cid from request body
-        $validated = $request->validate([
-            'cid' => 'required|integer|exists:companies,id'
-        ]);
-        $cid = $validated['cid'];
-        $rid = $user->rid; // Role ID from authenticated user
-        $uid = $user->id; // User ID from authenticated user
+    $validated = $request->validate(['cid' => 'required|integer|exists:companies,id']);
+    $cid = $validated['cid'];
+    $rid = $user->rid;
+    $uid = $user->id;
 
-        // Purchase count with conditional uid filtering
-        $purchaseCount = TransactionPurchase::where('cid', $cid)
-            ->when(!in_array($rid, [5, 6]), fn($q) => $q->where('uid', $uid))
-            ->count();
+    // Total Purchase Orders (unchanged)
+    $purchaseCount = TransactionPurchase::where('cid', $cid)
+        ->when(!in_array($rid, [5, 6]), fn($q) => $q->where('uid', $uid))
+        ->count();
 
-        // Vendor count with conditional uid filtering
-        $vendorCount = PurchaseItem::join('purchases', 'purchase_items.purchase_id', '=', 'purchases.id')
+    // Total Vendors (unchanged)
+    $vendorCount = PurchaseItem::join('purchases', 'purchase_items.purchase_id', '=', 'purchases.id')
         ->join('transaction_purchases', 'purchases.transaction_id', '=', 'transaction_purchases.id')
         ->where('transaction_purchases.cid', $cid)
         ->distinct('purchase_items.vendor_id')
         ->count('purchase_items.vendor_id');
 
-        // Total amount calculation with conditional uid filtering
-        $totalAmount = PurchaseItem::join('purchases', 'purchase_items.purchase_id', '=', 'purchases.id')
+    // Total Purchase Amount (revised to include all discounts)
+    $totalAmount = DB::table(function ($query) use ($cid, $rid, $uid) {
+        $query->from('purchase_items')
+            ->join('purchases', 'purchase_items.purchase_id', '=', 'purchases.id')
             ->join('transaction_purchases', 'purchases.transaction_id', '=', 'transaction_purchases.id')
+            ->selectRaw('
+                transaction_purchases.id,
+                SUM(
+                    purchase_items.quantity * 
+                    (purchase_items.per_item_cost * (1 - purchase_items.discount / 100) - purchase_items.flat_discount)
+                ) AS transaction_total,
+                MAX(transaction_purchases.absolute_discount) AS absolute_discount
+            ')
             ->where('transaction_purchases.cid', $cid)
             ->when(!in_array($rid, [5, 6]), fn($q) => $q->where('transaction_purchases.uid', $uid))
-            ->sum(DB::raw('purchase_items.quantity * purchase_items.per_item_cost * (1 - purchase_items.discount / 100)'));
+            ->groupBy('transaction_purchases.id');
+    }, 'transaction_sums')
+    ->sum(DB::raw('transaction_total - absolute_discount'));
 
-        return response()->json([
-            'total_purchase_order' => $purchaseCount,
-            'total_vendor' => $vendorCount,
-            'total_purchase_amount' => $totalAmount
-        ], 200);
-    }
+    return response()->json([
+        'total_purchase_order' => $purchaseCount,
+        'total_vendor' => $vendorCount,
+        'total_purchase_amount' => round($totalAmount, 2)
+    ], 200);
+}
     public function updateTransactionById(Request $request, $transaction_id)
 {
     // Get the authenticated user
