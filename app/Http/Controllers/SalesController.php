@@ -43,7 +43,7 @@ class SalesController extends Controller
             'cash' => 3,
             'upi' => 4,
             'bank_transfer' => 5,
-            'phonepay'=>6,
+            'phonepe'=>6,
 
         ];
     
@@ -218,7 +218,7 @@ class SalesController extends Controller
                 3 => 'Cash',
                 4 => 'UPI',
                 5 => 'Bank Transfer',
-                6 => 'PhonePay',
+                6 => 'phonepe',
             ];
                 try {
                     $transaction = TransactionSales::findOrFail($transactionId);
@@ -309,7 +309,7 @@ private function getInvoiceData($transactionId)
         3 => 'cash',
         4 => 'upi',
         5 => 'bank_transfer',
-        6 => 'phonepay',
+        6 => 'phonepe',
     ];
     $items = [];
     $totalAmount = 0;
@@ -514,7 +514,7 @@ public function update(Request $request, $transactionId)
         'cash' => 3,
         'upi' => 4,
         'bank_transfer' => 5,
-        'phonepay' => 6,
+        'phonepe' => 6,
     ];
     // Validate the request
     try {
@@ -775,7 +775,7 @@ public function update(Request $request, $transactionId)
                 3 => 'cash',
                 4 => 'upi',
                 5 => 'bank_transfer',
-                6 => 'phonepay',
+                6 => 'phonepe',
             ];
             $decodedPaymentMode = $paymentModes[$transaction->payment_mode] ?? 'Unknown';
             $transactionData = [
