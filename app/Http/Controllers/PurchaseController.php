@@ -47,7 +47,8 @@ class PurchaseController extends Controller
                 'products.*.sale_discount_percent' => 'nullable|numeric|min:0|max:100',
                 'products.*.sale_discount_flat' => 'nullable|numeric|min:0',
                 'cid' => 'required|integer',
-                'payment_mode' => 'required|string|max:50',
+                //'payment_mode' => 'required|string|max:50',
+                'payment_mode' => 'required|string|in:' . implode(',', array_keys(TransactionPurchase::$paymentModeMap)),
                 'purchase_date' => 'required|date_format:Y-m-d H:i:s', // Add this line
                 'absolute_discount' => 'nullable|numeric|min:0',
                 'paid_amount' => 'nullable|numeric|min:0',
@@ -75,7 +76,8 @@ class PurchaseController extends Controller
                 'uid' => $user->id,
                 'cid' => $request->cid,
                 'total_amount' => 0, // Placeholder, update later if needed
-                'payment_mode' => $request->payment_mode,
+                //'payment_mode' => $request->payment_mode,
+                'payment_mode' => TransactionPurchase::$paymentModeMap[$request->payment_mode],
                 'absolute_discount' => $request->absolute_discount ?? 0,
                 'paid_amount' => $request->paid_amount ?? 0,
                'created_at' => $purchaseDate,
@@ -238,6 +240,14 @@ class PurchaseController extends Controller
 
     // Execute the query
     $transactions = $query->get();
+
+    // Convert payment_mode from integer to string
+    $inverseMap = array_flip(TransactionPurchase::$paymentModeMap);
+    $transactions = $transactions->map(function ($transaction) use ($inverseMap) {
+        $transaction->payment_mode = $inverseMap[$transaction->payment_mode] ?? 'Unknown';
+        return $transaction;
+    });
+
 
     // Check if any transactions were found
     if ($transactions->isEmpty()) {
@@ -472,6 +482,13 @@ public function getPurchaseDetailsByTransaction(Request $request)
         ], 404);
     }
 
+// **Transform payment_mode from integer to string**
+$inverseMap = array_flip(TransactionPurchase::$paymentModeMap);
+$purchaseDetails = $purchaseDetails->map(function ($detail) use ($inverseMap) {
+    $detail->payment_mode = $inverseMap[$detail->payment_mode] ?? 'Unknown';
+    return $detail;
+});
+
     // Calculate total amount
     $totalAmount = $purchaseDetails->sum('per_product_total');
 
@@ -655,7 +672,8 @@ public function getPurchaseDetailsByTransaction(Request $request)
         // Validation rules (unchanged from your code)
         $request->validate([
             'transaction_id' => 'sometimes|integer|in:' . $transaction_id,
-            'payment_mode' => 'nullable|string',
+            //'payment_mode' => 'nullable|string',
+            'payment_mode' => 'nullable|string|in:' . implode(',', array_keys(TransactionPurchase::$paymentModeMap)),
             'vendor_id' => 'nullable|integer|exists:vendors,id',
             'products' => 'nullable|array',
             'products.*.product_id' => 'required_with:products|integer|exists:products,id',
@@ -700,9 +718,12 @@ public function getPurchaseDetailsByTransaction(Request $request)
         $updateData = [
             'updated_at' => $request->input('updated_at', now()) // Use provided updated_at or now()
         ];
-        if ($request->has('payment_mode')) {
-            $updateData['payment_mode'] = $request->input('payment_mode');
+          // Handle payment_mode: convert string to integer if provided and valid
+          if ($request->filled('payment_mode')) {
+            $paymentModeString = $request->input('payment_mode');
+            $updateData['payment_mode'] = TransactionPurchase::$paymentModeMap[$paymentModeString];
         }
+
          // Update absolute_discount if provided and not null
          if ($request->has('absolute_discount') && $request->input('absolute_discount') !== null) {
             $updateData['absolute_discount'] = (float)$request->input('absolute_discount');
