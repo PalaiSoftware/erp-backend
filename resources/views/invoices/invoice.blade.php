@@ -125,6 +125,7 @@
                     <p><strong>Invoice Number:</strong> {{ $invoice->number }}</p>
                     <p><strong>Date:</strong> {{ $invoice->date }}</p>
                     <p><strong>Date:</strong> {{ $transaction->updated_at }}</p>
+                    <p><strong>Payment Mode:</strong> {{ $payment_mode }}</p>
 
                     <p><strong>Billing Done By:</strong> {{ $userDetails->name }}</p>
 
