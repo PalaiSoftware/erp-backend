@@ -123,8 +123,8 @@
                 <td class="billing-info" style="text-align: right;">
                     <h4>Billing Details</h4>
                     <p><strong>Invoice Number:</strong> {{ $invoice->number }}</p>
-                    <p><strong>Date:</strong> {{ $invoice->date }}</p>
-                    <p><strong>Date:</strong> {{ $transaction->updated_at }}</p>
+                    <!-- <p><strong>Bill Date:</strong> {{ $transaction->created_at }}</p> -->
+                    <p><strong>Bill Date:</strong> {{ $transaction->updated_at }}</p>
                     <p><strong>Payment Mode:</strong> {{ $payment_mode }}</p>
 
                     <p><strong>Billing Done By:</strong> {{ $userDetails->name }}</p>
