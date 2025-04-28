@@ -15,6 +15,9 @@ use App\Models\Customer;
 use App\Models\User;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
+use Illuminate\Validation\Rule;
+
+
 class SalesController extends Controller
 {
 
@@ -34,7 +37,15 @@ class SalesController extends Controller
         if (!in_array($user->rid, [5, 6, 7,8,9])) {
            return response()->json(['message' => 'Unauthorized to sale product'], 403);
         }
-    
+        $paymentModes = [
+            'debit_card' => 1,
+            'credit_card' => 2,
+            'cash' => 3,
+            'upi' => 4,
+            'bank_transfer' => 5,
+            'phonepay'=>6,
+
+        ];
     
         try {
             $request->validate([
@@ -47,7 +58,7 @@ class SalesController extends Controller
                 'products.*.unit_id' => 'required|integer|exists:units,id',
                 'cid' => 'required|integer',
                 'customer_id' => 'required|integer',
-                'payment_mode' => 'required|string|max:50',
+                'payment_mode' => ['required','string',Rule::in(array_keys($paymentModes)),],                
                 'absolute_discount' => 'nullable|numeric|min:0',
                 'total_paid' => 'required|numeric|min:0',
                 'updated_at' => 'nullable|date', 
@@ -60,7 +71,15 @@ class SalesController extends Controller
                 'errors' => $e->errors()
             ], 422);
         }
-    
+        $decodedPaymentMode = $paymentModes[$request->payment_mode];
+
+        if (!$decodedPaymentMode) {
+            return response()->json([
+                'message' => 'Invalid payment mode',
+                'errors' => ['payment_mode' => ['The selected payment mode is invalid.']],
+            ], 422);
+        }
+
         $uid = $user->id;
         $cid = (int)$request->cid;
     
@@ -136,7 +155,7 @@ class SalesController extends Controller
                 'uid' => $user->id,
                 'cid' => $request->cid,
                 'customer_id' => $request->customer_id,
-                'payment_mode' => $request->payment_mode,
+                'payment_mode' =>$decodedPaymentMode,
                 'absolute_discount' => $request->absolute_discount,
                 'total_paid' => $request->total_paid,
                 'updated_at' => $updatedAt, // Use the manually passed updated_at value
@@ -178,7 +197,8 @@ class SalesController extends Controller
             ], 500);
         }
     }
-        public function generateInvoice($transactionId)
+
+    public function generateInvoice($transactionId)
             {
                 Log::info("Generating invoice for transaction_id: {$transactionId}");
 
@@ -192,7 +212,14 @@ class SalesController extends Controller
             if ($user->rid < 5 || $user->rid > 10) {
                 return response()->json(['message' => 'Forbidden'], 403);
             }
-
+            $paymentModes = [
+                1 => 'Debit Card',
+                2 => 'Credit Card',
+                3 => 'Cash',
+                4 => 'UPI',
+                5 => 'Bank Transfer',
+                6 => 'PhonePay',
+            ];
                 try {
                     $transaction = TransactionSales::findOrFail($transactionId);
                     $sales = Sale::where('transaction_id', $transactionId)->with('salesItem.unit')->get();
@@ -244,6 +271,8 @@ class SalesController extends Controller
                         'company' => $company,
                         'customer' => $customer,
                         'userDetails' => $userDetails,
+                        'payment_mode' => $paymentModes[$transaction->payment_mode] ?? 'Unknown',
+
                     ];
 
                     $pdf = Pdf::loadView('invoices.invoice', $data);
@@ -274,7 +303,14 @@ private function getInvoiceData($transactionId)
         'number' => 'INV-' . $transactionId,
         'date' => Carbon::parse($transaction->updated_at)->format('Y-m-d'),
     ];
-
+    $paymentModes = [
+        1 => 'debit_card',
+        2 => 'credit_card',
+        3 => 'cash',
+        4 => 'upi',
+        5 => 'bank_transfer',
+        6 => 'phonepay',
+    ];
     $items = [];
     $totalAmount = 0;
     foreach ($sales as $sale) {
@@ -299,14 +335,15 @@ private function getInvoiceData($transactionId)
             $totalAmount += $itemTotal;
         }
     }
+    $transactionData = $transaction->toArray();
+    $transactionData['payment_mode'] = $paymentModes[$transaction->payment_mode] ?? 'Unknown';
 
     return [
         'invoice' => (object) $invoice,
-        'transaction' => $transaction,
+        'transaction' => $transactionData,
         'items' => $items,
         'total_amount' => $totalAmount,
         'customer' => $customer,
-        // Include only required user fields
         'user_name' => $user->name,
         'user_phone' => $user->mobile,
     ];
@@ -351,7 +388,6 @@ private function getInvoiceData($transactionId)
 
     public function getTotalSaleAmount($cid)
     {
-        // Authentication and validation (unchanged)
         $user = Auth::user();
         if (!$user) {
             return response()->json(['message' => 'Unauthorized'], 401);
@@ -360,18 +396,7 @@ private function getInvoiceData($transactionId)
         $uid = $user->id;
     
         try {
-            // Subquery to calculate item totals per transaction
-            // $subQuery = DB::table('sales_items as si')
-            //     ->join('sales as s', 'si.sale_id', '=', 's.id')
-            //     ->join('transaction_sales as ts', 's.transaction_id', '=', 'ts.id')
-            //     ->where('ts.cid', $cid)
-            //     ->when(!in_array($rid, [5, 6]), function ($query) use ($uid) {
-            //         $query->where('ts.uid', $uid);
-            //     })
-            //     ->select('ts.id')
-            //     ->selectRaw('SUM(si.quantity * si.per_item_cost * (1 - si.discount/100)) as item_total')
-            //     ->selectRaw('ts.absolute_discount')
-            //     ->groupBy('ts.id');
+ 
             $subQuery = DB::table('sales_items as si')
                 ->join('sales as s', 'si.sale_id', '=', 's.id')
                 ->join('transaction_sales as ts', 's.transaction_id', '=', 'ts.id')
@@ -483,7 +508,14 @@ public function update(Request $request, $transactionId)
     if (!$transaction) {
         return response()->json(['message' => 'Transaction not found or unauthorized'], 404);
     }
-
+    $paymentModes = [
+        'debit_card' => 1,
+        'credit_card' => 2,
+        'cash' => 3,
+        'upi' => 4,
+        'bank_transfer' => 5,
+        'phonepay' => 6,
+    ];
     // Validate the request
     try {
         $request->validate([
@@ -496,7 +528,7 @@ public function update(Request $request, $transactionId)
             'products.*.unit_id' => 'required|integer|exists:units,id',
             'cid' => 'required|integer',
             'customer_id' => 'required|integer',
-            'payment_mode' => 'required|string|max:50',
+            'payment_mode' => ['required','string',Rule::in(array_keys($paymentModes)),],
             'absolute_discount' => 'nullable|numeric|min:0', 
             'total_paid' => 'nullable|numeric|min:0',        
             'updated_at' => 'nullable|date_format:Y-m-d H:i:s', 
@@ -576,6 +608,15 @@ public function update(Request $request, $transactionId)
         ], 422);
     }
 
+
+    $decodedPaymentMode = $paymentModes[$request->payment_mode];
+
+    if (!$decodedPaymentMode) {
+        return response()->json([
+            'message' => 'Invalid payment mode',
+            'errors' => ['payment_mode' => ['The selected payment mode is invalid.']],
+        ], 422);
+    }
     // Start transaction
     DB::beginTransaction();
     try {
@@ -583,7 +624,7 @@ public function update(Request $request, $transactionId)
         $transaction->update([
             'cid' => $request->cid,
             'customer_id' => $request->customer_id,
-            'payment_mode' => $request->payment_mode,
+            'payment_mode' => $decodedPaymentMode,
             'updated_at' => $request->updated_at ?? now(),
             'absolute_discount' => $request->absolute_discount, 
             'total_paid' => $request->total_paid, 
@@ -728,6 +769,15 @@ public function update(Request $request, $transactionId)
             $totalAmount = $subTotal - $absoluteDiscount;
     
             // Construct the response data
+            $paymentModes = [
+                1 => 'debit_card',
+                2 => 'credit_card',
+                3 => 'cash',
+                4 => 'upi',
+                5 => 'bank_transfer',
+                6 => 'phonepay',
+            ];
+            $decodedPaymentMode = $paymentModes[$transaction->payment_mode] ?? 'Unknown';
             $transactionData = [
                 'transaction_id' => $transaction->id,
                 'absolute_discount' => $transaction->absolute_discount,
@@ -735,7 +785,7 @@ public function update(Request $request, $transactionId)
                 'cid' => $transaction->cid,
                 'customer_id' => $transaction->customer_id,
                 'customer' => $customerData, // Added customer data
-                'payment_mode' => $transaction->payment_mode,
+                'payment_mode' =>  $decodedPaymentMode,
                 'created_at' => Carbon::parse($transaction->created_at)->format('Y-m-d H:i:s'),
                 'updated_at' => $transaction->updated_at ? Carbon::parse($transaction->updated_at)->format('Y-m-d H:i:s') : null,
                 'products' => $products,
