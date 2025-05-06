@@ -807,4 +807,66 @@ public function update(Request $request, $transactionId)
             ], 500);
         }
     }
+
+    public function destroy(Request $request, $transactionId)
+    {
+        Log::info('Delete API endpoint reached', [
+            'transaction_id' => $transactionId,
+        ]);
+    
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
+        }
+    
+        if (!in_array($user->rid, [5, 6])) {
+            return response()->json(['message' => 'Unauthorized to delete transaction'], 403);
+        }
+    
+        $transaction = TransactionSales::where('id', $transactionId)
+            ->where('uid', $user->id)
+            ->first();
+    
+        if (!$transaction) {
+            return response()->json(['message' => 'Transaction not found or unauthorized'], 404);
+        }
+    
+        DB::beginTransaction();
+        try {
+            // Delete related SalesItems and Sales
+            $sales = Sale::where('transaction_id', $transactionId)->get();
+    
+            foreach ($sales as $sale) {
+                SalesItem::where('sale_id', $sale->id)->delete();
+                $sale->delete();
+            }
+    
+            // Delete the transaction
+            $transaction->delete();
+    
+            DB::commit();
+    
+            Log::info('Transaction deleted successfully', [
+                'transaction_id' => $transactionId,
+            ]);
+    
+            return response()->json([
+                'message' => 'Transaction deleted successfully',
+                'transaction_id' => $transactionId,
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Transaction deletion failed', [
+                'error' => $e->getMessage(),
+                'transaction_id' => $transactionId,
+            ]);
+    
+            return response()->json([
+                'message' => 'Transaction deletion failed',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
+
+
 }
