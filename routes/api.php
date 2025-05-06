@@ -76,7 +76,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/customers/{customerId}', [CustomerController::class, 'getCustomer']);
     Route::get('/vendor/{vendorId}', [VendorController::class, 'getVendorById']);
     Route::get('/products/{product_id}', [ProductController::class, 'getProductById']);
-
+    Route::delete('/transaction-sales/{transactionId}', [SalesController::class, 'destroy'])->name('transactions.destroy');
+    Route::delete('/purchase-transactions/{transactionId}', [PurchaseController::class, 'destroy'])->name('purchase-transactions.destroy');
 });
 
 Route::get('/units', [HelperController::class, 'index']);

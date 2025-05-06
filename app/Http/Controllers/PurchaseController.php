@@ -853,4 +853,73 @@ $purchaseDetails = $purchaseDetails->map(function ($detail) use ($inverseMap) {
     }
 }
 
+
+public function destroy(Request $request, $transactionId)
+{
+    Log::info('Delete purchase transaction endpoint reached', [
+        'transaction_id' => $transactionId,
+    ]);
+
+    $user = Auth::user();
+    if (!$user) {
+        return response()->json(['message' => 'Unauthenticated'], 401);
+    }
+
+    // Restrict to roles 5 and 6 only
+    if (!in_array($user->rid, [5, 6])) {
+        return response()->json(['message' => 'Unauthorized to delete purchase transaction'], 403);
+    }
+
+    // Check if transaction exists and belongs to the user
+    $transaction = DB::table('transaction_purchases')
+        ->where('id', $transactionId)
+        ->where('uid', $user->id)
+        ->first();
+
+    if (!$transaction) {
+        return response()->json([
+            'message' => 'Transaction not found or unauthorized',
+        ], 404);
+    }
+
+    DB::beginTransaction();
+    try {
+        // Delete related purchase_items first (foreign key constraint)
+        $purchaseIds = DB::table('purchases')
+            ->where('transaction_id', $transactionId)
+            ->pluck('id');
+
+        if ($purchaseIds->isNotEmpty()) {
+            DB::table('purchase_items')->whereIn('purchase_id', $purchaseIds)->delete();
+            DB::table('purchases')->where('transaction_id', $transactionId)->delete();
+        }
+
+        // Now delete the transaction
+        DB::table('transaction_purchases')
+            ->where('id', $transactionId)
+            ->delete();
+
+        DB::commit();
+        Log::info('Purchase transaction deleted successfully', [
+            'transaction_id' => $transactionId,
+        ]);
+
+        return response()->json([
+            'message' => 'Purchase transaction deleted successfully',
+            'transaction_id' => $transactionId,
+        ], 200);
+    } catch (\Exception $e) {
+        DB::rollBack();
+        Log::error('Failed to delete purchase transaction', [
+            'transaction_id' => $transactionId,
+            'error' => $e->getMessage(),
+        ]);
+
+        return response()->json([
+            'message' => 'Failed to delete purchase transaction',
+            'error' => $e->getMessage(),
+        ], 500);
+    }
+}
+
 }
