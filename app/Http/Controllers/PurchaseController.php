@@ -460,6 +460,7 @@ public function getPurchaseDetailsByTransaction(Request $request)
         ->join('products as prod', 'p.product_id', '=', 'prod.id')
         ->join('purchase_items as pi', 'p.id', '=', 'pi.purchase_id')
         ->join('transaction_purchases as tp', 'p.transaction_id', '=', 'tp.id')
+        ->join('product_values as pv', 'prod.id', '=', 'pv.pid')
         ->select(
             'p.product_id',
             'prod.name as product_name',
@@ -470,6 +471,7 @@ public function getPurchaseDetailsByTransaction(Request $request)
             'tp.payment_mode',
             'pi.discount',
             'pi.flat_discount',
+            'pv.selling_price', 
             DB::raw('ROUND(pi.quantity * (pi.per_item_cost * (1 - COALESCE(pi.discount, 0)/100) - COALESCE(pi.flat_discount, 0)), 2) AS per_product_total')        )
         ->where('p.transaction_id', $transactionId)
         ->get();

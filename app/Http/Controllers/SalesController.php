@@ -262,12 +262,27 @@ class SalesController extends Controller
                         }
                     }
                     Log::info('Invoice items prepared', ['items' => $items, 'total_amount' => $totalAmount]);
+                    
+                     // ✅ Apply global absolute discount
+        $absoluteDiscount = $transaction->absolute_discount ?? 0;
+        $totalAmount -= $absoluteDiscount;
 
+        // ✅ Calculate due amount
+        $dueAmount = max(0, $totalAmount - $transaction->total_paid);
+
+        Log::info('Final invoice totals', [
+            'total_amount' => $totalAmount,
+            'absolute_discount' => $absoluteDiscount,
+            'total_paid' => $transaction->total_paid,
+            'due_amount' => $dueAmount
+        ]);
+       
                     $data = [
                         'invoice' => (object) $invoice,
                         'transaction' => $transaction,
                         'items' => $items,
                         'total_amount' => $totalAmount,
+                        'due_amount' => $dueAmount,     // Final due amount
                         'company' => $company,
                         'customer' => $customer,
                         'userDetails' => $userDetails,
