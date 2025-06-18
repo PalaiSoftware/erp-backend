@@ -14,6 +14,9 @@ class VendorController extends Controller
 
     public function store(Request $request)
     {
+        // Force JSON response
+         $request->headers->set('Accept', 'application/json');
+
             $user = Auth::user();
 
         // Check if the user is authenticated
@@ -26,17 +29,48 @@ class VendorController extends Controller
             return response()->json(['message' => 'Unauthorized to create a vendor'], 403);
         }
 
-        $validated = $request->validate([
-            'vendor_name' => 'required|string|max:255',
-            'contact_person' => 'nullable|string|max:255',
-            'email' => 'nullable|email',
-            'phone' => 'nullable|string|max:20',
-            'address' => 'nullable|string',
-            'gst_no' => 'nullable|string|max:255',
-            'pan' => 'nullable|string|max:255',
-            'uid' => 'nullable|integer',
-            'cid' => 'required|integer',
-        ]);
+        // $validated = $request->validate([
+        //     'vendor_name' => 'required|string|max:255',
+        //     'contact_person' => 'nullable|string|max:255',
+        //     'email' => 'nullable|email',
+        //     'phone' => 'nullable|string|max:20',
+        //     'address' => 'nullable|string',
+        //     'gst_no' => 'nullable|string|max:255',
+        //     'pan' => 'nullable|string|max:255',
+        //     'uid' => 'nullable|integer',
+        //     'cid' => 'required|integer',
+        // ]);
+ 
+        try {
+            // Validate the request
+            $validated = $request->validate([
+                'vendor_name' => [
+                    'required',
+                    'string',
+                    'max:255',
+                    function ($attribute, $value, $fail) use ($request) {
+                        if (Vendor::where('vendor_name', $value)->where('cid', $request->input('cid'))->exists()) {
+                            $fail($value . ' has already been taken for this company.');
+                        }
+                    },
+                ],
+                'contact_person' => 'nullable|string|max:255',
+                'email' => 'nullable|email',
+                'phone' => 'nullable|string|max:20',
+                'address' => 'nullable|string',
+                'gst_no' => 'nullable|string|max:255',
+                'pan' => 'nullable|string|max:255',
+                'uid' => 'nullable|integer',
+                'cid' => 'required|integer',
+            ]);
+        } catch (ValidationException $e) {
+            // Customize validation error response
+            $errors = $e->errors();
+            if (isset($errors['vendor_name'])) {
+                return response()->json(['message' => $errors['vendor_name'][0]], 422);
+            }
+            return response()->json(['errors' => $errors], 422);
+        }
 
         $vendor = Vendor::create([
             'vendor_name' => $validated['vendor_name'],

@@ -13,6 +13,8 @@ class ProductController extends Controller
 {
     public function store(Request $request)
     {
+        // Force JSON response
+        $request->headers->set('Accept', 'application/json');
          // Get the authenticated user
         $user = Auth::user();
         
@@ -22,13 +24,24 @@ class ProductController extends Controller
         }
         
         // Restrict to rid 5, 6, 7, or 8 only
-        if (!in_array($user->rid, [5, 6, 7, 8])) {
+        if (!in_array($user->rid, [5, 6, 7])) {
             return response()->json(['message' => 'Unauthorized to add product to company'], 403);
         }
             
             $validatedData = $request->validate([
                 'products' => 'required|array', 
-                'products.*.name' => 'required|string|max:255',
+                'products.*.name' => [
+                    'required',
+                    'string',
+                    'max:255',
+                    function ($attribute, $value, $fail) use ($request) {
+                        $index = explode('.', $attribute)[1];
+                        $cid = $request->input("products.$index.cid");
+                        if (Product::where('name', $value)->where('cid', $cid)->exists()) {
+                            $fail( $value . ' has already been taken for this company.');
+                        }
+                    },
+                ],
                 'products.*.description' => 'nullable|string',
                 'products.*.category_id' => 'required|integer|exists:categories,id', 
                 'products.*.hscode' => 'nullable|string|max:255', 
@@ -42,6 +55,15 @@ class ProductController extends Controller
                 'products.*.purchase_discount_flat' => 'nullable|numeric|min:0',
                 'products.*.purchase_price' => 'nullable|numeric|min:0',
             ]);
+
+        // Check for duplicate names within the request for each company
+        $productsByCid = collect($validatedData['products'])->groupBy('cid');
+        foreach ($productsByCid as $cid => $products) {
+            $names = $products->pluck('name');
+            if ($names->duplicates()->isNotEmpty()) {
+                return response()->json(['message' => 'Duplicate product names found for company ID ' . $cid], 422);
+            }
+        }
 
         
             $createdProducts = [];
