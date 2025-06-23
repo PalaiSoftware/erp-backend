@@ -12,7 +12,7 @@ class CreatePurchaseItemsTable extends Migration
             $table->id(); // Auto-incrementing primary key
             $table->unsignedBigInteger('purchase_id'); // Links to purchases.id
             $table->unsignedBigInteger('vendor_id');
-            $table->integer('quantity')->check('quantity > 0');
+            $table->decimal('quantity',22,3)->check('quantity >= 0');
             $table->decimal('per_item_cost', 22, 3)->check('per_item_cost >= 0');
             $table->decimal('discount', 10, 2)->default(0);
             $table->decimal('flat_discount', 10, 2)->default(0);

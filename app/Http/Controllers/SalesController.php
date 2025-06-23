@@ -51,7 +51,7 @@ class SalesController extends Controller
             $request->validate([
                 'products' => 'required|array',
                 'products.*.product_id' => 'required|integer|exists:products,id',
-                'products.*.quantity' => 'required|integer|min:1',
+                'products.*.quantity' => 'required|numeric|min:0',
                 'products.*.discount' => 'nullable|numeric|min:0',
                 'products.*.flat_discount' => 'nullable|numeric|min:0',
                 'products.*.per_item_cost' => 'required|numeric|min:0',
@@ -536,7 +536,7 @@ public function update(Request $request, $transactionId)
         $request->validate([
             'products' => 'required|array',
             'products.*.product_id' => 'required|integer|exists:products,id',
-            'products.*.quantity' => 'required|integer|min:1',
+            'products.*.quantity' => 'required|numeric|min:1|regex:/^\d+(\.\d{1,3})?$/',
             'products.*.discount' => 'nullable|numeric|min:0',
             'products.*.flat_discount' => 'nullable|numeric|min:0',
             'products.*.per_item_cost' => 'required|numeric|min:0',

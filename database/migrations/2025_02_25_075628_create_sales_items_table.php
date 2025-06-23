@@ -10,7 +10,7 @@ return new class extends Migration {
         Schema::create('sales_items', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('sale_id'); // Links to sales.id
-            $table->integer('quantity');
+            $table->decimal('quantity',22,3)->check('quantity >= 0');
             $table->decimal('discount', 10, 2)->default(0);
             $table->decimal('flat_discount', 10, 2)->default(0);
             $table->decimal('per_item_cost', 22, 3);
