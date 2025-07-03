@@ -11,16 +11,10 @@ class Product extends Model
 
     protected $fillable = [
         'name',
-        'description',
         'category_id',
         'hscode',
-        'uid',
         'cid',
     ];
-    // protected $casts = [
-    //     'cids' => 'array',
-    // ];
-
     // Define the relationship with Category
     public function category()
     {

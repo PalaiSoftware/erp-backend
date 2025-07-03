@@ -3,9 +3,9 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use App\Models\Purchase;
+use App\Models\PurchaseBill;
 use App\Models\PurchaseItem;
-use App\Models\TransactionPurchase;
+//use App\Models\TransactionPurchase;
 use App\Models\Product;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -13,46 +13,199 @@ use Illuminate\Support\Facades\Log;
 
 class PurchaseController extends Controller
 {
+    // public function store(Request $request)
+    // {
+    //    // Get the authenticated user
+    //    $user = Auth::user();
+    
+    //    // Check if user is authenticated
+    //    if (!$user) {
+    //       return response()->json(['message' => 'Unauthenticated'], 401);
+    //     }
+
+    //     // Restrict to rid 5, 6, 7
+    //     if (!in_array($user->rid, [5, 6, 7])) {
+    //        return response()->json(['message' => 'Unauthorized to purchase product'], 403);
+    //     }
+    
+
+    //     // Log the incoming request before validation
+    //     Log::info('Incoming purchase request', ['request_data' => $request->all()]);
+
+    //     // Validate the request with logging for errors
+    //     try {
+    //         $request->validate([
+    //             'products' => 'required|array',
+    //             'products.*.product_id' => 'required|integer|exists:products,id',
+    //             'products.*.vendor_id' => 'required|integer',
+    //             'products.*.quantity' => 'required|numeric|min:0',
+    //             'products.*.per_item_cost' => 'required|numeric|min:0',
+    //             'products.*.discount' => 'nullable|numeric|min:0|max:100',
+    //             'products.*.flat_discount' => 'nullable|numeric|min:0',
+    //             'products.*.unit_id' => 'required|integer|exists:units,id', // Unit validation
+    //             'products.*.selling_price' => 'nullable|numeric|min:0',
+    //             'products.*.sale_discount_percent' => 'nullable|numeric|min:0|max:100',
+    //             'products.*.sale_discount_flat' => 'nullable|numeric|min:0',
+    //             'cid' => 'required|integer',
+    //             //'payment_mode' => 'required|string|max:50',
+    //             'payment_mode' => 'required|string|in:' . implode(',', array_keys(TransactionPurchase::$paymentModeMap)),
+    //             'purchase_date' => 'required|date_format:Y-m-d H:i:s', // Add this line
+    //             'absolute_discount' => 'nullable|numeric|min:0',
+    //             'paid_amount' => 'nullable|numeric|min:0',
+
+    //         ]);
+    //         Log::info('Validation passed successfully');
+    //     } catch (\Illuminate\Validation\ValidationException $e) {
+    //         Log::error('Validation failed', [
+    //             'errors' => $e->errors(),
+    //             'request_data' => $request->all()
+    //         ]);
+    //         return response()->json([
+    //             'message' => 'Validation failed',
+    //             'errors' => $e->errors(),
+    //         ], 422);
+    //     }
+
+    //     // Use a transaction to ensure data consistency
+    //     DB::beginTransaction();
+    //     try {
+    //         $purchaseDate = $request->purchase_date; // Get manual timestamp
+
+    //         // Step 1: Create the transaction
+    //         $transaction = TransactionPurchase::create([
+    //             'uid' => $user->id,
+    //             'cid' => $request->cid,
+    //             'total_amount' => 0, // Placeholder, update later if needed
+    //             //'payment_mode' => $request->payment_mode,
+    //             'payment_mode' => TransactionPurchase::$paymentModeMap[$request->payment_mode],
+    //             'absolute_discount' => $request->absolute_discount ?? 0,
+    //             'paid_amount' => $request->paid_amount ?? 0,
+    //            'created_at' => $purchaseDate,
+    //            'updated_at' =>  $purchaseDate, // Optional: Set updated_at if needed
+    //         ]);
+    //         $transactionId = $transaction->id;
+    //         Log::info('Transaction created', ['transaction_id' => $transactionId]);
+
+    //         // Step 2: Process each product
+    //         foreach ($request->products as $product) {
+    //             // Create purchase record
+    //             $purchase = Purchase::create([
+    //                 'transaction_id' => $transactionId,
+    //                 'product_id' => $product['product_id'],
+    //                 'created_at' =>  $purchaseDate,
+    //             ]);
+    //             $purchaseId = $purchase->id;
+    //             Log::info('Purchase created', ['purchase_id' => $purchaseId, 'product_id' => $product['product_id']]);
+
+    //             // Create purchase item record with unit_id
+    //             PurchaseItem::create([
+    //                 'purchase_id' => $purchaseId,
+    //                 'vendor_id' => $product['vendor_id'],
+    //                 'quantity' => $product['quantity'],
+    //                 'per_item_cost' => $product['per_item_cost'],
+    //                 'discount' => $product['discount'] ?? 0,
+    //                 'flat_discount' => $product['flat_discount'] ?? 0,
+    //                 'unit_id' => $product['unit_id'], // Saving unit_id
+    //                 'created_at' =>  $purchaseDate,
+    //             ]);
+    //             Log::info('Purchase item created', [
+    //                 'purchase_id' => $purchaseId,
+    //                 'vendor_id' => $product['vendor_id'],
+    //                 'quantity' => $product['quantity'],
+    //                 'unit_id' => $product['unit_id'],
+    //                 'discount' => $product['discount'] ?? 0,
+
+    //             ]);
+               
+    //             // Update product_values if it exists
+    //             $productModel = Product::find($product['product_id']);
+    //             if ($productModel && $productModel->productValue) {
+    //                 $updateData = [
+    //                     'purchase_discount_percent' => $product['discount'] ?? $productModel->productValue->purchase_discount_percent,
+    //                     'purchase_discount_flat' => $product['flat_discount'] ?? $productModel->productValue->purchase_discount_flat,
+    //                     'purchase_price' => $product['per_item_cost'],
+    //                 ];
+
+    //                 // Only update sales-related fields if provided and not null
+    //                 if (array_key_exists('sale_discount_percent', $product) && !is_null($product['sale_discount_percent'])) {
+    //                     $updateData['sale_discount_percent'] = $product['sale_discount_percent'];
+    //                 }
+    //                 if (array_key_exists('sale_discount_flat', $product) && !is_null($product['sale_discount_flat'])) {
+    //                     $updateData['sale_discount_flat'] = $product['sale_discount_flat'];
+    //                 }
+    //                 if (array_key_exists('selling_price', $product) && !is_null($product['selling_price'])) {
+    //                     $updateData['selling_price'] = $product['selling_price'];
+    //                 }
+
+    //                 $productModel->productValue->update($updateData);
+    //                 Log::info('Product values updated', [
+    //                     'product_id' => $product['product_id'],
+    //                     'updated_fields' => array_keys($updateData)
+    //                 ]);
+    //             } else {
+    //                 Log::warning('Product or ProductValue not found', ['product_id' => $product['product_id']]);
+    //             }
+    //         }
+
+    //         // Step 3: Commit the transaction
+    //         DB::commit();
+    //         Log::info('Transaction committed', ['transaction_id' => $transactionId]);
+
+    //         return response()->json([
+    //             'message' => 'Purchases recorded successfully',
+    //             'transaction_id' => $transactionId,
+    //             'transaction' => $transaction,
+    //         ], 201);
+    //     } catch (\Exception $e) {
+    //         DB::rollBack();
+    //         Log::error('Purchase failed', [
+    //             'error' => $e->getMessage(),
+    //             'trace' => $e->getTraceAsString()
+    //         ]);
+    //         return response()->json([
+    //             'message' => 'Purchase failed',
+    //             'error' => $e->getMessage(),
+    //         ], 500);
+    //     }
+    // }
+
     public function store(Request $request)
     {
-       // Get the authenticated user
-       $user = Auth::user();
-    
-       // Check if user is authenticated
-       if (!$user) {
-          return response()->json(['message' => 'Unauthenticated'], 401);
+        // Force JSON response
+        $request->headers->set('Accept', 'application/json');
+
+        // Get the authenticated user
+        $user = Auth::user();
+
+        // Check if user is authenticated
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
         }
 
-        // Restrict to rid 5, 6, 7
-        if (!in_array($user->rid, [5, 6, 7])) {
-           return response()->json(['message' => 'Unauthorized to purchase product'], 403);
+        // Restrict to rid 1, 2, 3,4
+        if (!in_array($user->rid, [1, 2, 3,4])) {
+            return response()->json(['message' => 'Unauthorized to purchase product'], 403);
         }
-    
 
         // Log the incoming request before validation
         Log::info('Incoming purchase request', ['request_data' => $request->all()]);
 
         // Validate the request with logging for errors
         try {
-            $request->validate([
+            $validated = $request->validate([
                 'products' => 'required|array',
                 'products.*.product_id' => 'required|integer|exists:products,id',
-                'products.*.vendor_id' => 'required|integer',
                 'products.*.quantity' => 'required|numeric|min:0',
-                'products.*.per_item_cost' => 'required|numeric|min:0',
-                'products.*.discount' => 'nullable|numeric|min:0|max:100',
-                'products.*.flat_discount' => 'nullable|numeric|min:0',
-                'products.*.unit_id' => 'required|integer|exists:units,id', // Unit validation
-                'products.*.selling_price' => 'nullable|numeric|min:0',
-                'products.*.sale_discount_percent' => 'nullable|numeric|min:0|max:100',
-                'products.*.sale_discount_flat' => 'nullable|numeric|min:0',
-                'cid' => 'required|integer',
-                //'payment_mode' => 'required|string|max:50',
-                'payment_mode' => 'required|string|in:' . implode(',', array_keys(TransactionPurchase::$paymentModeMap)),
-                'purchase_date' => 'required|date_format:Y-m-d H:i:s', // Add this line
+                'products.*.p_price' => 'required|numeric|min:0',
+                'products.*.s_price' => 'required|numeric|min:0',
+                'products.*.unit_id' => 'required|integer|exists:units,id',
+                'products.*.dis' => 'nullable|numeric|min:0|max:100',
+                'vendor_id' => 'required|integer|exists:purchase_clients,id',
+                'bill_name' => 'required|string|max:255',
+                'payment_mode' => 'required|integer|exists:payment_modes,id',
+                'purchase_date' => 'required|date_format:Y-m-d H:i:s',
                 'absolute_discount' => 'nullable|numeric|min:0',
                 'paid_amount' => 'nullable|numeric|min:0',
-
             ]);
             Log::info('Validation passed successfully');
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -69,92 +222,53 @@ class PurchaseController extends Controller
         // Use a transaction to ensure data consistency
         DB::beginTransaction();
         try {
-            $purchaseDate = $request->purchase_date; // Get manual timestamp
+            $purchaseDate = $validated['purchase_date'];
 
-            // Step 1: Create the transaction
-            $transaction = TransactionPurchase::create([
+            // Step 1: Create the purchase bill
+            $purchaseBill = PurchaseBill::create([
+                'bill_name' => $validated['bill_name'],
+                'pcid' => $validated['vendor_id'],
                 'uid' => $user->id,
-                'cid' => $request->cid,
-                'total_amount' => 0, // Placeholder, update later if needed
-                //'payment_mode' => $request->payment_mode,
-                'payment_mode' => TransactionPurchase::$paymentModeMap[$request->payment_mode],
-                'absolute_discount' => $request->absolute_discount ?? 0,
-                'paid_amount' => $request->paid_amount ?? 0,
-               'created_at' => $purchaseDate,
-               'updated_at' =>  $purchaseDate, // Optional: Set updated_at if needed
+                'payment_mode' => $validated['payment_mode'],
+                'absolute_discount' => $validated['absolute_discount'] ?? 0,
+                'paid_amount' => $validated['paid_amount'] ?? 0,
+                'created_at' => $purchaseDate,
+                'updated_at' => $purchaseDate,
             ]);
-            $transactionId = $transaction->id;
-            Log::info('Transaction created', ['transaction_id' => $transactionId]);
+            $billId = $purchaseBill->id;
+            Log::info('Purchase bill created', ['bill_id' => $billId]);
 
             // Step 2: Process each product
-            foreach ($request->products as $product) {
-                // Create purchase record
-                $purchase = Purchase::create([
-                    'transaction_id' => $transactionId,
-                    'product_id' => $product['product_id'],
-                    'created_at' =>  $purchaseDate,
-                ]);
-                $purchaseId = $purchase->id;
-                Log::info('Purchase created', ['purchase_id' => $purchaseId, 'product_id' => $product['product_id']]);
-
-                // Create purchase item record with unit_id
+            foreach ($validated['products'] as $product) {
+                // Create purchase item record
                 PurchaseItem::create([
-                    'purchase_id' => $purchaseId,
-                    'vendor_id' => $product['vendor_id'],
-                    'quantity' => $product['quantity'],
-                    'per_item_cost' => $product['per_item_cost'],
-                    'discount' => $product['discount'] ?? 0,
-                    'flat_discount' => $product['flat_discount'] ?? 0,
-                    'unit_id' => $product['unit_id'], // Saving unit_id
-                    'created_at' =>  $purchaseDate,
-                ]);
-                Log::info('Purchase item created', [
-                    'purchase_id' => $purchaseId,
-                    'vendor_id' => $product['vendor_id'],
+                    'bid' => $billId,
+                    'pid' => $product['product_id'],
+                    'p_price' => $product['p_price'],
+                    's_price' => $product['s_price'],
                     'quantity' => $product['quantity'],
                     'unit_id' => $product['unit_id'],
-                    'discount' => $product['discount'] ?? 0,
-
+                    'dis' => $product['dis'] ?? 0,
+                    'created_at' => $purchaseDate,
+                    'updated_at' => $purchaseDate,
                 ]);
-               
-                // Update product_values if it exists
-                $productModel = Product::find($product['product_id']);
-                if ($productModel && $productModel->productValue) {
-                    $updateData = [
-                        'purchase_discount_percent' => $product['discount'] ?? $productModel->productValue->purchase_discount_percent,
-                        'purchase_discount_flat' => $product['flat_discount'] ?? $productModel->productValue->purchase_discount_flat,
-                        'purchase_price' => $product['per_item_cost'],
-                    ];
-
-                    // Only update sales-related fields if provided and not null
-                    if (array_key_exists('sale_discount_percent', $product) && !is_null($product['sale_discount_percent'])) {
-                        $updateData['sale_discount_percent'] = $product['sale_discount_percent'];
-                    }
-                    if (array_key_exists('sale_discount_flat', $product) && !is_null($product['sale_discount_flat'])) {
-                        $updateData['sale_discount_flat'] = $product['sale_discount_flat'];
-                    }
-                    if (array_key_exists('selling_price', $product) && !is_null($product['selling_price'])) {
-                        $updateData['selling_price'] = $product['selling_price'];
-                    }
-
-                    $productModel->productValue->update($updateData);
-                    Log::info('Product values updated', [
-                        'product_id' => $product['product_id'],
-                        'updated_fields' => array_keys($updateData)
-                    ]);
-                } else {
-                    Log::warning('Product or ProductValue not found', ['product_id' => $product['product_id']]);
-                }
+                Log::info('Purchase item created', [
+                    'bill_id' => $billId,
+                    'product_id' => $product['product_id'],
+                    'quantity' => $product['quantity'],
+                    'unit_id' => $product['unit_id'],
+                    'dis' => $product['dis'] ?? 0,
+                ]);
             }
 
             // Step 3: Commit the transaction
             DB::commit();
-            Log::info('Transaction committed', ['transaction_id' => $transactionId]);
+            Log::info('Transaction committed', ['bill_id' => $billId]);
 
             return response()->json([
                 'message' => 'Purchases recorded successfully',
-                'transaction_id' => $transactionId,
-                'transaction' => $transaction,
+                'transaction_id' => $billId,
+                'transaction' => $purchaseBill,
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -167,7 +281,7 @@ class PurchaseController extends Controller
                 'error' => $e->getMessage(),
             ], 500);
         }
-    }
+}   
     public function getTransactionsByCid(Request $request)
 {
     // Get the authenticated user

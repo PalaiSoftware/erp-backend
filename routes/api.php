@@ -13,6 +13,7 @@ use App\Http\Controllers\WidgetController;
 use App\Http\Controllers\HelperController;
 use App\Http\Controllers\LmAuthController;
 use App\Http\Controllers\CategoryController;
+use App\Http\Controllers\PaymentController;
 
 
 /*
@@ -78,6 +79,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/products/{product_id}', [ProductController::class, 'getProductById']);
     Route::delete('/transaction-sales/{transactionId}', [SalesController::class, 'destroy'])->name('transactions.destroy');
     Route::delete('/purchase-transactions/{transactionId}', [PurchaseController::class, 'destroy'])->name('purchase-transactions.destroy');
+    Route::get('/payment-modes', [PaymentController::class, 'index']);
 });
 
 Route::get('/units', [HelperController::class, 'index']);

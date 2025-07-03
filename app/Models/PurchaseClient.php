@@ -5,12 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class Vendor extends Model
+class PurchaseClient extends Model
 {
     use HasFactory;
     protected $fillable = [
-        'vendor_name',
-        'contact_person',
+        'name',
         'email',
         'phone',
         'address',
@@ -19,8 +18,4 @@ class Vendor extends Model
         'uid',
         'cid',
     ];
-
-    // protected $casts = [
-    //     'cids' => 'array',
-    // ];
 }

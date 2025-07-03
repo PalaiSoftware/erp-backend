@@ -5,26 +5,23 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration {
-    public function up()
+    public function up(): void
     {
-        Schema::create('vendors', function (Blueprint $table) {
+        Schema::create('purchase_clients', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->string('vendor_name');
-            $table->string('contact_person')->nullable();
+            $table->string('name');
             $table->string('email')->nullable();
             $table->string('phone', 20)->nullable();
             $table->text('address')->nullable();
             $table->string('gst_no')->nullable();
             $table->string('pan', 20)->nullable();
-            $table->integer('uid')->nullable();
-            // $table->jsonb('cids')->default('[]');
-            $table->integer('cid')->nullable();
-            $table->timestamps();
+            $table->integer('uid');
+            $table->integer('cid');
+            $table->timestamps(); 
         });
     }
-
-    public function down()
+    public function down(): void
     {
-        Schema::dropIfExists('vendors');
+        Schema::dropIfExists('purchase_clients');
     }
 };

@@ -15,7 +15,7 @@ return new class extends Migration {
             $table->string('country');
             $table->string('password');
             $table->integer('rid'); // Role ID (not a foreign key)
-            $table->integer('cid')->nullable();
+            $table->integer('cid');
             $table->integer('blocked')->default(0); // 0 = Active, 1 = Blocked
             $table->timestamps(); // This adds created_at & updated_at columns
         });

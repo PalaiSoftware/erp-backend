@@ -10,15 +10,9 @@ return new class extends Migration {
         Schema::create('products', function (Blueprint $table) {
             $table->id();
             $table->string('name');
-            $table->text('description')->nullable();
             $table->unsignedBigInteger('category_id');
             $table->string('hscode')->nullable();
-            $table->integer('uid');
-            // $table->jsonb('cids')->default('[]'); 
-            $table->integer('cid')->nullable();
-
             $table->timestamps();
-
             $table->foreign('category_id')->references('id')->on('categories')->onDelete('restrict');
 
         });

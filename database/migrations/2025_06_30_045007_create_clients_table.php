@@ -7,15 +7,14 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up()
     {
-        Schema::create('companies', function (Blueprint $table) {
+        Schema::create('clients', function (Blueprint $table) {
             $table->id();
             $table->string('name');
-            $table->integer('uid');
+           // $table->integer('uid');
             $table->text('address')->nullable();
             $table->string('phone', 20)->nullable();
             $table->string('gst_no')->nullable();
             $table->string('pan', 20)->nullable();
-            $table->integer('cuid')->nullable(); // Contact Person ID (not a foreign key)
             $table->integer('blocked')->default(0);
             $table->timestamp('updated_at')->useCurrent();
         });
@@ -23,7 +22,7 @@ return new class extends Migration {
 
     public function down()
     {
-        Schema::dropIfExists('companies');
+        Schema::dropIfExists('clients');
     }
 };
 

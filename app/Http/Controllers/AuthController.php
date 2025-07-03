@@ -5,10 +5,10 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 use App\Models\User;
-use App\Models\Company;
+use App\Models\Client;
 use Illuminate\Support\Facades\Auth; 
-use App\Models\UidCid;
 class AuthController extends Controller
 {
 
@@ -20,10 +20,10 @@ public function register(Request $request)
         'mobile' => 'required|string|max:255',
         'country' => 'required|string|max:255',
         'password' => 'required|string|min:6',
-        'rid' => 'required|integer|between:5,10', // Role ID between 5 and 10
-        'company_name' => 'required|string|max:255',
-        'company_address' => 'nullable|string',
-        'company_phone' => 'nullable|string|max:20',
+        'rid' => 'required|integer|between:1,5',
+        'client_name' => 'required|string|max:255',
+        'client_address' => 'nullable|string',
+        'client_phone' => 'nullable|string|max:20',
         'gst_no' => 'nullable|string|max:255',
         'pan' => 'nullable|string|max:20',
     ]);
@@ -32,10 +32,10 @@ public function register(Request $request)
         return response()->json(['errors' => $validator->errors()], 422);
     }
 
-    \DB::beginTransaction(); // Start transaction
+    DB::beginTransaction();
 
     try {
-        // Create user first
+        // Create User
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
@@ -50,59 +50,86 @@ public function register(Request $request)
             throw new \Exception("User creation failed.");
         }
 
-        // Ensure $user->id exists before creating company
-        $company = new Company();
-        $company->name = $request->company_name;
-        $company->uid = $user->id; // Explicitly setting uid
-        $company->address = $request->company_address;
-        $company->phone = $request->company_phone;
-        $company->gst_no = $request->gst_no;
-        $company->pan = $request->pan;
-        $company->cuid = null;
-        $company->blocked = 0;
-        $company->save(); // Save instead of create()
+        // Create Client
+        $client = new Client();
+        $client->name = $request->client_name;
+        $client->address = $request->client_address;
+        $client->phone = $request->client_phone;
+        $client->gst_no = $request->gst_no;
+        $client->pan = $request->pan;
+        $client->blocked = 0;
+        $client->save();
 
-        // Update user with company ID
-        $user->cid = $company->id;
+        // Update user's cid with client ID
+        $user->cid = $client->id;
         $user->save();
-        // Debug the operation
-        $uid=$user->id;
-        $existing = UidCid::where('uid', $uid)->first();
-        if ($existing) {
-            \Log::info('Before: uid ' . $uid . ' exists with cid ' . $existing->cid);
-        } else {
-            \Log::info('Before: uid ' . $uid . ' not found');
-        }
 
-    UidCid::updateOrCreate(
-        ['uid' => $uid],
-        ['cid' => $company->id]
-    );
-
-    $updated = UidCid::where('uid', $uid)->first();
-    \Log::info('After: uid ' . $uid . ' has cid ' . $updated->cid);
-
-        \DB::commit(); // Commit transaction
+        DB::commit();
 
         return response()->json([
-            'message' => 'User and company registered successfully',
+            'message' => 'User and client registered successfully',
             'user' => $user,
-            'company' => $company
+            'client' => $client
         ], 201);
+
     } catch (\Exception $e) {
-        \DB::rollBack(); // Rollback transaction on failure
+        DB::rollBack();
         return response()->json([
             'message' => 'Registration failed',
             'error' => $e->getMessage()
         ], 500);
     }
 }
+
+public function login(Request $request)
+{
+    $credentials = $request->validate([
+        'email' => 'required|string|email',
+        'password' => 'required|string',
+    ]);
+
+    $user = User::where('email', $credentials['email'])->first();
+
+    if (!$user || !Hash::check($credentials['password'], $user->password)) {
+        return response()->json(['message' => 'Invalid credentials'], 401);
+    }
+
+    if ($user->blocked) {
+        return response()->json(['message' => 'User is blocked'], 403);
+    }
+
+    $user->touch(); // Update last login time
+
+    // Fetch client (company) details using user's cid
+    $client = Client::find($user->cid);
+
+    if (!$client) {
+        return response()->json(['message' => 'Client not found'], 404);
+    }
+
+    if ($client->blocked) {
+        return response()->json(['message' => 'Client is blocked'], 403);
+    }
+
+    // Generate token
+    $token = $user->createToken('auth_token')->plainTextToken;
+
+    return response()->json([
+        'message' => 'Login successful',
+        'user' => $user,
+        'token' => $token,
+        'client' => $client,
+        'previous_login' => $user->updated_at,
+    ]);
+}
+
+
 public function newuser(Request $request)
 {
     $user = Auth::user();
     
     // Check if user has permission to create new users based on their role
-    if (!in_array($user->rid, [5, 6, 7, 8])) {
+    if (!in_array($user->rid, [1, 2, 3])) {
         return response()->json([
             'message' => 'You are not allowed to create a new user for your company'
         ], 403);
@@ -114,7 +141,7 @@ public function newuser(Request $request)
         'mobile' => 'required|string|max:255',
         'country' => 'required|string|max:255',
         'password' => 'required|string|min:6',
-        'rid' => 'required|integer|between:6,10',
+        'rid' => 'required|integer|between:2,5',
     ]);
 
     if ($validator->fails()) {
@@ -129,7 +156,7 @@ public function newuser(Request $request)
     }
 
     // Define allowed role IDs based on current user's rid
-    $allowedRoles = range($user->rid + 1, 10);
+    $allowedRoles = range($user->rid + 1, 5);
 
     // Check if the requested rid is allowed for this user
     if (!in_array($request->rid, $allowedRoles)) {
@@ -153,73 +180,6 @@ public function newuser(Request $request)
     return response()->json(['message' => 'User registered successfully'], 201);
 }
 
-public function login(Request $request)
-{
-    $credentials = $request->validate([
-        'email' => 'required|string|email',
-        'password' => 'required|string',
-    ]);
-
-    $user = User::where('email', $credentials['email'])->first();
-
-    if (!$user || !Hash::check($credentials['password'], $user->password)) {
-        return response()->json(['message' => 'Invalid credentials'], 401);
-    }
-
-    if ($user->blocked) {
-        return response()->json(['message' => 'User is blocked'], 403);
-    }
-
-    $uid = $user->id;
-    $previousLogin = $user->updated_at;
-
-    // $user->touch(); // Update last login time
-
-    // Get initial CID (prioritize uid_cid over user's default cid)
-    $uidCidEntry = UidCid::where('uid', $uid)->first();
-    $cid = $uidCidEntry?->cid ?? $user->cid;
-
-    // Check company status
-    $company = Company::find($cid);
-    if (!$company) {
-        return response()->json(['message' => 'Company not found'], 404);
-    }
-
-    // Main logic: Check if initial company is blocked
-
-    if ($company->blocked) {
-        // Get the first unblocked company associated with the user
-        $availableCompany = Company::where('uid', $uid)
-            ->where('blocked', 0)
-            ->first();
-    
-        if (!$availableCompany) {
-            return response()->json(['message' => 'All associated companies are blocked'], 403);
-        }
-    
-        // Update uid_cid with the unblocked company
-        $uidCidEntry = UidCid::firstOrNew(['uid' => $uid]);
-        $uidCidEntry->cid = $availableCompany->id;
-        $uidCidEntry->save();
-    
-        // Update company reference
-        $cid = $availableCompany->id;
-        $company = $availableCompany;
-    }
-    // Generate token
-    $user->touch();
-
-    $token = $user->createToken('auth_token')->plainTextToken;
-
-    return response()->json([
-        'message' => 'Login successful',
-        'user' => $user,
-        'token' => $token,
-        'company' => $company,
-        'previous_login' => $user->updated_at,
-    ]);
-}
-
 //Add the new function here for get UsersByRole
 public function getUsersByRole(Request $request)
 {
@@ -233,8 +193,8 @@ public function getUsersByRole(Request $request)
     // Define the role hierarchy logic
     $currentRid = $currentUser->rid;
 
-    // Check if current user's rid is 5, 6, 7, or 8
-    if (!in_array($currentRid, [5, 6, 7, 8])) {
+    // Check if current user's rid is 1, 2, 3, or 4
+    if (!in_array($currentRid, [1, 2, 3, 4])) {
         return response()->json([
             'message' => 'You are not authorized to view users with lower roles',
             'users' => []
@@ -244,7 +204,7 @@ public function getUsersByRole(Request $request)
     // Validate the cid from the request body
     try {
         $request->validate([
-            'cid' => 'required|integer|exists:companies,id', // Ensure cid is provided and exists
+            'cid' => 'required|integer|exists:clients,id', // Ensure cid is provided and exists
         ]);
     } catch (\Illuminate\Validation\ValidationException $e) {
         return response()->json([
@@ -286,8 +246,8 @@ public function userBlockUnblock(Request $request)
         return response()->json(['message' => 'Unauthorized'], 401);
     }
 
-    // Check if current user's rid is 1, 2, 3, or 4
-    if (!in_array($currentUser->rid, [5, 6, 7, 8])) {
+    // Check if current user's rid is 1, 2, or 3
+    if (!in_array($currentUser->rid, [1, 2, 3])) {
         return response()->json([
             'message' => 'You are not authorized to block/unblock users'
         ], 403);
@@ -346,17 +306,17 @@ public function UserPromoteDemote(Request $request)
         return response()->json(['message' => 'Unauthorized'], 401);
     }
 
-    // Check if current user's rid is 5, 6, 7, or 8 (only these can promote/demote)
-    if (!in_array($currentUser->rid, [5, 6, 7, 8])) {
+    // Check if current user's rid is 1, 2, or 3 (only these can promote/demote)
+    if (!in_array($currentUser->rid, [1, 2, 3])) {
         return response()->json([
             'message' => 'You are not authorized to promote or demote users'
         ], 403);
     }
     $validator = Validator::make($request->all(), [
         'user_id' => 'required|integer|exists:users,id',
-        'rid' => 'required|integer|min:5|max:10'
+        'rid' => 'required|integer|min:1|max:5'
     ], [
-        'rid.max' => 'Cannot demote beyond the lowest role (rid=10).'
+        'rid.max' => 'Cannot demote beyond the lowest role (rid=5).'
     ]);
 
     if ($validator->fails()) {
@@ -391,7 +351,7 @@ public function UserPromoteDemote(Request $request)
     }
 
     // Prevent promoting to equal or higher roles than current user (except for rid=1)
-    if ($currentUser->rid > 5 && $request->rid <= $currentUser->rid) {
+    if ($currentUser->rid > 1 && $request->rid <= $currentUser->rid) {
         return response()->json([
             'message' => 'You cannot set a role equal to or higher than yours'
         ], 400);

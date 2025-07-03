@@ -6,27 +6,25 @@ use Illuminate\Database\Eloquent\Model;
 
 class PurchaseItem extends Model
 {
+    protected $table = 'purchase_items';
+
+    protected $primaryKey = null; // No primary key
+
+    public $incrementing = false; // No auto-incrementing key
     public $timestamps = false;
     protected $fillable = [
-        'purchase_id',
-        'vendor_id',
+        'bid',
+        'pid',
+        'p_price',
+        's_price',
         'quantity',
-        'per_item_cost',
-        'discount',
-        'flat_discount',
         'unit_id',
-        'created_at',
+        'dis',
     ];
 
     // Relationship with Unit model
     public function unit()
     {
         return $this->belongsTo(Unit::class, 'unit_id');
-    }
-
-    // Relationship with Purchase model (if needed)
-    public function purchase()
-    {
-        return $this->belongsTo(Purchase::class, 'purchase_id');
     }
 }
