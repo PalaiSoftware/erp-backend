@@ -13,7 +13,7 @@ return new class extends Migration
         Schema::create('units', function (Blueprint $table) {
             $table->id();                    // Auto-incrementing primary key
             $table->string('name', 50)->nullable(false); // Name field, max 50 chars, not nullable
-            $table->timestamps();            // Optional created_at and updated_at columns
+           
         });
 
         // Insert sample data

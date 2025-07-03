@@ -11,7 +11,7 @@ class CreatePaymentModesTable extends Migration
         Schema::create('payment_modes', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->string('name', 50)->unique();
-            $table->timestamps();
+            
         });
 
          // Insert sample data

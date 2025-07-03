@@ -35,7 +35,21 @@ public function register(Request $request)
     DB::beginTransaction();
 
     try {
-        // Create User
+        // Create Client first
+        $client = Client::create([
+            'name' => $request->client_name,
+            'address' => $request->client_address,
+            'phone' => $request->client_phone,
+            'gst_no' => $request->gst_no,
+            'pan' => $request->pan,
+            'blocked' => 0,
+        ]);
+
+        if (!$client) {
+            throw new \Exception("Client creation failed.");
+        }
+
+        // Create User with cid set to client’s ID
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
@@ -44,26 +58,12 @@ public function register(Request $request)
             'password' => Hash::make($request->password),
             'rid' => $request->rid,
             'blocked' => 0,
+            'cid' => $client->id, // Set cid during creation
         ]);
 
         if (!$user) {
             throw new \Exception("User creation failed.");
         }
-
-        // Create Client
-        $client = new Client();
-        $client->name = $request->client_name;
-        $client->address = $request->client_address;
-        $client->phone = $request->client_phone;
-        $client->gst_no = $request->gst_no;
-        $client->pan = $request->pan;
-        $client->blocked = 0;
-        $client->save();
-
-        // Update user's cid with client ID
-        $user->cid = $client->id;
-        $user->save();
-
         DB::commit();
 
         return response()->json([
