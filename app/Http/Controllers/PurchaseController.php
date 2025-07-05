@@ -5,7 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\PurchaseBill;
 use App\Models\PurchaseItem;
-//use App\Models\TransactionPurchase;
+use App\Models\PaymentMode;
 use App\Models\Product;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -13,162 +13,6 @@ use Illuminate\Support\Facades\Log;
 
 class PurchaseController extends Controller
 {
-    // public function store(Request $request)
-    // {
-    //    // Get the authenticated user
-    //    $user = Auth::user();
-    
-    //    // Check if user is authenticated
-    //    if (!$user) {
-    //       return response()->json(['message' => 'Unauthenticated'], 401);
-    //     }
-
-    //     // Restrict to rid 5, 6, 7
-    //     if (!in_array($user->rid, [5, 6, 7])) {
-    //        return response()->json(['message' => 'Unauthorized to purchase product'], 403);
-    //     }
-    
-
-    //     // Log the incoming request before validation
-    //     Log::info('Incoming purchase request', ['request_data' => $request->all()]);
-
-    //     // Validate the request with logging for errors
-    //     try {
-    //         $request->validate([
-    //             'products' => 'required|array',
-    //             'products.*.product_id' => 'required|integer|exists:products,id',
-    //             'products.*.vendor_id' => 'required|integer',
-    //             'products.*.quantity' => 'required|numeric|min:0',
-    //             'products.*.per_item_cost' => 'required|numeric|min:0',
-    //             'products.*.discount' => 'nullable|numeric|min:0|max:100',
-    //             'products.*.flat_discount' => 'nullable|numeric|min:0',
-    //             'products.*.unit_id' => 'required|integer|exists:units,id', // Unit validation
-    //             'products.*.selling_price' => 'nullable|numeric|min:0',
-    //             'products.*.sale_discount_percent' => 'nullable|numeric|min:0|max:100',
-    //             'products.*.sale_discount_flat' => 'nullable|numeric|min:0',
-    //             'cid' => 'required|integer',
-    //             //'payment_mode' => 'required|string|max:50',
-    //             'payment_mode' => 'required|string|in:' . implode(',', array_keys(TransactionPurchase::$paymentModeMap)),
-    //             'purchase_date' => 'required|date_format:Y-m-d H:i:s', // Add this line
-    //             'absolute_discount' => 'nullable|numeric|min:0',
-    //             'paid_amount' => 'nullable|numeric|min:0',
-
-    //         ]);
-    //         Log::info('Validation passed successfully');
-    //     } catch (\Illuminate\Validation\ValidationException $e) {
-    //         Log::error('Validation failed', [
-    //             'errors' => $e->errors(),
-    //             'request_data' => $request->all()
-    //         ]);
-    //         return response()->json([
-    //             'message' => 'Validation failed',
-    //             'errors' => $e->errors(),
-    //         ], 422);
-    //     }
-
-    //     // Use a transaction to ensure data consistency
-    //     DB::beginTransaction();
-    //     try {
-    //         $purchaseDate = $request->purchase_date; // Get manual timestamp
-
-    //         // Step 1: Create the transaction
-    //         $transaction = TransactionPurchase::create([
-    //             'uid' => $user->id,
-    //             'cid' => $request->cid,
-    //             'total_amount' => 0, // Placeholder, update later if needed
-    //             //'payment_mode' => $request->payment_mode,
-    //             'payment_mode' => TransactionPurchase::$paymentModeMap[$request->payment_mode],
-    //             'absolute_discount' => $request->absolute_discount ?? 0,
-    //             'paid_amount' => $request->paid_amount ?? 0,
-    //            'created_at' => $purchaseDate,
-    //            'updated_at' =>  $purchaseDate, // Optional: Set updated_at if needed
-    //         ]);
-    //         $transactionId = $transaction->id;
-    //         Log::info('Transaction created', ['transaction_id' => $transactionId]);
-
-    //         // Step 2: Process each product
-    //         foreach ($request->products as $product) {
-    //             // Create purchase record
-    //             $purchase = Purchase::create([
-    //                 'transaction_id' => $transactionId,
-    //                 'product_id' => $product['product_id'],
-    //                 'created_at' =>  $purchaseDate,
-    //             ]);
-    //             $purchaseId = $purchase->id;
-    //             Log::info('Purchase created', ['purchase_id' => $purchaseId, 'product_id' => $product['product_id']]);
-
-    //             // Create purchase item record with unit_id
-    //             PurchaseItem::create([
-    //                 'purchase_id' => $purchaseId,
-    //                 'vendor_id' => $product['vendor_id'],
-    //                 'quantity' => $product['quantity'],
-    //                 'per_item_cost' => $product['per_item_cost'],
-    //                 'discount' => $product['discount'] ?? 0,
-    //                 'flat_discount' => $product['flat_discount'] ?? 0,
-    //                 'unit_id' => $product['unit_id'], // Saving unit_id
-    //                 'created_at' =>  $purchaseDate,
-    //             ]);
-    //             Log::info('Purchase item created', [
-    //                 'purchase_id' => $purchaseId,
-    //                 'vendor_id' => $product['vendor_id'],
-    //                 'quantity' => $product['quantity'],
-    //                 'unit_id' => $product['unit_id'],
-    //                 'discount' => $product['discount'] ?? 0,
-
-    //             ]);
-               
-    //             // Update product_values if it exists
-    //             $productModel = Product::find($product['product_id']);
-    //             if ($productModel && $productModel->productValue) {
-    //                 $updateData = [
-    //                     'purchase_discount_percent' => $product['discount'] ?? $productModel->productValue->purchase_discount_percent,
-    //                     'purchase_discount_flat' => $product['flat_discount'] ?? $productModel->productValue->purchase_discount_flat,
-    //                     'purchase_price' => $product['per_item_cost'],
-    //                 ];
-
-    //                 // Only update sales-related fields if provided and not null
-    //                 if (array_key_exists('sale_discount_percent', $product) && !is_null($product['sale_discount_percent'])) {
-    //                     $updateData['sale_discount_percent'] = $product['sale_discount_percent'];
-    //                 }
-    //                 if (array_key_exists('sale_discount_flat', $product) && !is_null($product['sale_discount_flat'])) {
-    //                     $updateData['sale_discount_flat'] = $product['sale_discount_flat'];
-    //                 }
-    //                 if (array_key_exists('selling_price', $product) && !is_null($product['selling_price'])) {
-    //                     $updateData['selling_price'] = $product['selling_price'];
-    //                 }
-
-    //                 $productModel->productValue->update($updateData);
-    //                 Log::info('Product values updated', [
-    //                     'product_id' => $product['product_id'],
-    //                     'updated_fields' => array_keys($updateData)
-    //                 ]);
-    //             } else {
-    //                 Log::warning('Product or ProductValue not found', ['product_id' => $product['product_id']]);
-    //             }
-    //         }
-
-    //         // Step 3: Commit the transaction
-    //         DB::commit();
-    //         Log::info('Transaction committed', ['transaction_id' => $transactionId]);
-
-    //         return response()->json([
-    //             'message' => 'Purchases recorded successfully',
-    //             'transaction_id' => $transactionId,
-    //             'transaction' => $transaction,
-    //         ], 201);
-    //     } catch (\Exception $e) {
-    //         DB::rollBack();
-    //         Log::error('Purchase failed', [
-    //             'error' => $e->getMessage(),
-    //             'trace' => $e->getTraceAsString()
-    //         ]);
-    //         return response()->json([
-    //             'message' => 'Purchase failed',
-    //             'error' => $e->getMessage(),
-    //         ], 500);
-    //     }
-    // }
-
     public function store(Request $request)
     {
         // Force JSON response
@@ -282,7 +126,7 @@ class PurchaseController extends Controller
             ], 500);
         }
 }   
-    public function getTransactionsByCid(Request $request)
+public function getTransactionsByCid(Request $request)
 {
     // Get the authenticated user
     $user = Auth::user();
@@ -294,7 +138,7 @@ class PurchaseController extends Controller
     $uid = $user->id;
 
     // Restrict access to users with rid between 5 and 10 inclusive
-    if ($user->rid < 5 || $user->rid > 10) {
+    if ($user->rid < 1 || $user->rid > 5) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -318,52 +162,33 @@ class PurchaseController extends Controller
     // Extract cid from the request
     $cid = $request->input('cid');
 
-    // Start building the query
-    $query = DB::table('transaction_purchases as tp')
+    // Build the query with the new purchase_bills table
+    $query = DB::table('purchase_bills as pb')
         ->select(
-            'tp.id as transaction_id',
-            'v.vendor_name',
-            'pi.vendor_id', // Add vendor_id from purchase_items
-            'tp.payment_mode',
-            'tp.updated_at as date',
-            'u.name as purchased_by'
+            'pb.id as transaction_id',          // Bill ID as transaction ID
+            'pb.bill_name as bill_name ',
+            'pc.name as vendor_name',           // Vendor name from purchase_clients
+            'pb.pcid as vendor_id',             // Vendor ID from purchase_bills
+            'pb.payment_mode',                  // Payment mode integer
+            'pb.updated_at as date',            // Date of the transaction
+            'u.name as purchased_by'            // Name of the user who made the purchase
         )
-        ->leftJoin('purchases as p', 'tp.id', '=', 'p.transaction_id')
-        ->leftJoin('purchase_items as pi', 'p.id', '=', 'pi.purchase_id')
-        ->leftJoin('vendors as v', 'pi.vendor_id', '=', 'v.id')
-        ->leftJoin('users as u', 'tp.uid', '=', 'u.id')
-        ->where('tp.cid', $cid);
-
-    // Apply additional restrictions based on the user's rid
-    if ($user->rid === 5) {
-        // RID 5: Allow all transactions for the company (cid)
-        $query->where('tp.cid', $cid);
-    } elseif ($user->rid === 6) {
-        // RID 6: Allow admin to see their own transactions and lower role (7, 8, 9) transactions
-        $query->where(function ($q) use ($uid) {
-            $q->where('tp.uid', $uid) // Their own transactions
-              ->orWhereIn('u.rid', [7, 8, 9]); // Transactions of lower-role users
-        });
-    } else {
-        // RID 7, 8, 9: Restrict to transactions where uid matches the authenticated user's ID
-        $query->where('tp.uid', $uid);
-    }
-
-    // Group by necessary columns
-    $query->groupBy('tp.id', 'v.vendor_name', 'pi.vendor_id', 'tp.payment_mode', 'tp.created_at', 'u.name');
+        ->leftJoin('purchase_clients as pc', 'pb.pcid', '=', 'pc.id')  // Join with vendors
+        ->leftJoin('users as u', 'pb.uid', '=', 'u.id')                // Join with users for cid and rid
+        ->where('u.cid', $cid);                                         // Filter by company ID
 
     // Execute the query
     $transactions = $query->get();
 
-    // Convert payment_mode from integer to string
-    $inverseMap = array_flip(TransactionPurchase::$paymentModeMap);
-    $transactions = $transactions->map(function ($transaction) use ($inverseMap) {
-        $transaction->payment_mode = $inverseMap[$transaction->payment_mode] ?? 'Unknown';
-        return $transaction;
-    });
+   // Fetch payment modes from the database
+   $paymentModes = DB::table('payment_modes')->pluck('name', 'id')->toArray();
 
-
-    // Check if any transactions were found
+    // Map payment_mode from integer to string
+    $transactions = $transactions->map(function ($transaction) use ($paymentModes) {
+    $transaction->payment_mode = $paymentModes[$transaction->payment_mode] ?? 'Unknown';
+    return $transaction;
+});
+    // Handle empty results
     if ($transactions->isEmpty()) {
         Log::info('No transactions found for cid', ['cid' => $cid]);
         return response()->json([
@@ -372,175 +197,33 @@ class PurchaseController extends Controller
         ], 404);
     }
 
-    // Log success and return the transactions
+    // Return successful response
     Log::info('Transactions retrieved successfully', ['cid' => $cid, 'count' => $transactions->count()]);
     return response()->json([
         'status' => 'success',
         'data' => $transactions
     ], 200);
 }
-//     public function getPurchaseDetailsByTransaction(Request $request)
-// {
-//     // Get the authenticated user
-//     $user = Auth::user();
-//     if (!$user) {
-//         return response()->json(['message' => 'Unauthorized'], 401);
-//     }
-// {
-//     // Get the authenticated user
-//     $user = Auth::user();
-//     if (!$user) {
-//         return response()->json(['message' => 'Unauthorized'], 401);
-//     }
-
-//     // Restrict access to users with rid between 5 and 10 inclusive
-//     if ($user->rid < 5 || $user->rid > 10) {
-//         return response()->json(['message' => 'Forbidden'], 403);
-//     }
-  
-//     try {
-//         $request->validate([
-//             'transaction_id' => 'required|integer'
-//         ]);
-//         Log::info('Validation passed successfully for getPurchaseDetailsByTransaction', ['transaction_id' => $request->transaction_id]);
-//     } catch (\Illuminate\Validation\ValidationException $e) {
-//         Log::error('Validation failed for getPurchaseDetailsByTransaction', [
-//             'errors' => $e->errors(),
-//             'request_data' => $request->all()
-//         ]);
-//         return response()->json([
-//             'message' => 'Validation failed',
-//             'errors' => $e->errors(),
-//         ], 422);
-//     }
-//     try {
-//         $request->validate([
-//             'transaction_id' => 'required|integer'
-//         ]);
-//         Log::info('Validation passed successfully for getPurchaseDetailsByTransaction', ['transaction_id' => $request->transaction_id]);
-//     } catch (\Illuminate\Validation\ValidationException $e) {
-//         Log::error('Validation failed for getPurchaseDetailsByTransaction', [
-//             'errors' => $e->errors(),
-//             'request_data' => $request->all()
-//         ]);
-//         return response()->json([
-//             'message' => 'Validation failed',
-//             'errors' => $e->errors(),
-//         ], 422);
-//     }
-
-//     $transactionId = $request->input('transaction_id');
-//     $transactionId = $request->input('transaction_id');
-
-//     $transactionExists = DB::table('transaction_purchases')
-//         ->where('id', $transactionId)
-//         ->exists();
-//     $transactionExists = DB::table('transaction_purchases')
-//         ->where('id', $transactionId)
-//         ->exists();
-
-//     if (!$transactionExists) {
-//         Log::info('Transaction not found', ['transaction_id' => $transactionId]);
-//         return response()->json([
-//             'status' => 'error',
-//             'message' => 'Transaction not found'
-//         ], 404);
-//     }
-//     if (!$transactionExists) {
-//         Log::info('Transaction not found', ['transaction_id' => $transactionId]);
-//         return response()->json([
-//             'status' => 'error',
-//             'message' => 'Transaction not found'
-//         ], 404);
-//     }
-
-//     $purchaseDetails = DB::table('purchases as p')
-//         ->join('products as prod', 'p.product_id', '=', 'prod.id')
-//         ->join('purchase_items as pi', 'p.id', '=', 'pi.purchase_id')
-//         ->join('transaction_purchases as tp', 'p.transaction_id', '=', 'tp.id')
-//         ->select(
-//             'prod.name as product_name',
-//             'pi.quantity',
-//             'pi.per_item_cost',
-//             'pi.unit_id',
-//             'pi.vendor_id', // Add vendor_id
-//             'tp.payment_mode',
-//             'pi.discount',
-//             DB::raw('pi.quantity * pi.per_item_cost * (1 - pi.discount / 100) as per_product_total')
-//             // DB::raw('pi.quantity * pi.per_item_cost as per_product_total')
-//         )
-//         ->where('p.transaction_id', $transactionId)
-//         ->get();
-
-//     if ($purchaseDetails->isEmpty()) {
-//         Log::info('No purchase details found for transaction', ['transaction_id' => $transactionId]);
-//         return response()->json([
-//             'status' => 'error',
-//             'message' => 'No purchase details found for this transaction ID'
-//         ], 404);
-//     }
-//     if ($purchaseDetails->isEmpty()) {
-//         Log::info('No purchase details found for transaction', ['transaction_id' => $transactionId]);
-//         return response()->json([
-//             'status' => 'error',
-//             'message' => 'No purchase details found for this transaction ID'
-//         ], 404);
-//     }
-
-//     $totalAmount = $purchaseDetails->sum('per_product_total');
-    
-//     // Get unique vendor_ids from the purchase details
-//     $vendorIds = $purchaseDetails->pluck('vendor_id')->unique()->values();
-
-//     // Fetch vendor details
-//     $vendors = DB::table('vendors')
-//         ->whereIn('id', $vendorIds)
-//         ->select('id', 'vendor_name', 'contact_person', 'email', 'phone', 'address', 'gst_no', 'pan')
-//         ->get()
-
-//     Log::info('Purchase details retrieved successfully', ['transaction_id' => $transactionId]);
-//     return response()->json([
-//         'status' => 'success',
-//         'data' => [
-//             'products' => $purchaseDetails,
-//             'total_amount' => $totalAmount
-//         ]
-//     ], 200);
-// }
-//     Log::info('Purchase details retrieved successfully', ['transaction_id' => $transactionId]);
-//     return response()->json([
-//         'status' => 'success',
-//         'data' => [
-//             'products' => $purchaseDetails,
-//             'total_amount' => $totalAmount
-//         ]
-//     ], 200);
-// }
 
 public function getPurchaseDetailsByTransaction(Request $request)
 {
-    // Get the authenticated user
+    // Authentication check
     $user = Auth::user();
     if (!$user) {
         return response()->json(['message' => 'Unauthorized'], 401);
     }
 
-    // Restrict access to users with rid between 5 and 10 inclusive
-    if ($user->rid < 5 || $user->rid > 10) {
+    // Role-based access control
+    if ($user->rid < 1 || $user->rid > 5) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
-    // Validate the request
+    // Request validation
     try {
         $request->validate([
             'transaction_id' => 'required|integer'
         ]);
-        Log::info('Validation passed successfully for getPurchaseDetailsByTransaction', ['transaction_id' => $request->transaction_id]);
     } catch (\Illuminate\Validation\ValidationException $e) {
-        Log::error('Validation failed for getPurchaseDetailsByTransaction', [
-            'errors' => $e->errors(),
-            'request_data' => $request->all()
-        ]);
         return response()->json([
             'message' => 'Validation failed',
             'errors' => $e->errors(),
@@ -549,263 +232,178 @@ public function getPurchaseDetailsByTransaction(Request $request)
 
     $transactionId = $request->input('transaction_id');
 
-    // Fetch the transaction using the model
-    $transaction = TransactionPurchase::find($transactionId);
-    Log::info('Transaction data retrieved via model', ['transaction' => $transaction ? $transaction->toArray() : null]);
-
-    // Fallback: Fetch directly from DB to confirm data
-    $rawTransaction = DB::table('transaction_purchases')->where('id', $transactionId)->first();
-    Log::info('Raw transaction data retrieved via DB', ['raw_transaction' => $rawTransaction]);
+    // Fetch transaction details
+    $transaction = DB::table('purchase_bills')
+        ->where('id', $transactionId)
+        ->select('id', 'bill_name', 'pcid', 'uid', 'payment_mode', 'absolute_discount', 'paid_amount', 'updated_at')
+        ->first();
 
     if (!$transaction) {
-        Log::info('Transaction not found', ['transaction_id' => $transactionId]);
         return response()->json([
             'status' => 'error',
             'message' => 'Transaction not found'
         ], 404);
     }
 
-    // Extract absolute_discount and paid_amount, defaulting to 0 if null
+    // Default values for null fields
     $absoluteDiscount = $transaction->absolute_discount ?? 0;
     $paidAmount = $transaction->paid_amount ?? 0;
 
-    // Fetch purchase details with vendor_id
-    $purchaseDetails = DB::table('purchases as p')
-        ->join('products as prod', 'p.product_id', '=', 'prod.id')
-        ->join('purchase_items as pi', 'p.id', '=', 'pi.purchase_id')
-        ->join('transaction_purchases as tp', 'p.transaction_id', '=', 'tp.id')
-        ->join('product_values as pv', 'prod.id', '=', 'pv.pid')
+    // Fetch purchase items (products) with unit name
+    $purchaseDetails = DB::table('purchase_items as pi')
+        ->join('products as prod', 'pi.pid', '=', 'prod.id')
+        ->join('purchase_bills as pb', 'pi.bid', '=', 'pb.id')
+        ->join('units as u', 'pi.unit_id', '=', 'u.id')
         ->select(
-            'p.product_id',
+            'pi.pid as product_id',
             'prod.name as product_name',
+            'pi.s_price as selling_price',
+            'pi.p_price as per_item_cost',
+            'pi.dis as discount',
             'pi.quantity',
-            'pi.per_item_cost',
             'pi.unit_id',
-            'pi.vendor_id',
-            'tp.payment_mode',
-            'pi.discount',
-            'pi.flat_discount',
-            'pv.selling_price', 
-            DB::raw('ROUND(pi.quantity * (pi.per_item_cost * (1 - COALESCE(pi.discount, 0)/100) - COALESCE(pi.flat_discount, 0)), 2) AS per_product_total')        )
-        ->where('p.transaction_id', $transactionId)
+            'u.name as unit_name',
+            DB::raw('ROUND(pi.quantity * (pi.p_price * (1 - COALESCE(pi.dis, 0)/100)), 2) AS per_product_total')
+        )
+        ->where('pi.bid', $transactionId)
         ->get();
 
     if ($purchaseDetails->isEmpty()) {
-        Log::info('No purchase details found for transaction', ['transaction_id' => $transactionId]);
         return response()->json([
             'status' => 'error',
             'message' => 'No purchase details found for this transaction ID'
         ], 404);
     }
 
-// **Transform payment_mode from integer to string**
-$inverseMap = array_flip(TransactionPurchase::$paymentModeMap);
-$purchaseDetails = $purchaseDetails->map(function ($detail) use ($inverseMap) {
-    $detail->payment_mode = $inverseMap[$detail->payment_mode] ?? 'Unknown';
-    return $detail;
-});
+    // Fetch payment modes
+    $paymentModes = DB::table('payment_modes')->pluck('name', 'id')->toArray();
 
-    // Calculate total amount
+    // Map payment_mode for transaction
+    $paymentModeName = $paymentModes[$transaction->payment_mode] ?? 'Unknown';
+
+    // Calculate financials
     $totalAmount = $purchaseDetails->sum('per_product_total');
-
-    // Calculate payable_amount and due_amount
     $payableAmount = $totalAmount - $absoluteDiscount;
     $dueAmount = max(0, $payableAmount - $paidAmount);
 
-    // Get unique vendor_ids from the purchase details
-    $vendorIds = $purchaseDetails->pluck('vendor_id')->unique()->values();
-
     // Fetch vendor details
-    $vendors = DB::table('vendors')
-        ->whereIn('id', $vendorIds)
-        ->select('id', 'vendor_name', 'contact_person', 'email', 'phone', 'address', 'gst_no', 'pan')
-        ->get();
+    $vendor = DB::table('purchase_clients')
+        ->where('id', $transaction->pcid)
+        ->select('name as vendor_name')
+        ->first();
 
-    Log::info('Purchase details retrieved successfully', [
-        'transaction_id' => $transactionId,
-        'total_amount' => $totalAmount,
-        'absolute_discount' => $absoluteDiscount,
-        'payable_amount' => $payableAmount,
-        'paid_amount' => $paidAmount,
-        'due_amount' => $dueAmount
-    ]);
+    // Fetch user details
+    $userDetail = DB::table('users')
+        ->where('id', $transaction->uid)
+        ->select('name')
+        ->first();
 
+    // Return response
     return response()->json([
         'status' => 'success',
         'data' => [
             'products' => $purchaseDetails,
-            'vendors' => $vendors,
+            'transaction_id' => $transaction->id,
+            'bill_name' => $transaction->bill_name,
+            'purchased_by' => $userDetail ? $userDetail->name : 'Unknown',
+            'vendor_name' => $vendor ? $vendor->vendor_name : 'Unknown',
+            'vendor_id' => $transaction->pcid,
+            'payment_mode' => $paymentModeName,
+            'date' => $transaction->updated_at,
             'total_amount' => round($totalAmount, 2),
             'absolute_discount' => round($absoluteDiscount, 2),
             'payable_amount' => round($payableAmount, 2),
             'paid_amount' => round($paidAmount, 2),
             'due_amount' => round($dueAmount, 2),
-            'updated_at' => $transaction->updated_at->format('Y-m-d H:i:s')
-            ]
+        ]
     ], 200);
 }
 
-    // In your controller (e.g., PurchaseController.php)
-// public function getPurchaseWidget(Request $request)
-// {
-//     // Authentication check
-//     $user = Auth::user();
-//     if (!$user) {
-//         return response()->json(['message' => 'Unauthorized'], 401);
-//     }
-
-//     // Validate request data
-//     $validated = $request->validate([
-//         'cid' => 'required|integer|exists:companies,id'
-//     ]);
-//     $cid = $validated['cid'];
-
-//     // Get purchase count
-//     $purchaseCount = TransactionPurchase::where('cid', $cid)->count();
-//     $vendorCount = PurchaseItem::join('purchases', 'purchase_items.purchase_id', '=', 'purchases.id')
-//         ->join('transaction_purchases', 'purchases.transaction_id', '=', 'transaction_purchases.id')
-//         ->where('transaction_purchases.cid', $cid)
-//         ->distinct('purchase_items.vendor_id')
-//         ->count('purchase_items.vendor_id');
-//     $totalAmount = PurchaseItem::join('purchases', 'purchase_items.purchase_id', '=', 'purchases.id')
-//         ->join('transaction_purchases', 'purchases.transaction_id', '=', 'transaction_purchases.id')
-//         ->where('transaction_purchases.cid', $cid)
-//        // ->sum(DB::raw('purchase_items.quantity * purchase_items.per_item_cost'));
-//         ->sum(DB::raw('purchase_items.quantity * purchase_items.per_item_cost * (1 - purchase_items.discount / 100)'));
-
-//     return response()->json([
-//         // 'cid' => $cid,
-//         'total_purchase_order' => $purchaseCount,
-//         'total_vendor'=>$vendorCount,
-//         'total_purchase_amount' => $totalAmount
-
-//     ], 200);
-// }
-    // public function getPurchaseWidget(Request $request)
-    // {
-    //     // Authentication check
-    //     $user = Auth::user();
-    //     if (!$user) {
-    //         return response()->json(['message' => 'Unauthorized'], 401);
-    //     }
-
-    //     // Validate and extract cid from request body
-    //     $validated = $request->validate([
-    //         'cid' => 'required|integer|exists:companies,id'
-    //     ]);
-    //     $cid = $validated['cid'];
-    //     $rid = $user->rid; // Role ID from authenticated user
-    //     $uid = $user->id; // User ID from authenticated user
-
-    //     // Purchase count with conditional uid filtering
-    //     $purchaseCount = TransactionPurchase::where('cid', $cid)
-    //         ->when(!in_array($rid, [5, 6]), fn($q) => $q->where('uid', $uid))
-    //         ->count();
-
-    //     // Vendor count with conditional uid filtering
-    //     $vendorCount = PurchaseItem::join('purchases', 'purchase_items.purchase_id', '=', 'purchases.id')
-    //     ->join('transaction_purchases', 'purchases.transaction_id', '=', 'transaction_purchases.id')
-    //     ->where('transaction_purchases.cid', $cid)
-    //     ->distinct('purchase_items.vendor_id')
-    //     ->count('purchase_items.vendor_id');
-
-    //     // Total amount calculation with conditional uid filtering
-    //     $totalAmount = PurchaseItem::join('purchases', 'purchase_items.purchase_id', '=', 'purchases.id')
-    //         ->join('transaction_purchases', 'purchases.transaction_id', '=', 'transaction_purchases.id')
-    //         ->where('transaction_purchases.cid', $cid)
-    //         ->when(!in_array($rid, [5, 6]), fn($q) => $q->where('transaction_purchases.uid', $uid))
-    //         ->sum(DB::raw('purchase_items.quantity * purchase_items.per_item_cost * (1 - purchase_items.discount / 100)'));
-
-    //     return response()->json([
-    //         'total_purchase_order' => $purchaseCount,
-    //         'total_vendor' => $vendorCount,
-    //         'total_purchase_amount' => $totalAmount
-    //     ], 200);
-    // }
-
-    public function getPurchaseWidget(Request $request)
+public function getPurchaseWidget(Request $request)
 {
-    // Authentication and validation (unchanged)
+    // Authentication check
     $user = Auth::user();
-    if (!$user) return response()->json(['message' => 'Unauthorized'], 401);
+    if (!$user) {
+        return response()->json(['message' => 'Unauthorized'], 401);
+    }
 
-    $validated = $request->validate(['cid' => 'required|integer|exists:companies,id']);
+    // Validate the request
+    $validated = $request->validate([
+        'cid' => 'required|integer|exists:clients,id'
+    ]);
     $cid = $validated['cid'];
     $rid = $user->rid;
     $uid = $user->id;
 
-    // Total Purchase Orders (unchanged)
-    $purchaseCount = TransactionPurchase::where('cid', $cid)
-        ->when(!in_array($rid, [5, 6]), fn($q) => $q->where('uid', $uid))
+    // Total Purchase Orders
+    $purchaseCount = PurchaseBill::join('users', 'purchase_bills.uid', '=', 'users.id')
+        ->where('users.cid', $cid)
+        ->when(!in_array($rid, [1, 2, 3]), fn($q) => $q->where('purchase_bills.uid', $uid))
         ->count();
 
-    // Total Vendors (unchanged)
-    $vendorCount = PurchaseItem::join('purchases', 'purchase_items.purchase_id', '=', 'purchases.id')
-        ->join('transaction_purchases', 'purchases.transaction_id', '=', 'transaction_purchases.id')
-        ->where('transaction_purchases.cid', $cid)
-        ->distinct('purchase_items.vendor_id')
-        ->count('purchase_items.vendor_id');
+    // Total Vendors
+    $vendorCount = PurchaseBill::join('users', 'purchase_bills.uid', '=', 'users.id')
+        ->where('users.cid', $cid)
+        ->distinct()
+        ->count('purchase_bills.pcid');
 
-    // Total Purchase Amount (revised to include all discounts)
+    // Total Purchase Amount
     $totalAmount = DB::table(function ($query) use ($cid, $rid, $uid) {
         $query->from('purchase_items')
-            ->join('purchases', 'purchase_items.purchase_id', '=', 'purchases.id')
-            ->join('transaction_purchases', 'purchases.transaction_id', '=', 'transaction_purchases.id')
+            ->join('purchase_bills', 'purchase_items.bid', '=', 'purchase_bills.id')
+            ->join('users', 'purchase_bills.uid', '=', 'users.id')
             ->selectRaw('
-                transaction_purchases.id,
-                SUM(
-                    purchase_items.quantity * 
-                    (purchase_items.per_item_cost * (1 - purchase_items.discount / 100) - purchase_items.flat_discount)
-                ) AS transaction_total,
-                MAX(transaction_purchases.absolute_discount) AS absolute_discount
+                purchase_bills.id,
+                SUM(purchase_items.quantity * purchase_items.p_price * (1 - COALESCE(purchase_items.dis, 0) / 100)) AS transaction_total,
+                MAX(purchase_bills.absolute_discount) AS absolute_discount
             ')
-            ->where('transaction_purchases.cid', $cid)
-            ->when(!in_array($rid, [5, 6]), fn($q) => $q->where('transaction_purchases.uid', $uid))
-            ->groupBy('transaction_purchases.id');
+            ->where('users.cid', $cid)
+            ->when(!in_array($rid, [1, 2, 3]), fn($q) => $q->where('purchase_bills.uid', $uid))
+            ->groupBy('purchase_bills.id');
     }, 'transaction_sums')
-    ->sum(DB::raw('transaction_total - absolute_discount'));
+    ->sum(DB::raw('transaction_total - COALESCE(absolute_discount, 0)'));
 
+    // Return the response
     return response()->json([
         'total_purchase_order' => $purchaseCount,
         'total_vendor' => $vendorCount,
         'total_purchase_amount' => round($totalAmount, 2)
     ], 200);
 }
-    public function updateTransactionById(Request $request, $transaction_id)
+
+public function updateTransactionById(Request $request, $transaction_id)
 {
-    // Get the authenticated user
+    // Authentication check
     $user = Auth::user();
     if (!$user) {
         return response()->json(['message' => 'Unauthorized'], 401);
     }
 
     // Restrict access to users with rid between 5 and 10 inclusive
-    if ($user->rid < 5 || $user->rid > 10) {
+    if ($user->rid < 1 || $user->rid > 4) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
+    // Validation rules
     try {
-        // Validation rules (unchanged from your code)
         $request->validate([
-            'transaction_id' => 'sometimes|integer|in:' . $transaction_id,
-            //'payment_mode' => 'nullable|string',
-            'payment_mode' => 'nullable|string|in:' . implode(',', array_keys(TransactionPurchase::$paymentModeMap)),
-            'vendor_id' => 'nullable|integer|exists:vendors,id',
+            'bill_name' => 'nullable|string|max:255',
+            'payment_mode' => 'nullable|integer|exists:payment_modes,id',
+            'vendor_id' => 'nullable|integer|exists:purchase_clients,id',
             'products' => 'nullable|array',
             'products.*.product_id' => 'required_with:products|integer|exists:products,id',
             'products.*.quantity' => 'required_with:products|numeric|min:0',
-            'products.*.per_item_cost' => 'required_with:products|numeric|min:0',
+            'products.*.p_price' => 'required_with:products|numeric|min:0',
+            'products.*.s_price' => 'required_with:products|numeric|min:0',
             'products.*.unit_id' => 'required_with:products|integer|exists:units,id',
-            'products.*.discount' => 'nullable|numeric|min:0|max:100',
-            'products.*.flat_discount' => 'nullable|numeric|min:0',
+            'products.*.dis' => 'nullable|numeric|min:0|max:100',
             'updated_at' => 'nullable|date_format:Y-m-d H:i:s',
             'absolute_discount' => 'nullable|numeric|min:0',
-            'add_paid_amount' => 'nullable|numeric|min:0', 
-            'set_paid_amount' => 'nullable|numeric|min:0', 
+            'set_paid_amount' => 'nullable|numeric|min:0',
         ]);
-        Log::info('Validation passed successfully for updateTransactionById', ['transaction_id' => $transaction_id]);
+        \Log::info('Validation passed successfully for updateTransactionById', ['transaction_id' => $transaction_id]);
     } catch (\Illuminate\Validation\ValidationException $e) {
-        Log::error('Validation failed for updateTransactionById', [
+        \Log::error('Validation failed for updateTransactionById', [
             'errors' => $e->errors(),
             'request_data' => $request->all()
         ]);
@@ -816,148 +414,96 @@ $purchaseDetails = $purchaseDetails->map(function ($detail) use ($inverseMap) {
     }
 
     // Check if the transaction exists
-    $transaction = DB::table('transaction_purchases')
-        ->where('id', $transaction_id)
-        ->first();
-
+    $transaction = PurchaseBill::where('id', $transaction_id)->first();
     if (!$transaction) {
-        Log::info('Transaction not found', ['transaction_id' => $transaction_id]);
+        \Log::info('Transaction not found', ['transaction_id' => $transaction_id]);
         return response()->json([
             'status' => 'error',
             'message' => 'Transaction not found'
         ], 404);
     }
 
+    // Start a database transaction
     DB::beginTransaction();
     try {
-        // Prepare update data for transaction_purchases
+        // Prepare update data for purchase_bills
         $updateData = [
-            'updated_at' => $request->input('updated_at', now()) // Use provided updated_at or now()
+            'updated_at' => $request->input('updated_at', now()),
+            'bill_name' => $request->input('bill_name', $transaction->bill_name),
+            'pcid' => $request->input('vendor_id', $transaction->pcid),
+            'payment_mode' => $request->input('payment_mode', $transaction->payment_mode),
+            'absolute_discount' => $request->input('absolute_discount', $transaction->absolute_discount),
+            'paid_amount' => $request->input('set_paid_amount', $transaction->paid_amount),
         ];
-          // Handle payment_mode: convert string to integer if provided and valid
-          if ($request->filled('payment_mode')) {
-            $paymentModeString = $request->input('payment_mode');
-            $updateData['payment_mode'] = TransactionPurchase::$paymentModeMap[$paymentModeString];
-        }
 
-         // Update absolute_discount if provided and not null
-         if ($request->has('absolute_discount') && $request->input('absolute_discount') !== null) {
-            $updateData['absolute_discount'] = (float)$request->input('absolute_discount');
-        }
-        // Update paid_amount by adding to existing value if provided and not null
-        if ($request->has('set_paid_amount')) {
-            // Replace existing value
-            $updateData['paid_amount'] = (float)$request->input('set_paid_amount');
-        } elseif ($request->has('add_paid_amount')) {
-            // Add to existing value
-            $currentPaidAmount = (float)($transaction->paid_amount ?? 0);
-            $additionalAmount = (float)$request->input('add_paid_amount');
-            $updateData['paid_amount'] = $currentPaidAmount + $additionalAmount;
-        }
-        if (!empty($updateData)) {
-            DB::table('transaction_purchases')
-                ->where('id', $transaction_id)
-                ->update($updateData);
-        }
+        // Update purchase_bills
+        PurchaseBill::where('id', $transaction_id)->update($updateData);
 
         // Handle products if provided
         if ($request->has('products')) {
-            // Require vendor_id if products are provided
-            if (!$request->has('vendor_id')) {
-                return response()->json([
-                    'message' => 'Validation failed',
-                    'errors' => ['vendor_id' => ['The vendor_id field is required when products are provided.']]
-                ], 422);
+            $products = $request->input('products', []);
+            $productIds = array_column($products, 'product_id');
+
+            // Fetch existing purchase items
+            $existingItems = DB::table('purchase_items')
+                ->where('bid', $transaction_id)
+                ->get(['pid', 'bid']);
+
+            // Products to remove
+            $existingProductIds = $existingItems->pluck('pid')->toArray();
+            $productIdsToRemove = array_diff($existingProductIds, $productIds);
+
+            // Remove products not in request
+            if (!empty($productIdsToRemove)) {
+                DB::table('purchase_items')
+                    ->where('bid', $transaction_id)
+                    ->whereIn('pid', $productIdsToRemove)
+                    ->delete();
             }
 
-            $products = $request->input('products', []); // Default to empty array if null
-            $vendorId = $request->input('vendor_id');
+            // Insert or update products
+            foreach ($products as $product) {
+                $item = DB::table('purchase_items')
+                    ->where('bid', $transaction_id)
+                    ->where('pid', $product['product_id'])
+                    ->first();
 
-            // Fetch existing purchases for this transaction
-            $existingPurchases = DB::table('purchases')
-                ->where('transaction_id', $transaction_id)
-                ->get(['id', 'product_id']);
-
-            if (empty($products)) {
-                // If products is empty, remove all existing purchases
-                if ($existingPurchases->isNotEmpty()) {
-                    $purchaseIds = $existingPurchases->pluck('id');
-                    DB::table('purchase_items')->whereIn('purchase_id', $purchaseIds)->delete();
-                    DB::table('purchases')->where('transaction_id', $transaction_id)->delete();
-                }
-            } else {
-                // Extract product_ids from request
-                $requestProductIds = array_column($products, 'product_id');
-                $existingProductIds = $existingPurchases->pluck('product_id')->toArray();
-
-                // Products to add (in request, not in DB)
-                $productsToAdd = array_filter($products, function ($product) use ($existingProductIds) {
-                    return !in_array($product['product_id'], $existingProductIds);
-                });
-
-                // Products to update (in both request and DB)
-                $productsToUpdate = array_filter($products, function ($product) use ($existingProductIds) {
-                    return in_array($product['product_id'], $existingProductIds);
-                });
-
-                // Products to remove (in DB, not in request)
-                $productIdsToRemove = array_diff($existingProductIds, $requestProductIds);
-
-                // Add new products
-                foreach ($productsToAdd as $product) {
-                    $purchaseId = DB::table('purchases')->insertGetId([
-                        'transaction_id' => $transaction_id,
-                        'product_id' => $product['product_id'],
-                        'created_at' => now(),
-                    ]);
+                if ($item) {
+                    // Update existing item
+                    DB::table('purchase_items')
+                        ->where('bid', $transaction_id)
+                        ->where('pid', $product['product_id'])
+                        ->update([
+                            'p_price' => $product['p_price'],
+                            's_price' => $product['s_price'],
+                            'quantity' => $product['quantity'],
+                            'unit_id' => $product['unit_id'],
+                            'dis' => $product['dis'] ?? $product['discount'] ?? 0,
+                        ]);
+                } else {
+                    // Insert new item
                     DB::table('purchase_items')->insert([
-                        'purchase_id' => $purchaseId,
-                        'vendor_id' => $vendorId,
+                        'bid' => $transaction_id,
+                        'pid' => $product['product_id'],
+                        'p_price' => $product['p_price'],
+                        's_price' => $product['s_price'],
                         'quantity' => $product['quantity'],
-                        'per_item_cost' => $product['per_item_cost'],
                         'unit_id' => $product['unit_id'],
-                        'discount' => $product['discount'] ?? 0,
-                        'flat_discount' => $product['flat_discount'] ?? 0,
-                        'created_at' => now(),
+                        'dis' => $product['dis'] ?? $product['discount'] ?? 0,
                     ]);
-                }
-
-                // Update existing products
-                foreach ($productsToUpdate as $product) {
-                    $purchase = $existingPurchases->firstWhere('product_id', $product['product_id']);
-                    if ($purchase) {
-                        DB::table('purchase_items')
-                            ->where('purchase_id', $purchase->id)
-                            ->update([
-                                'vendor_id' => $vendorId,
-                                'quantity' => $product['quantity'],
-                                'per_item_cost' => $product['per_item_cost'],
-                                'unit_id' => $product['unit_id'],
-                                'discount' => $product['discount'] ?? 0,
-                                'flat_discount' => $product['flat_discount'] ?? 0,
-                                
-                            ]);
-                    }
-                }
-
-                // Remove products not in request
-                if (!empty($productIdsToRemove)) {
-                    $purchaseIdsToRemove = $existingPurchases->whereIn('product_id', $productIdsToRemove)->pluck('id');
-                    DB::table('purchase_items')->whereIn('purchase_id', $purchaseIdsToRemove)->delete();
-                    DB::table('purchases')->whereIn('id', $purchaseIdsToRemove)->delete();
                 }
             }
         }
 
         DB::commit();
-        Log::info('Transaction updated successfully', ['transaction_id' => $transaction_id]);
+        \Log::info('Transaction updated successfully', ['transaction_id' => $transaction_id]);
         return response()->json([
             'status' => 'success',
             'message' => 'Transaction updated successfully'
         ], 200);
     } catch (\Exception $e) {
         DB::rollBack();
-        Log::error('Failed to update transaction', [
+        \Log::error('Failed to update transaction', [
             'transaction_id' => $transaction_id,
             'error' => $e->getMessage()
         ]);
@@ -968,8 +514,6 @@ $purchaseDetails = $purchaseDetails->map(function ($detail) use ($inverseMap) {
         ], 500);
     }
 }
-
-
 public function destroy(Request $request, $transactionId)
 {
     Log::info('Delete purchase transaction endpoint reached', [

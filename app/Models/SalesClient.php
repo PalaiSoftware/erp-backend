@@ -1,0 +1,23 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class SalesClient extends Model
+{
+    protected $table = 'sales_clients';
+
+    protected $fillable = [
+        'name',
+        'email',
+        'phone',
+        'address',
+        'gst_no',
+        'pan',
+        'uid',
+        'cid',
+    ];
+
+    // Add relationships or methods here if needed
+}
