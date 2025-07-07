@@ -3,19 +3,19 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use App\Models\Sale;
+use App\Models\SalesBill;
 use App\Models\SalesItem;
-use App\Models\TransactionSales;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use App\Models\Company;
+use App\Models\Client;
 use App\Models\Product;
-use App\Models\Customer;
+use App\Models\SalesClient;
 use App\Models\User;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Carbon\Carbon;
 use Illuminate\Validation\Rule;
+use App\Models\PaymentMode;
 
 
 class SalesController extends Controller
@@ -24,45 +24,39 @@ class SalesController extends Controller
     public function store(Request $request)
     {
         Log::info('API endpoint reached', ['request' => $request->all()]);
-    
+
         // Get the authenticated user
-       $user = Auth::user();
-    
-       // Check if user is authenticated
-       if (!$user) {
-          return response()->json(['message' => 'Unauthenticated'], 401);
+        $user = Auth::user();
+
+        // Check if user is authenticated
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
         }
 
-        // Restrict to rid 5, 6, 7,8 or 9 only
-        if (!in_array($user->rid, [5, 6, 7,8,9])) {
-           return response()->json(['message' => 'Unauthorized to sale product'], 403);
+        // Restrict to rid 1, 2, 3, 4, or 5 only
+        if (!in_array($user->rid, [1, 2, 3, 4, 5])) {
+            return response()->json(['message' => 'Unauthorized to sale product'], 403);
         }
-        $paymentModes = [
-            'debit_card' => 1,
-            'credit_card' => 2,
-            'cash' => 3,
-            'upi' => 4,
-            'bank_transfer' => 5,
-            'phonepe'=>6,
 
-        ];
-    
+        // Use the cid from the authenticated user
+        $cid = $user->cid;
+        $uid = $user->id;
+
+        // Validate the request data (no 'cid' in the request)
         try {
             $request->validate([
+                'bill_name' => 'required|string',
+                'customer_id' => 'required|integer|exists:sales_clients,id',
+                'payment_mode' => 'required|integer|exists:payment_modes,id',
+                'absolute_discount' => 'nullable|numeric|min:0',
+                'total_paid' => 'required|numeric|min:0',
                 'products' => 'required|array',
                 'products.*.product_id' => 'required|integer|exists:products,id',
                 'products.*.quantity' => 'required|numeric|min:0',
                 'products.*.discount' => 'nullable|numeric|min:0',
-                'products.*.flat_discount' => 'nullable|numeric|min:0',
-                'products.*.per_item_cost' => 'required|numeric|min:0',
+                'products.*.p_price' => 'required|numeric|min:0', // Added p_price
+                'products.*.s_price' => 'required|numeric|min:0', // Replaced per_item_cost with s_price
                 'products.*.unit_id' => 'required|integer|exists:units,id',
-                'cid' => 'required|integer',
-                'customer_id' => 'required|integer',
-                'payment_mode' => ['required','string',Rule::in(array_keys($paymentModes)),],                
-                'absolute_discount' => 'nullable|numeric|min:0',
-                'total_paid' => 'required|numeric|min:0',
-                'updated_at' => 'nullable|date', 
-
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             Log::error('Validation failed', ['errors' => $e->errors()]);
@@ -71,51 +65,36 @@ class SalesController extends Controller
                 'errors' => $e->errors()
             ], 422);
         }
-        $decodedPaymentMode = $paymentModes[$request->payment_mode];
 
-        if (!$decodedPaymentMode) {
-            return response()->json([
-                'message' => 'Invalid payment mode',
-                'errors' => ['payment_mode' => ['The selected payment mode is invalid.']],
-            ], 422);
-        }
-
-        $uid = $user->id;
-        $cid = (int)$request->cid;
-    
         // Extract product IDs from the request
         $productIds = array_column($request->products, 'product_id');
-    
-        // Fetch product details and current stock in one query
+
+        // Fetch product details and current stock using query builder
         $stocks = DB::table('products as p')
             ->whereIn('p.id', $productIds)
-            // ->where('p.uid', $uid)
-            ->select([
-                'p.id',
-                'p.name',
-                DB::raw("(
-                    SELECT COALESCE(SUM(pi.quantity), 0)
-                    FROM purchases pur
-                    JOIN transaction_purchases tp ON pur.transaction_id = tp.id
-                    JOIN purchase_items pi ON pur.id = pi.purchase_id
-                    WHERE pur.product_id = p.id AND tp.cid = $cid
-                ) - (
-                    SELECT COALESCE(SUM(si.quantity), 0)
-                    FROM sales s
-                    JOIN transaction_sales ts ON s.transaction_id = ts.id
-                    JOIN sales_items si ON s.id = si.sale_id
-                    WHERE s.product_id = p.id AND ts.cid = $cid
-                ) as current_stock")
-            ])
+            ->select(['p.id', 'p.name'])
+            ->selectRaw("(
+                SELECT COALESCE(SUM(pi.quantity), 0)
+                FROM purchase_items pi
+                JOIN purchase_bills pb ON pi.bid = pb.id
+                JOIN purchase_clients pc ON pb.pcid = pc.id
+                WHERE pi.pid = p.id AND pc.cid = ?
+            ) - (
+                SELECT COALESCE(SUM(si.quantity), 0)
+                FROM sales_items si
+                JOIN sales_bills sb ON si.bid = sb.id
+                JOIN sales_clients sc ON sb.scid = sc.id
+                WHERE si.pid = p.id AND sc.cid = ?
+            ) as current_stock", [$cid, $cid])
             ->get()
-            ->keyBy('id'); // Key by product ID for efficient lookup
-    
+            ->keyBy('id');
+
         // Check stock availability for each product
         $errors = [];
         foreach ($request->products as $product) {
             $productId = $product['product_id'];
             $requestedQuantity = $product['quantity'];
-    
+
             if (!isset($stocks[$productId])) {
                 $errors[] = [
                     'product_id' => $productId,
@@ -125,10 +104,10 @@ class SalesController extends Controller
                 ];
                 continue;
             }
-    
+
             $stock = $stocks[$productId];
             $currentStock = $stock->current_stock;
-    
+
             if ($requestedQuantity > $currentStock) {
                 $errors[] = [
                     'product_id' => $productId,
@@ -138,7 +117,7 @@ class SalesController extends Controller
                 ];
             }
         }
-    
+
         // Return error response if stock check fails
         if (!empty($errors)) {
             return response()->json([
@@ -146,47 +125,53 @@ class SalesController extends Controller
                 'errors' => $errors
             ], 422);
         }
-    
+
         // Proceed with the transaction if all stock checks pass
         DB::beginTransaction();
         try {
-            $updatedAt = $request->has('updated_at') ? Carbon::parse($request->updated_at) : now();
-            $transaction = TransactionSales::create([
+            $salesBill = SalesBill::create([
+                'bill_name' => $request->bill_name,
+                'scid' => $request->customer_id,
                 'uid' => $user->id,
-                'cid' => $request->cid,
-                'customer_id' => $request->customer_id,
-                'payment_mode' =>$decodedPaymentMode,
-                'absolute_discount' => $request->absolute_discount,
-                'total_paid' => $request->total_paid,
-                'updated_at' => $updatedAt, // Use the manually passed updated_at value
+                'payment_mode' => $request->payment_mode,
+                'absolute_discount' => $request->absolute_discount ?? 0,
+                'paid_amount' => $request->total_paid,
             ]);
-            $transactionId = $transaction->id;
-            Log::info('Created transaction', ['transaction_id' => $transactionId]);
-    
+            $billId = $salesBill->id;
+            Log::info('Created sales bill', ['bill_id' => $billId]);
+
             foreach ($request->products as $product) {
-                $sale = Sale::create([
-                    'transaction_id' => $transactionId,
-                    'product_id' => $product['product_id'],
-                ]);
-                $saleId = $sale->id;
-                Log::info('Created sale', ['sale_id' => $saleId]);
-    
+                $productId = $product['product_id'];
+
+                // Fetch the latest purchase price for the product and company
+                $latestPurchase = DB::table('purchase_items as pi')
+                    ->join('purchase_bills as pb', 'pi.bid', '=', 'pb.id')
+                    ->join('purchase_clients as pc', 'pb.pcid', '=', 'pc.id')
+                    ->where('pi.pid', $productId)
+                    ->where('pc.cid', $cid)
+                    ->orderBy('pb.created_at', 'desc')
+                    ->select('pi.p_price')
+                    ->first();
+
+                $p_price = $latestPurchase ? $latestPurchase->p_price : 0;
+
                 SalesItem::create([
-                    'sale_id' => $saleId,
+                    'bid' => $billId,
+                    'pid' => $productId,
+                    'p_price' => $product['p_price'], // Use p_price from request
+                    's_price' => $product['s_price'], // Use s_price from request
                     'quantity' => $product['quantity'],
-                    'discount' => $product['discount'] ?? 0, // percentage
-                    'flat_discount' => $product['flat_discount'] ?? 0, // Flat
-                    'per_item_cost' => $product['per_item_cost'],
                     'unit_id' => $product['unit_id'],
+                    'dis' => $product['discount'] ?? 0,
                 ]);
             }
-    
+
             DB::commit();
-            Log::info('Sale recorded successfully', ['transaction_id' => $transactionId]);
-    
+            Log::info('Sale recorded successfully', ['bill_id' => $billId]);
+
             return response()->json([
                 'message' => 'Sale recorded successfully',
-                'transaction_id' => $transactionId,
+                'bill_id' => $billId,
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
@@ -197,6 +182,318 @@ class SalesController extends Controller
             ], 500);
         }
     }
+
+    public function getAllInvoicesByCompany($cid)
+    {
+        // Get the authenticated user
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+        $uid = $user->id;
+
+        // Restrict access to users with rid between 5 and 10 inclusive
+        if ($user->rid < 1 || $user->rid > 5) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+
+        // Check if the user belongs to the requested company
+        if ($user->cid != $cid) {
+            return response()->json(['message' => 'Forbidden: You do not have access to this company\'s data'], 403);
+        }
+    try {
+        
+        // Build the query with the purchase_bills table
+        $query = DB::table('sales_bills as sb')
+            ->select(
+                'sb.id as transaction_id',          // Bill ID as transaction ID
+                'sb.bill_name as bill_name',
+                'sc.name as customer_name',           // Vendor name from purchase_clients
+                'sb.scid as customer_id',             // Vendor ID from purchase_bills
+                'sb.payment_mode',                  // Payment mode integer
+                'sb.updated_at as date',            // Date of the transaction
+                'u.name as sales_by'            // Name of the user who made the purchase
+            )
+            ->leftJoin('sales_clients as sc', 'sb.scid', '=', 'sc.id')  // Join with vendors
+            ->leftJoin('users as u', 'sb.uid', '=', 'u.id')                // Join with users
+            ->where('u.cid', $cid);                                         // Filter by company ID
+
+        // Execute the query
+        $transactions = $query->get();
+
+        // Fetch payment modes from the database
+        $paymentModes = DB::table('payment_modes')->pluck('name', 'id')->toArray();
+
+        // Map payment_mode from integer to string
+        $transactions = $transactions->map(function ($transaction) use ($paymentModes) {
+            $transaction->payment_mode = $paymentModes[$transaction->payment_mode] ?? 'Unknown';
+            return $transaction;
+        });
+
+        // Handle empty results
+        if ($transactions->isEmpty()) {
+            Log::info('No transactions found for cid', ['cid' => $cid]);
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No transactions found for this customer ID'
+            ], 404);
+        }
+
+        // Return successful response
+        Log::info('Transactions retrieved successfully', ['cid' => $cid, 'count' => $transactions->count()]);
+        return response()->json([
+            'status' => 'success',
+            'data' => $transactions
+        ], 200);
+    } catch (\Exception $e) {
+        Log::error('Failed to fetch transactions', ['cid' => $cid, 'error' => $e->getMessage()]);
+        return response()->json(['message' => 'Failed to fetch transactions', 'error' => $e->getMessage()], 500);
+    }
+}
+  
+public function getTransaction($transactionId)
+{
+    // Authentication check
+    $user = Auth::user();
+    if (!$user) {
+        return response()->json(['message' => 'Unauthorized'], 401);
+    }
+
+    // Role-based access control
+    if ($user->rid < 1 || $user->rid > 5) {
+        return response()->json(['message' => 'Forbidden'], 403);
+    }
+
+    // Fetch transaction details
+    $transaction = DB::table('sales_bills')
+        ->where('id', $transactionId)
+        ->select('id', 'bill_name', 'scid', 'uid', 'payment_mode', 'absolute_discount', 'paid_amount', 'updated_at')
+        ->first();
+
+    if (!$transaction) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Transaction not found'
+        ], 404);
+    }
+
+    // Default values for null fields
+    $absoluteDiscount = $transaction->absolute_discount ?? 0;
+    $paidAmount = $transaction->paid_amount ?? 0;
+
+    // Fetch purchase items (products) with unit name
+    $purchaseDetails = DB::table('sales_items as si')
+        ->join('products as prod', 'si.pid', '=', 'prod.id')
+        ->join('sales_bills as sb', 'si.bid', '=', 'sb.id')
+        ->join('units as u', 'si.unit_id', '=', 'u.id')
+        ->select(
+            'si.pid as product_id',
+            'prod.name as product_name',
+            'si.s_price as s_price',
+            'si.p_price as p_price',
+            'si.dis as discount',
+            'si.quantity',
+            'si.unit_id',
+            'u.name as unit_name',
+            DB::raw('ROUND(si.quantity * (si.s_price * (1 - COALESCE(si.dis, 0)/100)), 2) AS per_product_total')
+        )
+        ->where('si.bid', $transactionId)
+        ->get();
+
+    if ($purchaseDetails->isEmpty()) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'No sales details found for this transaction ID'
+        ], 404);
+    }
+
+    // Fetch payment modes
+    $paymentModes = DB::table('payment_modes')->pluck('name', 'id')->toArray();
+
+    // Map payment_mode for transaction
+    $paymentModeName = $paymentModes[$transaction->payment_mode] ?? 'Unknown';
+
+    // Calculate financials
+    $totalAmount = $purchaseDetails->sum('per_product_total');
+    $payableAmount = $totalAmount - $absoluteDiscount;
+    $dueAmount = max(0, $payableAmount - $paidAmount);
+
+    // Fetch vendor details
+    $customer = DB::table('sales_clients')
+        ->where('id', $transaction->scid) // Fixed from pcid to scid
+        ->select('name as customer_name')
+        ->first();
+
+    // Fetch user details
+    $userDetail = DB::table('users')
+        ->where('id', $transaction->uid)
+        ->select('name')
+        ->first();
+
+    // Return response
+    return response()->json([
+        'status' => 'success',
+        'data' => [
+            'products' => $purchaseDetails,
+            'transaction_id' => $transaction->id,
+            'bill_name' => $transaction->bill_name,
+            'sales_by' => $userDetail ? $userDetail->name : 'Unknown',
+            'customer_name' => $customer ? $customer->customer_name : 'Unknown',
+            'customer_id' => $transaction->scid,
+            'payment_mode' => $paymentModeName,
+            'date' => $transaction->updated_at,
+            'total_amount' => round($totalAmount, 2),
+            'absolute_discount' => round($absoluteDiscount, 2),
+            'payable_amount' => round($payableAmount, 2),
+            'paid_amount' => round($paidAmount, 2),
+            'due_amount' => round($dueAmount, 2),
+        ]
+    ], 200);
+}
+
+public function update(Request $request, $transactionId)
+{
+    // Authentication check
+    $user = Auth::user();
+    if (!$user) {
+        return response()->json(['message' => 'Unauthorized'], 401);
+    }
+
+    // Restrict access to users with rid between 1 and 4 inclusive
+    if ($user->rid < 1 || $user->rid > 4) {
+        return response()->json(['message' => 'You do not have permission to update transactions'], 403);
+    }
+
+    // Validation rules
+    try {
+        $request->validate([
+            'bill_name' => 'nullable|string|max:255',
+            'payment_mode' => 'nullable|integer|exists:payment_modes,id',
+            'customer_id' => 'nullable|integer|exists:sales_clients,id',
+            'products' => 'nullable|array',
+            'products.*.product_id' => 'required_with:products|integer|exists:products,id',
+            'products.*.quantity' => 'required_with:products|numeric|min:0',
+            'products.*.p_price' => 'required_with:products|numeric|min:0',
+            'products.*.s_price' => 'required_with:products|numeric|min:0',
+            'products.*.unit_id' => 'required_with:products|integer|exists:units,id',
+            'products.*.dis' => 'nullable|numeric|min:0|max:100',
+            'absolute_discount' => 'nullable|numeric|min:0',
+            'set_paid_amount' => 'nullable|numeric|min:0',
+            'updated_at' => 'nullable|date_format:Y-m-d H:i:s',
+        ]);
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        \Log::error('Validation failed for updateTransactionById', [
+            'errors' => $e->errors(),
+            'request_data' => $request->all()
+        ]);
+        return response()->json([
+            'message' => 'Validation failed',
+            'errors' => $e->errors(),
+        ], 422);
+    }
+
+    // Check if the transaction exists
+    $transaction = SalesBill::where('id', $transactionId)->first();
+    if (!$transaction) {
+        \Log::info('Transaction not found', ['transaction_id' => $transactionId]);
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Transaction not found'
+        ], 404);
+    }
+
+    // Start a database transaction
+    DB::beginTransaction();
+    try {
+        // Prepare update data for sales_bills
+        $updateData = [
+            'updated_at' => $request->input('updated_at', now()),
+            'created_at' => $request->input('updated_at', now()),
+            'bill_name' => $request->input('bill_name', $transaction->bill_name),
+            'scid' => $request->input('customer_id', $transaction->scid),
+            'payment_mode' => $request->input('payment_mode', $transaction->payment_mode),
+            'absolute_discount' => $request->input('absolute_discount', $transaction->absolute_discount),
+            'paid_amount' => $request->input('set_paid_amount', $transaction->paid_amount),
+        ];
+
+        // Update sales_bills
+        SalesBill::where('id', $transactionId)->update($updateData);
+
+        // Handle products if provided
+        if ($request->has('products')) {
+            $products = $request->input('products', []);
+            $productIds = array_column($products, 'product_id');
+
+            // Fetch existing sales items
+            $existingItems = DB::table('sales_items')
+                ->where('bid', $transactionId)
+                ->get(['pid', 'bid']);
+
+            // Products to remove
+            $existingProductIds = $existingItems->pluck('pid')->toArray();
+            $productIdsToRemove = array_diff($existingProductIds, $productIds);
+
+            // Remove products not in request
+            if (!empty($productIdsToRemove)) {
+                DB::table('sales_items')
+                    ->where('bid', $transactionId)
+                    ->whereIn('pid', $productIdsToRemove)
+                    ->delete();
+            }
+
+            // Insert or update products
+            foreach ($products as $product) {
+                $item = DB::table('sales_items')
+                    ->where('bid', $transactionId)
+                    ->where('pid', $product['product_id'])
+                    ->first();
+
+                if ($item) {
+                    // Update existing item
+                    DB::table('sales_items')
+                        ->where('bid', $transactionId)
+                        ->where('pid', $product['product_id'])
+                        ->update([
+                            'p_price' => $product['p_price'],
+                            's_price' => $product['s_price'],
+                            'quantity' => $product['quantity'],
+                            'unit_id' => $product['unit_id'],
+                            'dis' => $product['dis'] ?? 0,
+                        ]);
+                } else {
+                    // Insert new item
+                    DB::table('sales_items')->insert([
+                        'bid' => $transactionId,
+                        'pid' => $product['product_id'],
+                        'p_price' => $product['p_price'],
+                        's_price' => $product['s_price'],
+                        'quantity' => $product['quantity'],
+                        'unit_id' => $product['unit_id'],
+                        'dis' => $product['dis'] ?? 0,
+                    ]);
+                }
+            }
+        }
+
+        DB::commit();
+        \Log::info('Transaction updated successfully', ['transaction_id' => $transactionId]);
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Transaction updated successfully'
+        ], 200);
+    } catch (\Exception $e) {
+        DB::rollBack();
+        \Log::error('Failed to update transaction', [
+            'transaction_id' => $transactionId,
+            'error' => $e->getMessage()
+        ]);
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Failed to update transaction',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
 
     public function generateInvoice($transactionId)
             {
@@ -302,7 +599,7 @@ class SalesController extends Controller
                     ]);
                     return response()->json(['message' => 'Error generating invoice', 'error' => $e->getMessage()], 500);
                 }
-            }
+}
 private function getInvoiceData($transactionId)
 {
     $transaction = TransactionSales::findOrFail($transactionId);
@@ -363,43 +660,6 @@ private function getInvoiceData($transactionId)
         'user_phone' => $user->mobile,
     ];
 }
-
-    public function getAllInvoicesByCompany($cid)
-        {
-            // Get the authenticated user
-            $user = Auth::user();
-            if (!$user) { 
-                return response()->json(['message' => 'Unauthorized'], 401);
-            }
-            $uid = $user->id;
-            // Restrict access to users with rid between 5 and 10 inclusive
-            if ($user->rid < 5 || $user->rid > 10) {
-                return response()->json(['message' => 'Forbidden'], 403);
-            }
-
-            try {
-
-                if($user->rid ==5){
-                    $transactionIds = TransactionSales::where('cid', $cid)->orderBy('id', 'asc')->pluck('id')->toArray();
-                }
-                else if($user->rid ==6){
-                    $uids = User::where('rid', '>', 6)->pluck('id')->push($user->id)->unique()->toArray();
-                    $transactionIds = TransactionSales::where('cid', $cid)->whereIn('uid', $uids)->orderBy('id', 'asc')->pluck('id')->toArray();
-                }else{
-                    $transactionIds = TransactionSales::where('cid', $cid)->where('uid', $uid)->orderBy('id', 'asc')->pluck('id')->toArray();
-                }
-                $invoices = [];
-
-                foreach ($transactionIds as $tid) {
-                    $invoices[] = $this->getInvoiceData($tid);
-                }
-
-                return response()->json(['invoices' => $invoices]);
-            } catch (\Exception $e) {
-                Log::error('Failed to fetch invoices', ['cid' => $cid, 'error' => $e->getMessage()]);
-                return response()->json(['error' => 'Failed to fetch invoices'], 500);
-            }
-        }
 
     public function getTotalSaleAmount($cid)
     {
@@ -497,332 +757,6 @@ public function getCustomerStats(Request $request)
     return response()->json($customers);
 }
 
-
-public function update(Request $request, $transactionId)
-{
-    Log::info('Update API endpoint reached', [
-        'transaction_id' => $transactionId,
-        'request' => $request->all()
-    ]);
-
-    // Get the authenticated user
-    $user = Auth::user();
-    if (!$user) {
-        return response()->json(['message' => 'Unauthenticated'], 401);
-    }
-
-    // Restrict to rid 5, 6, 7, 8, or 9 only
-    if (!in_array($user->rid, [5, 6, 7, 8, 9])) {
-        return response()->json(['message' => 'Unauthorized to update sale'], 403);
-    }
-
-    // Check if the transaction exists and belongs to the user's company
-    $transaction = TransactionSales::where('id', $transactionId)
-        ->where('uid', $user->id)
-        ->first();
-    if (!$transaction) {
-        return response()->json(['message' => 'Transaction not found or unauthorized'], 404);
-    }
-    $paymentModes = [
-        'debit_card' => 1,
-        'credit_card' => 2,
-        'cash' => 3,
-        'upi' => 4,
-        'bank_transfer' => 5,
-        'phonepe' => 6,
-    ];
-    // Validate the request
-    try {
-        $request->validate([
-            'products' => 'required|array',
-            'products.*.product_id' => 'required|integer|exists:products,id',
-            'products.*.quantity' => 'required|numeric|min:1|regex:/^\d+(\.\d{1,3})?$/',
-            'products.*.discount' => 'nullable|numeric|min:0',
-            'products.*.flat_discount' => 'nullable|numeric|min:0',
-            'products.*.per_item_cost' => 'required|numeric|min:0',
-            'products.*.unit_id' => 'required|integer|exists:units,id',
-            'cid' => 'required|integer',
-            'customer_id' => 'required|integer',
-            'payment_mode' => ['required','string',Rule::in(array_keys($paymentModes)),],
-            'absolute_discount' => 'nullable|numeric|min:0', 
-            'total_paid' => 'nullable|numeric|min:0',        
-            'updated_at' => 'nullable|date_format:Y-m-d H:i:s', 
-        ]);
-    } catch (\Illuminate\Validation\ValidationException $e) {
-        Log::error('Validation failed', ['errors' => $e->errors()]);
-        return response()->json([
-            'message' => 'Validation failed',
-            'errors' => $e->errors()
-        ], 422);
-    }
-
-    $cid = (int)$request->cid;
-    $productIds = array_column($request->products, 'product_id');
-
-    // Fetch current stock for all products
-    $stocks = DB::table('products as p')
-        ->whereIn('p.id', $productIds)
-        ->select([
-            'p.id',
-            'p.name',
-            DB::raw("(
-                SELECT COALESCE(SUM(pi.quantity), 0)
-                FROM purchases pur
-                JOIN transaction_purchases tp ON pur.transaction_id = tp.id
-                JOIN purchase_items pi ON pur.id = pi.purchase_id
-                WHERE pur.product_id = p.id AND tp.cid = $cid
-            ) - (
-                SELECT COALESCE(SUM(si.quantity), 0)
-                FROM sales s
-                JOIN transaction_sales ts ON s.transaction_id = ts.id
-                JOIN sales_items si ON s.id = si.sale_id
-                WHERE s.product_id = p.id AND ts.cid = $cid AND ts.id != $transactionId
-            ) + (
-                SELECT COALESCE(SUM(si.quantity), 0)
-                FROM sales s
-                JOIN sales_items si ON s.id = si.sale_id
-                WHERE s.transaction_id = $transactionId AND s.product_id = p.id
-            ) as current_stock")
-        ])
-        ->get()
-        ->keyBy('id');
-
-    // Check stock availability
-    $errors = [];
-    foreach ($request->products as $product) {
-        $productId = $product['product_id'];
-        $requestedQuantity = $product['quantity'];
-
-        if (!isset($stocks[$productId])) {
-            $errors[] = [
-                'product_id' => $productId,
-                'product_name' => 'Unknown',
-                'current_stock' => 0,
-                'requested_stock' => $requestedQuantity
-            ];
-            continue;
-        }
-
-        $stock = $stocks[$productId];
-        $currentStock = $stock->current_stock;
-
-        if ($requestedQuantity > $currentStock) {
-            $errors[] = [
-                'product_id' => $productId,
-                'product_name' => $stock->name,
-                'current_stock' => $currentStock,
-                'requested_stock' => $requestedQuantity
-            ];
-        }
-    }
-
-    if (!empty($errors)) {
-        return response()->json([
-            'message' => 'Stock check failed',
-            'errors' => $errors
-        ], 422);
-    }
-
-
-    $decodedPaymentMode = $paymentModes[$request->payment_mode];
-
-    if (!$decodedPaymentMode) {
-        return response()->json([
-            'message' => 'Invalid payment mode',
-            'errors' => ['payment_mode' => ['The selected payment mode is invalid.']],
-        ], 422);
-    }
-    // Start transaction
-    DB::beginTransaction();
-    try {
-        // Update the TransactionSales record
-        $transaction->update([
-            'cid' => $request->cid,
-            'customer_id' => $request->customer_id,
-            'payment_mode' => $decodedPaymentMode,
-            'updated_at' => $request->updated_at ?? now(),
-            'absolute_discount' => $request->absolute_discount, 
-            'total_paid' => $request->total_paid, 
-        ]);
-        // Fetch existing sales for this transaction
-        $existingSales = Sale::where('transaction_id', $transactionId)->get()->keyBy('product_id');
-        $newProductIds = array_column($request->products, 'product_id');
-
-        // Delete sales that are no longer in the updated product list
-        foreach ($existingSales as $sale) {
-            if (!in_array($sale->product_id, $newProductIds)) {
-                SalesItem::where('sale_id', $sale->id)->delete();
-                $sale->delete();
-                Log::info('Deleted sale', ['sale_id' => $sale->id]);
-            }
-        }
-
-        // Update or create sales and sales items
-        foreach ($request->products as $product) {
-            $productId = $product['product_id'];
-
-            if (isset($existingSales[$productId])) {
-                // Update existing sale
-                $sale = $existingSales[$productId];
-                $salesItem = SalesItem::where('sale_id', $sale->id)->first();
-                $salesItem->update([
-                    'quantity' => $product['quantity'],
-                    'discount' => $product['discount'] ?? 0,
-                    'flat_discount' => $product['flat_discount'] ?? 0, // Flat
-                    'per_item_cost' => $product['per_item_cost'],
-                    'unit_id' => $product['unit_id'],
-                ]);
-                Log::info('Updated sale item', ['sale_id' => $sale->id]);
-            } else {
-                // Create new sale
-                $sale = Sale::create([
-                    'transaction_id' => $transactionId,
-                    'product_id' => $productId,
-                ]);
-                SalesItem::create([
-                    'sale_id' => $sale->id,
-                    'quantity' => $product['quantity'],
-                    'discount' => $product['discount'] ?? 0,
-                    'per_item_cost' => $product['per_item_cost'],
-                    'unit_id' => $product['unit_id'],
-                ]);
-                Log::info('Created new sale', ['sale_id' => $sale->id]);
-            }
-        }
-
-        DB::commit();
-        Log::info('Sale updated successfully', ['transaction_id' => $transactionId]);
-
-        return response()->json([
-            'message' => 'Sale updated successfully',
-            'transaction_id' => $transactionId,
-        ], 200);
-    } catch (\Exception $e) {
-        DB::rollBack();
-        Log::error('Sale update failed', ['error' => $e->getMessage()]);
-        return response()->json([
-            'message' => 'Sale update failed',
-            'error' => $e->getMessage(),
-        ], 500);
-    }
-}
-
-    public function getTransaction($transactionId)
-    {
-        Log::info('Get transaction API endpoint reached', ['transaction_id' => $transactionId]);
-    
-        // Get the authenticated user
-        $user = Auth::user();
-        if (!$user) {
-            return response()->json(['message' => 'Unauthenticated'], 401);
-        }
-    
-        // Restrict to rid 5, 6, 7, 8, 9 only
-        if (!in_array($user->rid, [5, 6, 7, 8, 9])) {
-            return response()->json(['message' => 'Unauthorized to view transaction'], 403);
-        }
-    
-        // Fetch the transaction
-        $transaction = TransactionSales::where('id', $transactionId)
-            ->where('uid', $user->id)
-            ->first();
-    
-        if (!$transaction) {
-            return response()->json(['message' => 'Transaction not found or unauthorized'], 404);
-        }
-    
-        try {
-            // Fetch associated sales and sales items with units
-            $sales = Sale::where('transaction_id', $transactionId)
-                ->with('salesItem.unit')
-                ->get();
-    
-            if ($sales->isEmpty()) {
-                Log::warning("No sales records found for transaction_id: {$transactionId}");
-                return response()->json(['message' => 'No sales records found for this transaction'], 404);
-            }
-    
-            // Fetch customer data directly using customer_id
-            $customer = \App\Models\Customer::where('id', $transaction->customer_id)->first();
-    
-            // Prepare customer data
-            $customerData = $customer ? [
-                'id' => $customer->id,
-                'first_name' => $customer->first_name,
-                'last_name' => $customer->last_name,
-                'email' => $customer->email ?? null,
-                'phone' => $customer->phone ?? null,
-                'gst' => $customer->gst ?? null,
-                'pan' => $customer->pan ?? null,
-                'address' => $customer->address ?? null,
-            ] : null;
-    
-            // Calculate total amount
-            $subTotal = 0;
-            $products = [];
-            foreach ($sales as $sale) {
-                $salesItem = $sale->salesItem;
-                if ($salesItem) {
-                    // $productTotal = $salesItem->quantity * $salesItem->per_item_cost * (1 - $salesItem->discount / 100);
-                    $productTotal = ($salesItem->quantity * $salesItem->per_item_cost * (1 - $salesItem->discount / 100)) - $salesItem->flat_discount;
-                    $subTotal += $productTotal;
-    
-                    $products[] = [
-                        'product_id' => $sale->product_id,
-                        'quantity' => $salesItem->quantity,
-                        'discount' => $salesItem->discount,
-                        'flat_discount' => $salesItem->flat_discount,
-                        'per_item_cost' => $salesItem->per_item_cost,
-                        'unit_id' => $salesItem->unit_id,
-                        'unit_name' => $salesItem->unit ? $salesItem->unit->name : 'N/A',
-                    ];
-                }
-            }
-    
-            // Subtract absolute discount from subtotal
-            $absoluteDiscount = $transaction->absolute_discount ?? 0;
-            $totalAmount = $subTotal - $absoluteDiscount;
-    
-            // Construct the response data
-            $paymentModes = [
-                1 => 'debit_card',
-                2 => 'credit_card',
-                3 => 'cash',
-                4 => 'upi',
-                5 => 'bank_transfer',
-                6 => 'phonepe',
-            ];
-            $decodedPaymentMode = $paymentModes[$transaction->payment_mode] ?? 'Unknown';
-            $transactionData = [
-                'transaction_id' => $transaction->id,
-                'absolute_discount' => $transaction->absolute_discount,
-                'total_paid' => $transaction->total_paid,
-                'cid' => $transaction->cid,
-                'customer_id' => $transaction->customer_id,
-                'customer' => $customerData, // Added customer data
-                'payment_mode' =>  $decodedPaymentMode,
-                'created_at' => Carbon::parse($transaction->created_at)->format('Y-m-d H:i:s'),
-                'updated_at' => $transaction->updated_at ? Carbon::parse($transaction->updated_at)->format('Y-m-d H:i:s') : null,
-                'products' => $products,
-                'sub_total' => round($subTotal, 2), // Rounded to 2 decimal places
-                'total_amount' => round($totalAmount, 2), // Rounded to 2 decimal places
-            ];
-    
-            Log::info('Transaction data retrieved successfully', ['transaction_id' => $transactionId]);
-            return response()->json($transactionData, 200);
-    
-        } catch (\Exception $e) {
-            Log::error('Failed to fetch transaction data', [
-                'transaction_id' => $transactionId,
-                'error' => $e->getMessage()
-            ]);
-            return response()->json([
-                'message' => 'Failed to fetch transaction data',
-                'error' => $e->getMessage()
-            ], 500);
-        }
-    }
-
     public function destroy(Request $request, $transactionId)
     {
         Log::info('Delete API endpoint reached', [
@@ -882,6 +816,4 @@ public function update(Request $request, $transactionId)
             ], 500);
         }
     }
-
-
 }

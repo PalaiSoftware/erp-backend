@@ -134,7 +134,6 @@ public function newuser(Request $request)
             'message' => 'You are not allowed to create a new user for your company'
         ], 403);
     }
-
     $validator = Validator::make($request->all(), [
         'name' => 'required|string|max:255',
         'email' => 'required|string|email|max:255|unique:users',

@@ -108,45 +108,6 @@ class CustomerController extends Controller
             'sales_clients' => $salesClients
         ], 200);
     }
-    // public function index(Request $request)
-    // {
-    //     // Get the authenticated user
-    //     $user = Auth::user();
-    //     if (!$user) {
-    //         return response()->json(['message' => 'Unauthorized'], 401);
-    //     }
-    
-    //     // Restrict access to users with rid between 5 and 10 inclusive
-    //     if ($user->rid < 5 || $user->rid > 10) {
-    //         return response()->json(['message' => 'Forbidden'], 403);
-    //     }
-        
-    //     // Validate the request
-    //     $validated = $request->validate([
-    //         'cid' => 'required|integer',
-    //     ]);
-    
-    //     // Retrieve customers where cid matches the provided value
-    //     $customers = Customer::where('cid', $validated['cid'])
-    //                         ->get()
-    //                         ->map(function ($customer) {
-    //                             return [
-    //                                 'id' => $customer->id,
-    //                                 'name' => $customer->first_name . ($customer->last_name ? ' ' . $customer->last_name : ''),
-    //                                 'email' => $customer->email,
-    //                                 'phone' => $customer->phone,
-    //                                 'address' => $customer->address,
-    //                                 'pan' => $customer->pan,
-    //                                 'gst' => $customer->gst,
-    //                             ];
-    //                         });
-    
-    //     return response()->json([
-    //         'message' => 'Customers retrieved successfully',
-    //         'customers' => $customers,
-    //     ], 200);
-    // }
-
     public function index(Request $request)
     {
         // Get the authenticated user

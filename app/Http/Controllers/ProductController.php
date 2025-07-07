@@ -113,8 +113,6 @@ public function index(Request $request)
 
 public function getProductById($product_id)
 {
-    // Force JSON response
-    //$request->headers->set('Accept', 'application/json');
     // Authentication check
     $user = Auth::user();
     if (!$user) {
@@ -156,95 +154,6 @@ public function getProductById($product_id)
         'product' => $product,
     ], 200);
 }
-//     public function update(Request $request, $id)
-//         {
-//             // Authentication and authorization checks
-//                 $user = Auth::user();
-//                 if (!$user) {
-//                     return response()->json(['message' => 'Unauthorized'], 401);
-//                 }
-//                 if (!in_array($user->rid, [5, 6, 7, 8])) {
-//                     return response()->json(['message' => 'Forbidden'], 403);
-//                 }
-
-//                 // Validate the request
-//                 $validated = $request->validate([
-//                     'name' => 'required|string|max:255',
-//                     'description' => 'nullable|string',
-//                     'category_id' => 'required|integer|exists:categories,id',
-//                     'hscode' => 'nullable|string|max:255',
-//                     'uid' => 'required|integer',
-//                     'cid' => 'required|integer',
-//                     'unit_id'=> 'nullable|integer',
-//                     'sale_discount_percent' => 'nullable|numeric|min:0|max:100',
-//                     'sale_discount_flat' => 'nullable|numeric|min:0',
-//                     'selling_price' => 'nullable|numeric|min:0',
-//                     'purchase_discount_percent' => 'nullable|numeric|min:0|max:100',
-//                     'purchase_discount_flat' => 'nullable|numeric|min:0',
-//                     'purchase_price' => 'nullable|numeric|min:0',
-//                 ]);
-
-//                 // Find the product
-//                 $product = Product::find($id);
-//                 if (!$product) {
-//                     return response()->json(['message' => 'Product not found'], 404);
-//                 }
-
-//                 // Update the product
-//                 $product->update($validated);
-//                 $product->productValue()->updateOrCreate(
-//                     ['pid' => $product->id], 
-//                     [
-//                         'unit_id' => $validated['unit_id'] ?? 0, 
-//                         'sale_discount_percent' => $validated['sale_discount_percent'] ?? 0,
-//                         'sale_discount_flat' => $validated['sale_discount_flat'] ?? 0,
-//                         'selling_price' => $validated['selling_price'] ?? 0,
-//                         'purchase_discount_percent' => $validated['purchase_discount_percent'] ?? 0,
-//                         'purchase_discount_flat' => $validated['purchase_discount_flat'] ?? 0,
-//                         'purchase_price' => $validated['purchase_price'] ?? 0,
-//                     ]
-//                 );
-//                 // Return response
-//                 return response()->json([
-//                     'message' => 'Product updated successfully',
-//                     'product' => $product
-//                 ], 200);
-// }
-   
-// public function update(Request $request, $id)
-// {
-//     // Authentication and authorization checks
-//     $user = Auth::user();
-//     if (!$user) {
-//         return response()->json(['message' => 'Unauthorized'], 401);
-//     }
-//     if (!in_array($user->rid, [1, 2, 3, 4,5])) {
-//         return response()->json(['message' => 'Forbidden'], 403);
-//     }
-
-//     // Validate the request
-//     $validated = $request->validate([
-//         'name' => 'required|string|max:255',
-//         'category_id' => 'required|integer|exists:categories,id',
-//         'hscode' => 'nullable|string|max:255',
-//     ]);
-
-//     // Find the product
-//     $product = Product::find($id);
-//     if (!$product) {
-//         return response()->json(['message' => 'Product not found'], 404);
-//     }
-
-//     // Update the product
-//     $product->update($validated);
-
-//     // Return response
-//     return response()->json([
-//         'message' => 'Product updated successfully',
-//         'product' => $product
-//     ], 200);
-// }
-
 public function update(Request $request, $id)
 {
     try {

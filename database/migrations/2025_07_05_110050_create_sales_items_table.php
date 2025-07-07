@@ -1,0 +1,30 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up()
+    {
+        Schema::create('sales_items', function (Blueprint $table) {
+            $table->unsignedBigInteger('bid');
+            $table->unsignedBigInteger('pid');
+            $table->decimal('p_price', 12, 2);
+            $table->decimal('s_price', 12, 2);
+            $table->decimal('quantity', 22, 3);
+            $table->bigInteger('unit_id')->unsigned();
+            $table->decimal('dis', 12, 2)->default(0);
+
+            $table->foreign('bid')->references('id')->on('sales_bills')->onDelete('cascade');
+            $table->foreign('unit_id')->references('id')->on('units')->onDelete('restrict');
+
+        });
+    }
+
+    public function down()
+    {
+        Schema::dropIfExists('sales_items');
+    }
+};

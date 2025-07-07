@@ -9,15 +9,25 @@ class SalesItem extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['sale_id', 'quantity', 'discount','flat_discount', 'per_item_cost','unit_id'];
+    protected $table = 'sales_items';
 
-    // Relationship to sale (no foreign key enforced)
+    protected $primaryKey = null; // No primary key
+
+    public $incrementing = false; // No auto-incrementing key
+    public $timestamps = false;
+    protected $fillable = [
+        'bid',
+        'pid',
+        'p_price',
+        's_price',
+        'quantity',
+        'unit_id',
+        'dis',
+    ];
+
+    // Relationship with Unit model
     public function unit()
     {
         return $this->belongsTo(Unit::class, 'unit_id');
-    }
-    public function sale()
-    {
-        return $this->belongsTo(Sale::class, 'sale_id');
     }
 }

@@ -137,72 +137,74 @@ public function getTransactionsByCid(Request $request)
     // Extract uid from the authenticated user
     $uid = $user->id;
 
-    // Restrict access to users with rid between 5 and 10 inclusive
+    // Restrict access to users with rid between 1 and 5 inclusive
     if ($user->rid < 1 || $user->rid > 5) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
-    try {
-        // Validate the request data
-        $request->validate([
-            'cid' => 'required|integer'
-        ]);
-        Log::info('Validation passed successfully for getTransactionsByCid', ['cid' => $request->cid]);
-    } catch (\Illuminate\Validation\ValidationException $e) {
-        Log::error('Validation failed for getTransactionsByCid', [
-            'errors' => $e->errors(),
-            'request_data' => $request->all()
-        ]);
-        return response()->json([
-            'message' => 'Validation failed',
-            'errors' => $e->errors(),
-        ], 422);
-    }
+    // Validate the request data
+    $request->validate([
+        'cid' => 'required|integer'
+    ]);
 
     // Extract cid from the request
     $cid = $request->input('cid');
 
-    // Build the query with the new purchase_bills table
-    $query = DB::table('purchase_bills as pb')
-        ->select(
-            'pb.id as transaction_id',          // Bill ID as transaction ID
-            'pb.bill_name as bill_name ',
-            'pc.name as vendor_name',           // Vendor name from purchase_clients
-            'pb.pcid as vendor_id',             // Vendor ID from purchase_bills
-            'pb.payment_mode',                  // Payment mode integer
-            'pb.updated_at as date',            // Date of the transaction
-            'u.name as purchased_by'            // Name of the user who made the purchase
-        )
-        ->leftJoin('purchase_clients as pc', 'pb.pcid', '=', 'pc.id')  // Join with vendors
-        ->leftJoin('users as u', 'pb.uid', '=', 'u.id')                // Join with users for cid and rid
-        ->where('u.cid', $cid);                                         // Filter by company ID
-
-    // Execute the query
-    $transactions = $query->get();
-
-   // Fetch payment modes from the database
-   $paymentModes = DB::table('payment_modes')->pluck('name', 'id')->toArray();
-
-    // Map payment_mode from integer to string
-    $transactions = $transactions->map(function ($transaction) use ($paymentModes) {
-    $transaction->payment_mode = $paymentModes[$transaction->payment_mode] ?? 'Unknown';
-    return $transaction;
-});
-    // Handle empty results
-    if ($transactions->isEmpty()) {
-        Log::info('No transactions found for cid', ['cid' => $cid]);
-        return response()->json([
-            'status' => 'error',
-            'message' => 'No transactions found for this customer ID'
-        ], 404);
+    // Check if the user belongs to the requested company
+    if ($user->cid != $cid) {
+        return response()->json(['message' => 'Forbidden: You do not have access to this company\'s data'], 403);
     }
 
-    // Return successful response
-    Log::info('Transactions retrieved successfully', ['cid' => $cid, 'count' => $transactions->count()]);
-    return response()->json([
-        'status' => 'success',
-        'data' => $transactions
-    ], 200);
+    try {
+        // Log successful validation
+        Log::info('Validation passed successfully for getTransactionsByCid', ['cid' => $cid]);
+
+        // Build the query with the purchase_bills table
+        $query = DB::table('purchase_bills as pb')
+            ->select(
+                'pb.id as transaction_id',          // Bill ID as transaction ID
+                'pb.bill_name as bill_name',
+                'pc.name as vendor_name',           // Vendor name from purchase_clients
+                'pb.pcid as vendor_id',             // Vendor ID from purchase_bills
+                'pb.payment_mode',                  // Payment mode integer
+                'pb.updated_at as date',            // Date of the transaction
+                'u.name as purchased_by'            // Name of the user who made the purchase
+            )
+            ->leftJoin('purchase_clients as pc', 'pb.pcid', '=', 'pc.id')  // Join with vendors
+            ->leftJoin('users as u', 'pb.uid', '=', 'u.id')                // Join with users
+            ->where('u.cid', $cid);                                         // Filter by company ID
+
+        // Execute the query
+        $transactions = $query->get();
+
+        // Fetch payment modes from the database
+        $paymentModes = DB::table('payment_modes')->pluck('name', 'id')->toArray();
+
+        // Map payment_mode from integer to string
+        $transactions = $transactions->map(function ($transaction) use ($paymentModes) {
+            $transaction->payment_mode = $paymentModes[$transaction->payment_mode] ?? 'Unknown';
+            return $transaction;
+        });
+
+        // Handle empty results
+        if ($transactions->isEmpty()) {
+            Log::info('No transactions found for cid', ['cid' => $cid]);
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No transactions found for this customer ID'
+            ], 404);
+        }
+
+        // Return successful response
+        Log::info('Transactions retrieved successfully', ['cid' => $cid, 'count' => $transactions->count()]);
+        return response()->json([
+            'status' => 'success',
+            'data' => $transactions
+        ], 200);
+    } catch (\Exception $e) {
+        Log::error('Failed to fetch transactions', ['cid' => $cid, 'error' => $e->getMessage()]);
+        return response()->json(['message' => 'Failed to fetch transactions', 'error' => $e->getMessage()], 500);
+    }
 }
 
 public function getPurchaseDetailsByTransaction(Request $request)
@@ -334,6 +336,10 @@ public function getPurchaseWidget(Request $request)
     $cid = $validated['cid'];
     $rid = $user->rid;
     $uid = $user->id;
+     // Check if the user belongs to the requested company
+     if ($user->cid != $cid) {
+        return response()->json(['message' => 'Forbidden: You do not have access to this company\'s data'], 403);
+    }
 
     // Total Purchase Orders
     $purchaseCount = PurchaseBill::join('users', 'purchase_bills.uid', '=', 'users.id')
@@ -429,6 +435,7 @@ public function updateTransactionById(Request $request, $transaction_id)
         // Prepare update data for purchase_bills
         $updateData = [
             'updated_at' => $request->input('updated_at', now()),
+            'created_at' => $request->input('updated_at', now()),
             'bill_name' => $request->input('bill_name', $transaction->bill_name),
             'pcid' => $request->input('vendor_id', $transaction->pcid),
             'payment_mode' => $request->input('payment_mode', $transaction->payment_mode),
