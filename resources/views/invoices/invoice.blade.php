@@ -123,7 +123,6 @@
                 <td class="billing-info" style="text-align: right;">
                     <h4>Billing Details</h4>
                     <p><strong>Invoice Number:</strong> {{ $invoice->number }}</p>
-                    <!-- <p><strong>Bill Date:</strong> {{ $transaction->created_at }}</p> -->
                     <p><strong>Bill Date:</strong> {{ $transaction->updated_at }}</p>
                     <p><strong>Payment Mode:</strong> {{ $payment_mode }}</p>
 
@@ -131,8 +130,8 @@
 
                     <h4>Billed To</h4>
                     @isset($customer)
-                        @if(!is_null($customer->first_name))
-                            <p><strong>Customer Name:</strong> {{ $customer->first_name }} {{ $customer->last_name ? $customer->last_name : '' }}</p>
+                        @if(!is_null($customer->name))
+                            <p><strong>Customer Name:</strong> {{ $customer->name }}</p>
                         @endif
                         @if(!is_null($customer->phone))
                             <p><strong>Phone:</strong> {{ $customer->phone }}</p>
@@ -166,7 +165,6 @@
                     <th>Unit</th>
                     <th>Price/Unit</th>
                     <th>Discount (%)</th>
-                    <th>Flat Discount</th>
 
                     <th>Total</th>
                 </tr>
@@ -180,13 +178,11 @@
                         <td>{{ $item['unit'] }}</td>
                         <td><span class="currency-symbol">Rs. </span> {{ number_format($item['per_item_cost'], 2) }}</td>
                         <td>{{ $item['discount'] }}</td>
-                        <td>{{ $item['flat_discount'] }}</td>
-
                         <td><span class="currency-symbol">Rs.  </span> {{ number_format($item['total'], 2) }}</td>
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="7">No items found for this sale.</td>
+                        <td colspan="6">No items found for this sale.</td>
                     </tr>
                 @endforelse
             </tbody>
@@ -195,12 +191,10 @@
         <!-- Footer Section -->
         <div class="footer-section">
             <p>Extra Discount: <span class="currency-symbol">Rs.</span> {{ number_format($transaction->absolute_discount, 2) }}</p>
-            <p>Paid Amount: <span class="currency-symbol">Rs.</span> {{ number_format($transaction->total_paid, 2) }}</p>
+            <p>Paid Amount: <span class="currency-symbol">Rs.</span> {{ number_format($transaction->paid_amount, 2) }}</p>
 
-            <!-- <p><strong>Total Amount:</strong> <span class="currency-symbol">Rs.</span> {{ number_format($total_amount-$transaction->absolute_discount, 2) }}</p> -->
-            <!-- <p><strong>Due Amount:</strong> <span class="currency-symbol">Rs.</span> {{ number_format($total_amount-$transaction->total_paid, 2) }}</p> -->
             <p><strong>Total Amount:</strong> <span class="currency-symbol">Rs.</span> {{ number_format($total_amount, 2) }}</p>
-            <p><strong>Due Amount:</strong> <span class="currency-symbol">Rs.</span> {{ number_format($total_amount - $transaction->total_paid, 2) }}</p>
+            <p><strong>Due Amount:</strong> <span class="currency-symbol">Rs.</span> {{ number_format($total_amount - $transaction->paid_amount, 2) }}</p>
 
 
         </div>
