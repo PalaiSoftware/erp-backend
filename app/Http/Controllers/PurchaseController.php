@@ -41,11 +41,11 @@ class PurchaseController extends Controller
                 'products.*.product_id' => 'required|integer|exists:products,id',
                 'products.*.quantity' => 'required|numeric|min:0',
                 'products.*.p_price' => 'required|numeric|min:0',
-                'products.*.s_price' => 'required|numeric|min:0',
+                'products.*.s_price' => 'nullable|numeric|min:0',
                 'products.*.unit_id' => 'required|integer|exists:units,id',
                 'products.*.dis' => 'nullable|numeric|min:0|max:100',
                 'vendor_id' => 'required|integer|exists:purchase_clients,id',
-                'bill_name' => 'required|string|max:255',
+                'bill_name' => 'string|nullable|max:255',
                 'payment_mode' => 'required|integer|exists:payment_modes,id',
                 'purchase_date' => 'required|date_format:Y-m-d H:i:s',
                 'absolute_discount' => 'nullable|numeric|min:0',
@@ -62,7 +62,16 @@ class PurchaseController extends Controller
                 'errors' => $e->errors(),
             ], 422);
         }
-
+      // Determine bill_name
+if ($request->filled('bill_name')) {
+    $billName = $request->bill_name;
+} else {
+    $vendor = DB::table('purchase_clients')->where('id', $validated['vendor_id'])->first();
+    $vendorName = $vendor ? $vendor->name : 'Unknown Vendor';
+    $formattedDate = substr($validated['purchase_date'], 0, 10); // Extracts 'Y-m-d'
+    $billName = $vendorName . ' - ' . $formattedDate;
+}
+        
         // Use a transaction to ensure data consistency
         DB::beginTransaction();
         try {
@@ -70,7 +79,7 @@ class PurchaseController extends Controller
 
             // Step 1: Create the purchase bill
             $purchaseBill = PurchaseBill::create([
-                'bill_name' => $validated['bill_name'],
+                'bill_name' => $billName,
                 'pcid' => $validated['vendor_id'],
                 'uid' => $user->id,
                 'payment_mode' => $validated['payment_mode'],
@@ -89,7 +98,7 @@ class PurchaseController extends Controller
                     'bid' => $billId,
                     'pid' => $product['product_id'],
                     'p_price' => $product['p_price'],
-                    's_price' => $product['s_price'],
+                    's_price' => $product['s_price'] ?? 0,
                     'quantity' => $product['quantity'],
                     'unit_id' => $product['unit_id'],
                     'dis' => $product['dis'] ?? 0,
@@ -172,8 +181,8 @@ public function getTransactionsByCid(Request $request)
             )
             ->leftJoin('purchase_clients as pc', 'pb.pcid', '=', 'pc.id')  // Join with vendors
             ->leftJoin('users as u', 'pb.uid', '=', 'u.id')                // Join with users
-            ->where('u.cid', $cid);                                         // Filter by company ID
-
+            ->where('u.cid', $cid)                                   // Filter by company ID
+            ->orderBy('pb.id', 'desc');      
         // Execute the query
         $transactions = $query->get();
 

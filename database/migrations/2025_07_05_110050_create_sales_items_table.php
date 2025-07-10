@@ -11,9 +11,9 @@ return new class extends Migration
         Schema::create('sales_items', function (Blueprint $table) {
             $table->unsignedBigInteger('bid');
             $table->unsignedBigInteger('pid');
-            $table->decimal('p_price', 12, 2);
+            $table->decimal('p_price', 12, 2)->default(0);
             $table->decimal('s_price', 12, 2);
-            $table->decimal('quantity', 22, 3);
+            $table->decimal('quantity', 22, 3)->default(0);
             $table->bigInteger('unit_id')->unsigned();
             $table->decimal('dis', 12, 2)->default(0);
 

@@ -10,7 +10,7 @@ class CreatePurchaseBillsTable extends Migration
     {
         Schema::create('purchase_bills', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->string('bill_name');
+            $table->string('bill_name')->nullable();
             $table->unsignedBigInteger('pcid');
             $table->unsignedBigInteger('uid');
             $table->integer('payment_mode');

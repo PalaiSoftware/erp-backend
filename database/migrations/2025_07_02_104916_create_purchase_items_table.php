@@ -12,8 +12,8 @@ class CreatePurchaseItemsTable extends Migration
             $table->unsignedBigInteger('bid');
             $table->unsignedBigInteger('pid');
             $table->decimal('p_price', 12, 2);
-            $table->decimal('s_price', 12, 2);
-            $table->decimal('quantity', 22, 3);
+            $table->decimal('s_price', 12, 2)->default(0);
+            $table->decimal('quantity', 22, 3)->default(0);
             $table->unsignedBigInteger('unit_id');
             $table->decimal('dis', 12, 2)->default(0);
 

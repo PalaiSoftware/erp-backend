@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('sales_bills', function (Blueprint $table) {
             $table->bigIncrements('id');
-            $table->string('bill_name');
+            $table->string('bill_name')->nullable();
             $table->bigInteger('scid');
             $table->bigInteger('uid');
             $table->integer('payment_mode');

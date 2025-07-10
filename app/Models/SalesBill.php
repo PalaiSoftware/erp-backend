@@ -8,7 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 class SalesBill extends Model
 {
     use HasFactory;
-    protected $fillable = ['bill_name', 'scid', 'uid', 'payment_mode', 'absolute_discount', 'paid_amount'];
+    protected $fillable = ['bill_name', 'scid', 'uid', 'payment_mode', 'absolute_discount', 'paid_amount', 'created_at',
+    'updated_at'];
 
     public function items()
     {

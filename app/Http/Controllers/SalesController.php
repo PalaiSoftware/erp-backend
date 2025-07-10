@@ -45,16 +45,17 @@ class SalesController extends Controller
         // Validate the request data (no 'cid' in the request)
         try {
             $request->validate([
-                'bill_name' => 'required|string',
+                'bill_name' => 'string|nullable|max:255',
                 'customer_id' => 'required|integer|exists:sales_clients,id',
                 'payment_mode' => 'required|integer|exists:payment_modes,id',
                 'absolute_discount' => 'nullable|numeric|min:0',
                 'total_paid' => 'required|numeric|min:0',
+                'sales_date' => 'required|date_format:Y-m-d H:i:s',
                 'products' => 'required|array',
                 'products.*.product_id' => 'required|integer|exists:products,id',
                 'products.*.quantity' => 'required|numeric|min:0',
                 'products.*.discount' => 'nullable|numeric|min:0',
-                'products.*.p_price' => 'required|numeric|min:0', // Added p_price
+                'products.*.p_price' => 'nullable|numeric|min:0', // Added p_price
                 'products.*.s_price' => 'required|numeric|min:0', // Replaced per_item_cost with s_price
                 'products.*.unit_id' => 'required|integer|exists:units,id',
             ]);
@@ -64,6 +65,15 @@ class SalesController extends Controller
                 'message' => 'Validation failed',
                 'errors' => $e->errors()
             ], 422);
+        }
+        // Determine bill_name
+        if ($request->has('bill_name')) {
+            $billName = $request->bill_name;
+        } else {
+            $customer = DB::table('sales_clients')->where('id', $request->customer_id)->first();
+            $customerName = $customer->name;
+            $formattedDate = Carbon::parse($request->sales_date)->format('Y-m-d');
+            $billName = $customerName . ' - ' . $formattedDate;
         }
 
         // Extract product IDs from the request
@@ -128,14 +138,17 @@ class SalesController extends Controller
 
         // Proceed with the transaction if all stock checks pass
         DB::beginTransaction();
-        try {
+        try { 
+            $salesDate = $request['sales_date'];
             $salesBill = SalesBill::create([
-                'bill_name' => $request->bill_name,
+                'bill_name' => $billName,
                 'scid' => $request->customer_id,
                 'uid' => $user->id,
                 'payment_mode' => $request->payment_mode,
                 'absolute_discount' => $request->absolute_discount ?? 0,
                 'paid_amount' => $request->total_paid,
+                'created_at' => $salesDate,
+                'updated_at' => $salesDate,
             ]);
             $billId = $salesBill->id;
             Log::info('Created sales bill', ['bill_id' => $billId]);
@@ -158,7 +171,7 @@ class SalesController extends Controller
                 SalesItem::create([
                     'bid' => $billId,
                     'pid' => $productId,
-                    'p_price' => $product['p_price'], // Use p_price from request
+                    'p_price' => $product['p_price'] ?? 0, // Use p_price from request
                     's_price' => $product['s_price'], // Use s_price from request
                     'quantity' => $product['quantity'],
                     'unit_id' => $product['unit_id'],
@@ -216,8 +229,8 @@ class SalesController extends Controller
             )
             ->leftJoin('sales_clients as sc', 'sb.scid', '=', 'sc.id')  // Join with vendors
             ->leftJoin('users as u', 'sb.uid', '=', 'u.id')                // Join with users
-            ->where('u.cid', $cid);                                         // Filter by company ID
-
+            ->where('u.cid', $cid)                                         // Filter by company ID
+            ->orderBy('sb.id', 'desc');
         // Execute the query
         $transactions = $query->get();
 
