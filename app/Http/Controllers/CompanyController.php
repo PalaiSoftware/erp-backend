@@ -41,7 +41,7 @@ class CompanyController extends Controller
                 return response()->json(['message' => 'Unauthorized. Token invalid or missing.'], 401);
             }
 
-            if (!in_array($user->rid, [1,2,3,4])) {
+            if (!in_array($user->rid, [1,2])) {
                return response()->json(['message' => 'Unauthorized to get all companies'], 403);
             }
 

@@ -140,7 +140,7 @@ public function newuser(Request $request)
         'mobile' => 'required|string|max:255',
         'country' => 'required|string|max:255',
         'password' => 'required|string|min:6',
-        'rid' => 'required|integer|between:2,5',
+        'rid' => 'required|integer|between:1,5',
     ]);
 
     if ($validator->fails()) {
@@ -214,6 +214,11 @@ public function getUsersByRole(Request $request)
 
     // Get the cid from the request
     $cid = $request->input('cid');
+
+    // Check if the user belongs to the requested company
+    if ( $currentUser->cid != $cid) {
+        return response()->json(['message' => 'Forbidden: You do not have access to this company\'s data'], 403);
+    }
 
       // Fetch users with rid greater than the current user's rid, within the same company
       // No filter on 'blocked' to include both blocked and unblocked users
@@ -349,8 +354,8 @@ public function UserPromoteDemote(Request $request)
         ], 403);
     }
 
-    // Prevent promoting to equal or higher roles than current user (except for rid=1)
-    if ($currentUser->rid > 1 && $request->rid <= $currentUser->rid) {
+    // Yeh modified condition hai
+    if ($request->rid <= $currentUser->rid) {
         return response()->json([
             'message' => 'You cannot set a role equal to or higher than yours'
         ], 400);

@@ -142,6 +142,13 @@ public function index(Request $request)
         $validated = $request->validate([
             'cid' => 'required|integer',
         ]);
+        // Extract the validated 'cid' for clarity (optional but improves readability)
+        $cid = $validated['cid'];
+
+         // Check if the user belongs to the requested company
+         if ($user->cid != $cid) {
+            return response()->json(['message' => 'Forbidden: You do not have access to this company\'s data'], 403);
+         }
     
         $purchaseClients = PurchaseClient::where('cid', $validated['cid'])
             ->select(
