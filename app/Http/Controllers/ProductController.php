@@ -35,7 +35,8 @@ class ProductController extends Controller
             'string',
             'max:255',
             function ($attribute, $value, $fail) {
-                if (Product::where('name', $value)->exists()) {
+                // Case-insensitive database check
+                if (Product::whereRaw('LOWER(name) = LOWER(?)', [$value])->exists()) {
                     $fail($value . ' has already been taken.');
                 }
             },
@@ -44,11 +45,14 @@ class ProductController extends Controller
         'products.*.hscode' => 'nullable|string|max:255',
     ]);
 
-    // Check duplicate names in current request
+    // Case-insensitive duplicate check within the request
     $names = collect($validatedData['products'])->pluck('name');
-    if ($names->duplicates()->isNotEmpty()) {
+    $lowercaseNames = $names->map(function ($name) {
+        return strtolower($name);
+    });
+    if ($lowercaseNames->duplicates()->isNotEmpty()) {
         return response()->json([
-            'message' => "Duplicate product names found in the request."
+            'message' => "Duplicate product names found in the request (case-insensitive)."
         ], 422);
     }
 

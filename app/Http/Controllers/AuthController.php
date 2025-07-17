@@ -16,7 +16,18 @@ public function register(Request $request)
 {
     $validator = Validator::make($request->all(), [
         'name' => 'required|string|max:255',
-        'email' => 'required|string|email|max:255|unique:users',
+        // 'email' => 'required|string|email|max:255|unique:users',
+        'email' => [
+            'required',
+            'string',
+            'email',
+            'max:255',
+            function ($attribute, $value, $fail) {
+                if (User::whereRaw('LOWER(email) = LOWER(?)', [strtolower($value)])->exists()) {
+                    $fail('The email has already been taken.');
+                }
+            },
+        ],
         'mobile' => 'required|string|max:255',
         'country' => 'required|string|max:255',
         'password' => 'required|string|min:6',
@@ -136,7 +147,17 @@ public function newuser(Request $request)
     }
     $validator = Validator::make($request->all(), [
         'name' => 'required|string|max:255',
-        'email' => 'required|string|email|max:255|unique:users',
+        'email' => [
+            'required',
+            'string',
+            'email',
+            'max:255',
+            function ($attribute, $value, $fail) {
+                if (User::whereRaw('LOWER(email) = LOWER(?)', [strtolower($value)])->exists()) {
+                    $fail('The email has already been taken.');
+                }
+            },
+        ],
         'mobile' => 'required|string|max:255',
         'country' => 'required|string|max:255',
         'password' => 'required|string|min:6',

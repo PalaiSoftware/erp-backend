@@ -37,7 +37,9 @@ class VendorController extends Controller
                 'string',
                 'max:255',
                 function ($attribute, $value, $fail) use ($request) {
-                    if (PurchaseClient::where('name', $value)->where('cid', $request->input('cid'))->exists()) {
+                    if (PurchaseClient::whereRaw('LOWER(name) = LOWER(?)', [$value])
+                        ->where('cid', $request->input('cid'))
+                        ->exists()) {
                         $fail($value . ' has already been taken for this company.');
                     }
                 },
