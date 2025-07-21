@@ -44,6 +44,7 @@ class PurchaseController extends Controller
                 'products.*.s_price' => 'nullable|numeric|min:0',
                 'products.*.unit_id' => 'required|integer|exists:units,id',
                 'products.*.dis' => 'nullable|numeric|min:0|max:100',
+                'products.*.gst' => 'nullable|numeric|min:0', // Added GST validation
                 'vendor_id' => 'required|integer|exists:purchase_clients,id',
                 'bill_name' => 'string|nullable|max:255',
                 'payment_mode' => 'required|integer|exists:payment_modes,id',
@@ -102,6 +103,7 @@ if ($request->filled('bill_name')) {
                     'quantity' => $product['quantity'],
                     'unit_id' => $product['unit_id'],
                     'dis' => $product['dis'] ?? 0,
+                    'gst' => $product['gst'] ?? 0, // Added GST to purchase item
                     'created_at' => $purchaseDate,
                     'updated_at' => $purchaseDate,
                 ]);
@@ -111,6 +113,7 @@ if ($request->filled('bill_name')) {
                     'quantity' => $product['quantity'],
                     'unit_id' => $product['unit_id'],
                     'dis' => $product['dis'] ?? 0,
+                    'gst' => $product['gst'] ?? 0, 
                 ]);
             }
 
@@ -271,10 +274,11 @@ public function getPurchaseDetailsByTransaction(Request $request)
             'pi.s_price as selling_price',
             'pi.p_price as per_item_cost',
             'pi.dis as discount',
+            'pi.gst as gst',
             'pi.quantity',
             'pi.unit_id',
             'u.name as unit_name',
-            DB::raw('ROUND(pi.quantity * (pi.p_price * (1 - COALESCE(pi.dis, 0)/100)), 2) AS per_product_total')
+            DB::raw('ROUND(pi.quantity * (pi.p_price * (1 - COALESCE(pi.dis, 0)/100) * (1 + COALESCE(pi.gst, 0)/100)), 2) AS per_product_total')
         )
         ->where('pi.bid', $transactionId)
         ->get();
@@ -369,7 +373,7 @@ public function getPurchaseWidget(Request $request)
             ->join('users', 'purchase_bills.uid', '=', 'users.id')
             ->selectRaw('
                 purchase_bills.id,
-                SUM(purchase_items.quantity * purchase_items.p_price * (1 - COALESCE(purchase_items.dis, 0) / 100)) AS transaction_total,
+               SUM(purchase_items.quantity * purchase_items.p_price * (1 - COALESCE(purchase_items.dis, 0) / 100) * (1 + COALESCE(purchase_items.gst, 0) / 100)) AS transaction_total,
                 MAX(purchase_bills.absolute_discount) AS absolute_discount
             ')
             ->where('users.cid', $cid)
@@ -412,6 +416,7 @@ public function updateTransactionById(Request $request, $transaction_id)
             'products.*.s_price' => 'required_with:products|numeric|min:0',
             'products.*.unit_id' => 'required_with:products|integer|exists:units,id',
             'products.*.dis' => 'nullable|numeric|min:0|max:100',
+            'products.*.gst' => 'nullable|numeric|min:0', // Added GST validation
             'updated_at' => 'nullable|date_format:Y-m-d H:i:s',
             'absolute_discount' => 'nullable|numeric|min:0',
             'set_paid_amount' => 'nullable|numeric|min:0',
@@ -495,6 +500,7 @@ public function updateTransactionById(Request $request, $transaction_id)
                             'quantity' => $product['quantity'],
                             'unit_id' => $product['unit_id'],
                             'dis' => $product['dis'] ?? $product['discount'] ?? 0,
+                            'gst' => $product['gst'] ?? $product['gst'] ?? 0,
                         ]);
                 } else {
                     // Insert new item
@@ -506,6 +512,7 @@ public function updateTransactionById(Request $request, $transaction_id)
                         'quantity' => $product['quantity'],
                         'unit_id' => $product['unit_id'],
                         'dis' => $product['dis'] ?? $product['discount'] ?? 0,
+                        'gst' => $product['gst'] ?? $product['gst'] ?? 0,
                     ]);
                 }
             }

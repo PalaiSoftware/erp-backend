@@ -58,6 +58,7 @@ class SalesController extends Controller
                 'products.*.p_price' => 'nullable|numeric|min:0', // Added p_price
                 'products.*.s_price' => 'required|numeric|min:0', // Replaced per_item_cost with s_price
                 'products.*.unit_id' => 'required|integer|exists:units,id',
+                'products.*.gst' => 'nullable|numeric|min:0', // Added GST validation
             ]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             Log::error('Validation failed', ['errors' => $e->errors()]);
@@ -176,6 +177,7 @@ class SalesController extends Controller
                     'quantity' => $product['quantity'],
                     'unit_id' => $product['unit_id'],
                     'dis' => $product['discount'] ?? 0,
+                    'gst' => $product['gst'] ?? 0,
                 ]);
             }
 
@@ -305,10 +307,11 @@ public function getTransaction($transactionId)
             'si.s_price as s_price',
             'si.p_price as p_price',
             'si.dis as discount',
+            'si.gst',
             'si.quantity',
             'si.unit_id',
             'u.name as unit_name',
-            DB::raw('ROUND(si.quantity * (si.s_price * (1 - COALESCE(si.dis, 0)/100)), 2) AS per_product_total')
+            DB::raw('ROUND(si.quantity * (si.s_price * (1 - COALESCE(si.dis, 0)/100) * (1 + COALESCE(si.gst, 0)/100)), 2) AS per_product_total')
         )
         ->where('si.bid', $transactionId)
         ->get();
@@ -390,6 +393,7 @@ public function update(Request $request, $transactionId)
             'products.*.s_price' => 'required_with:products|numeric|min:0',
             'products.*.unit_id' => 'required_with:products|integer|exists:units,id',
             'products.*.dis' => 'nullable|numeric|min:0|max:100',
+            'products.*.gst' => 'nullable|numeric|min:0', // Added GST validation
             'absolute_discount' => 'nullable|numeric|min:0',
             'set_paid_amount' => 'nullable|numeric|min:0',
             'updated_at' => 'nullable|date_format:Y-m-d H:i:s',
@@ -472,6 +476,7 @@ public function update(Request $request, $transactionId)
                             'quantity' => $product['quantity'],
                             'unit_id' => $product['unit_id'],
                             'dis' => $product['dis'] ?? 0,
+                            'gst' => $product['gst'] ?? 0,
                         ]);
                 } else {
                     // Insert new item
@@ -483,6 +488,7 @@ public function update(Request $request, $transactionId)
                         'quantity' => $product['quantity'],
                         'unit_id' => $product['unit_id'],
                         'dis' => $product['dis'] ?? 0,
+                        'gst' => $product['gst'] ?? 0,
                     ]);
                 }
             }
@@ -534,7 +540,7 @@ public function getTotalSaleAmount($cid)
             ->select('sb.id')
             ->selectRaw('
                 SUM(
-                    si.quantity * si.s_price * (1 - si.dis / 100)
+                 si.quantity * si.s_price * (1 - COALESCE(si.dis, 0) / 100) * (1 + COALESCE(si.gst, 0) / 100)
                 ) as item_total
             ')
             ->selectRaw('sb.absolute_discount')
@@ -764,13 +770,13 @@ if (!$company) {
 
             if ($salesItem) {
                 // Calculate item total without flat_discount
-                $itemTotal = $salesItem->quantity * ($salesItem->s_price * (1 - $salesItem->dis / 100));
-                $items[] = [
+                $itemTotal = $salesItem->quantity * ($salesItem->s_price * (1 - ($salesItem->dis ?? 0) / 100) * (1 + ($salesItem->gst ?? 0) / 100));                $items[] = [
                     'product_name' => $product ? $product->name : 'Unknown Product',
                     'quantity' => $salesItem->quantity,
                     'unit' => $salesItem->unit ? $salesItem->unit->name : 'N/A',
                     'per_item_cost' => $salesItem->s_price,
                     'discount' => $salesItem->dis,
+                    'gst' => $salesItem->gst ?? 0, // Added GST to items array
                     'total' => $itemTotal,
                 ];
                 $totalAmount += $itemTotal;

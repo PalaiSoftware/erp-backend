@@ -20,6 +20,7 @@ class PurchaseItem extends Model
         'quantity',
         'unit_id',
         'dis',
+        'gst', // Added gst to fillable array
     ];
 
     // Relationship with Unit model

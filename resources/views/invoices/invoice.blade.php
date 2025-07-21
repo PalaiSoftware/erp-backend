@@ -165,7 +165,7 @@
                     <th>Unit</th>
                     <th>Price/Unit</th>
                     <th>Discount (%)</th>
-
+                    <th>GST (%)</th>
                     <th>Total</th>
                 </tr>
             </thead>
@@ -178,11 +178,12 @@
                         <td>{{ $item['unit'] }}</td>
                         <td><span class="currency-symbol">Rs. </span> {{ number_format($item['per_item_cost'], 2) }}</td>
                         <td>{{ $item['discount'] }}</td>
+                        <td>{{ $item['gst'] }}</td>
                         <td><span class="currency-symbol">Rs.  </span> {{ number_format($item['total'], 2) }}</td>
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="6">No items found for this sale.</td>
+                        <td colspan="7">No items found for this sale.</td>
                     </tr>
                 @endforelse
             </tbody>
