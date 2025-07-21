@@ -770,7 +770,8 @@ if (!$company) {
 
             if ($salesItem) {
                 // Calculate item total without flat_discount
-                $itemTotal = $salesItem->quantity * ($salesItem->s_price * (1 - ($salesItem->dis ?? 0) / 100) * (1 + ($salesItem->gst ?? 0) / 100));                $items[] = [
+                $itemTotal = $salesItem->quantity * ($salesItem->s_price * (1 - ($salesItem->dis ?? 0) / 100) * (1 + ($salesItem->gst ?? 0) / 100));  
+                $gstTotal = $salesItem->quantity * $salesItem->s_price * (($salesItem->gst ?? 0) / 100);              $items[] = [
                     'product_name' => $product ? $product->name : 'Unknown Product',
                     'quantity' => $salesItem->quantity,
                     'unit' => $salesItem->unit ? $salesItem->unit->name : 'N/A',
@@ -778,6 +779,7 @@ if (!$company) {
                     'discount' => $salesItem->dis,
                     'gst' => $salesItem->gst ?? 0, // Added GST to items array
                     'total' => $itemTotal,
+                    'gst_amount'=> $gstTotal,
                 ];
                 $totalAmount += $itemTotal;
             }
@@ -785,18 +787,18 @@ if (!$company) {
 
         Log::info('Invoice items prepared', ['items' => $items, 'total_amount' => $totalAmount]);
 
-        // Apply global absolute discount
-        $absoluteDiscount = $transaction->absolute_discount ?? 0;
-        $totalAmount -= $absoluteDiscount;
-
-        // Calculate due amount
-        $dueAmount = max(0, $totalAmount - $transaction->paid_amount);
+       // Apply global absolute discount
+       $absoluteDiscount = $transaction->absolute_discount ?? 0;
+       $payableAmount = $totalAmount - $absoluteDiscount; // Calculate payable_amount
+       $paidAmount = $transaction->paid_amount ?? 0; // Fetch paid_amount
+       $dueAmount = max(0, $payableAmount - $paidAmount); // Calculate due_amount
 
         Log::info('Final invoice totals', [
             'total_amount' => $totalAmount,
             'absolute_discount' => $absoluteDiscount,
-            'total_paid' => $transaction->paid_amount,
-            'due_amount' => $dueAmount
+            'payable_amount' => $payableAmount,
+            'paid_amount' => $paidAmount,
+            'due_amount' => $dueAmount,
         ]);
 
         $data = [
@@ -804,6 +806,9 @@ if (!$company) {
             'transaction' => $transaction,
             'items' => $items,
             'total_amount' => $totalAmount,
+            'absolute_discount' => $absoluteDiscount,
+            'payable_amount' => $payableAmount,
+            'paid_amount' => $paidAmount,
             'due_amount' => $dueAmount,
             'company' => $company,
             'customer' => $customer,
