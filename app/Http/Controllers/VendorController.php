@@ -49,8 +49,8 @@ class VendorController extends Controller
             'address' => 'nullable|string',
             'gst_no' => 'nullable|string|max:255',
             'pan' => 'nullable|string|max:255',
-            'uid' => 'nullable|integer',
-            'cid' => 'required|integer',
+            // 'uid' => 'nullable|integer',
+            // 'cid' => 'required|integer',
         ]);
     } catch (ValidationException $e) {
         // Customize validation error response
@@ -68,8 +68,8 @@ class VendorController extends Controller
         'address' => $validated['address'] ?? null,
         'gst_no' => $validated['gst_no'] ?? null,
         'pan' => $validated['pan'] ?? null,
-        'uid' => $validated['uid'] ?? null,
-        'cid' => $validated['cid'],
+        'uid' => $user->id,
+        'cid' => $user->cid,
     ]);
 
     return response()->json([

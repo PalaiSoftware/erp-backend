@@ -165,6 +165,8 @@
                     <th>Unit</th>
                     <th>Price/Unit</th>
                     <th>Discount (%)</th>
+                    <th>Net Price</th>
+                    <th>Subtotal (excl. GST)</th>
                     <th>GST (%)</th>
                     <th>GST Amount</th>
                     <th>Total</th>
@@ -179,13 +181,15 @@
                         <td>{{ $item['unit'] }}</td>
                         <td><span class="currency-symbol">Rs. </span> {{ number_format($item['per_item_cost'], 2) }}</td>
                         <td>{{ $item['discount'] }}</td>
+                        <td><span class="currency-symbol">Rs. </span> {{ number_format($item['net_price'], 2) }}</td>
+                        <td><span class="currency-symbol">Rs. </span> {{ number_format($item['per_product_total'], 2) }}</td>
                         <td>{{ $item['gst'] }}</td>
                         <td><span class="currency-symbol">Rs.</span> {{ number_format($item['gst_amount'], 2) }}</td>
                         <td><span class="currency-symbol">Rs.  </span> {{ number_format($item['total'], 2) }}</td>
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="9">No items found for this sale.</td>
+                        <td colspan="11">No items found for this sale.</td>
                     </tr>
                 @endforelse
             </tbody>
@@ -193,6 +197,8 @@
 
         <!-- Footer Section -->
         <div class="footer-section">
+            <p><strong>Total Net Value (excl. GST):</strong> <span class="currency-symbol">Rs.</span> {{ number_format($total_item_net_value, 2) }}</p>
+            <p><strong>Total GST Amount:</strong> <span class="currency-symbol">Rs.</span> {{ number_format($total_gst_amount, 2) }}</p>
             <p><strong>Total Amount:</strong> <span class="currency-symbol">Rs.</span> {{ number_format($total_amount, 2) }}</p>
             <p>Extra Discount: <span class="currency-symbol">Rs.</span> {{ number_format($absolute_discount, 2) }}</p>
             <p><strong>Payable Amount:</strong> <span class="currency-symbol">Rs.</span> {{ number_format($payable_amount, 2) }}</p>

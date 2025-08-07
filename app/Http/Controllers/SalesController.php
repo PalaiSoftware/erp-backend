@@ -232,7 +232,7 @@ class SalesController extends Controller
             ->leftJoin('sales_clients as sc', 'sb.scid', '=', 'sc.id')  // Join with vendors
             ->leftJoin('users as u', 'sb.uid', '=', 'u.id')                // Join with users
             ->where('u.cid', $cid)                                         // Filter by company ID
-            ->orderBy('sb.id', 'desc');
+            ->orderBy('sb.updated_at', 'desc');
         // Execute the query
         $transactions = $query->get();
 
@@ -266,6 +266,107 @@ class SalesController extends Controller
     }
 }
   
+// public function getTransaction($transactionId)
+// {
+//     // Authentication check
+//     $user = Auth::user();
+//     if (!$user) {
+//         return response()->json(['message' => 'Unauthorized'], 401);
+//     }
+
+//     // Role-based access control
+//     if ($user->rid < 1 || $user->rid > 5) {
+//         return response()->json(['message' => 'Forbidden'], 403);
+//     }
+
+//     // Fetch transaction details
+//     $transaction = DB::table('sales_bills')
+//         ->where('id', $transactionId)
+//         ->select('id', 'bill_name', 'scid', 'uid', 'payment_mode', 'absolute_discount', 'paid_amount', 'updated_at')
+//         ->first();
+
+//     if (!$transaction) {
+//         return response()->json([
+//             'status' => 'error',
+//             'message' => 'Transaction not found'
+//         ], 404);
+//     }
+
+//     // Default values for null fields
+//     $absoluteDiscount = $transaction->absolute_discount ?? 0;
+//     $paidAmount = $transaction->paid_amount ?? 0;
+
+//     // Fetch purchase items (products) with unit name
+//     $purchaseDetails = DB::table('sales_items as si')
+//         ->join('products as prod', 'si.pid', '=', 'prod.id')
+//         ->join('sales_bills as sb', 'si.bid', '=', 'sb.id')
+//         ->join('units as u', 'si.unit_id', '=', 'u.id')
+//         ->select(
+//             'si.pid as product_id',
+//             'prod.name as product_name',
+//             'si.s_price as s_price',
+//             'si.p_price as p_price',
+//             'si.dis as discount',
+//             'si.gst',
+//             'si.quantity',
+//             'si.unit_id',
+//             'u.name as unit_name',          
+//             DB::raw('ROUND(si.quantity * (si.s_price * (1 - COALESCE(si.dis, 0)/100) * (1 + COALESCE(si.gst, 0)/100)), 2) AS per_product_total')
+//         )
+//         ->where('si.bid', $transactionId)
+//         ->get();
+
+//     if ($purchaseDetails->isEmpty()) {
+//         return response()->json([
+//             'status' => 'error',
+//             'message' => 'No sales details found for this transaction ID'
+//         ], 404);
+//     }
+
+//     // Fetch payment modes
+//     $paymentModes = DB::table('payment_modes')->pluck('name', 'id')->toArray();
+
+//     // Map payment_mode for transaction
+//     $paymentModeName = $paymentModes[$transaction->payment_mode] ?? 'Unknown';
+
+//     // Calculate financials
+//     $totalAmount = $purchaseDetails->sum('per_product_total');
+//     $payableAmount = $totalAmount - $absoluteDiscount;
+//     $dueAmount = max(0, $payableAmount - $paidAmount);
+
+//     // Fetch vendor details
+//     $customer = DB::table('sales_clients')
+//         ->where('id', $transaction->scid) // Fixed from pcid to scid
+//         ->select('name as customer_name')
+//         ->first();
+
+//     // Fetch user details
+//     $userDetail = DB::table('users')
+//         ->where('id', $transaction->uid)
+//         ->select('name')
+//         ->first();
+
+//     // Return response
+//     return response()->json([
+//         'status' => 'success',
+//         'data' => [
+//             'products' => $purchaseDetails,
+//             'transaction_id' => $transaction->id,
+//             'bill_name' => $transaction->bill_name,
+//             'sales_by' => $userDetail ? $userDetail->name : 'Unknown',
+//             'customer_name' => $customer ? $customer->customer_name : 'Unknown',
+//             'customer_id' => $transaction->scid,
+//             'payment_mode' => $paymentModeName,
+//             'date' => $transaction->updated_at,
+//             'total_amount' => round($totalAmount, 2),
+//             'absolute_discount' => round($absoluteDiscount, 2),
+//             'payable_amount' => round($payableAmount, 2),
+//             'paid_amount' => round($paidAmount, 2),
+//             'due_amount' => round($dueAmount, 2),
+//         ]
+//     ], 200);
+// }
+
 public function getTransaction($transactionId)
 {
     // Authentication check
@@ -296,47 +397,49 @@ public function getTransaction($transactionId)
     $absoluteDiscount = $transaction->absolute_discount ?? 0;
     $paidAmount = $transaction->paid_amount ?? 0;
 
-    // Fetch purchase items (products) with unit name
-    $purchaseDetails = DB::table('sales_items as si')
+    // Fetch sales items with calculated fields
+    $salesDetails = DB::table('sales_items as si')
         ->join('products as prod', 'si.pid', '=', 'prod.id')
         ->join('sales_bills as sb', 'si.bid', '=', 'sb.id')
         ->join('units as u', 'si.unit_id', '=', 'u.id')
         ->select(
             'si.pid as product_id',
             'prod.name as product_name',
-            'si.s_price as s_price',
-            'si.p_price as p_price',
+            'si.s_price as selling_price',
+            'si.p_price as purchase_price',
             'si.dis as discount',
-            'si.gst',
+            DB::raw('ROUND(si.s_price * (1 - COALESCE(si.dis, 0)/100), 2) AS net_price'),
             'si.quantity',
+            DB::raw('ROUND(si.quantity * si.s_price * (1 - COALESCE(si.dis, 0)/100), 2) AS per_product_total'),
+            'si.gst as gst',
+            DB::raw('ROUND((si.quantity * si.s_price * (1 - COALESCE(si.dis, 0)/100)) * (COALESCE(si.gst, 0)/100), 2) AS gst_amount'),
             'si.unit_id',
-            'u.name as unit_name',
-            DB::raw('ROUND(si.quantity * (si.s_price * (1 - COALESCE(si.dis, 0)/100) * (1 + COALESCE(si.gst, 0)/100)), 2) AS per_product_total')
+            'u.name as unit_name'
         )
         ->where('si.bid', $transactionId)
         ->get();
 
-    if ($purchaseDetails->isEmpty()) {
+    if ($salesDetails->isEmpty()) {
         return response()->json([
             'status' => 'error',
             'message' => 'No sales details found for this transaction ID'
         ], 404);
     }
 
-    // Fetch payment modes
-    $paymentModes = DB::table('payment_modes')->pluck('name', 'id')->toArray();
-
-    // Map payment_mode for transaction
-    $paymentModeName = $paymentModes[$transaction->payment_mode] ?? 'Unknown';
-
-    // Calculate financials
-    $totalAmount = $purchaseDetails->sum('per_product_total');
+    // Calculate financial totals
+    $totalItemNetValue = $salesDetails->sum('per_product_total');
+    $totalGstAmount = $salesDetails->sum('gst_amount');
+    $totalAmount = $totalItemNetValue + $totalGstAmount;
     $payableAmount = $totalAmount - $absoluteDiscount;
     $dueAmount = max(0, $payableAmount - $paidAmount);
 
-    // Fetch vendor details
+    // Fetch payment modes
+    $paymentModes = DB::table('payment_modes')->pluck('name', 'id')->toArray();
+    $paymentModeName = $paymentModes[$transaction->payment_mode] ?? 'Unknown';
+
+    // Fetch customer details
     $customer = DB::table('sales_clients')
-        ->where('id', $transaction->scid) // Fixed from pcid to scid
+        ->where('id', $transaction->scid)
         ->select('name as customer_name')
         ->first();
 
@@ -350,7 +453,7 @@ public function getTransaction($transactionId)
     return response()->json([
         'status' => 'success',
         'data' => [
-            'products' => $purchaseDetails,
+            'products' => $salesDetails,
             'transaction_id' => $transaction->id,
             'bill_name' => $transaction->bill_name,
             'sales_by' => $userDetail ? $userDetail->name : 'Unknown',
@@ -358,6 +461,8 @@ public function getTransaction($transactionId)
             'customer_id' => $transaction->scid,
             'payment_mode' => $paymentModeName,
             'date' => $transaction->updated_at,
+            'total_item_net_value' => round($totalItemNetValue, 2),
+            'total_gst_amount' => round($totalGstAmount, 2),
             'total_amount' => round($totalAmount, 2),
             'absolute_discount' => round($absoluteDiscount, 2),
             'payable_amount' => round($payableAmount, 2),
@@ -764,29 +869,50 @@ if (!$company) {
 
         $items = [];
         $totalAmount = 0;
+        $totalItemNetValue = 0; // Initialize total item net value
+        $totalGstAmount = 0;    // Initialize total GST amount
         foreach ($sales as $sale) {
             $product = Product::find($sale->pid);
             $salesItem = $sale;
 
+            // 
             if ($salesItem) {
-                // Calculate item total without flat_discount
-                $itemTotal = $salesItem->quantity * ($salesItem->s_price * (1 - ($salesItem->dis ?? 0) / 100) * (1 + ($salesItem->gst ?? 0) / 100));  
-                $gstTotal = $salesItem->quantity * $salesItem->s_price * (($salesItem->gst ?? 0) / 100);              $items[] = [
+                // Calculate net price after discount (excluding GST)
+                $netPrice = $salesItem->s_price * (1 - ($salesItem->dis ?? 0) / 100);
+                // Calculate per product total (without GST)
+                $perProductTotal = $salesItem->quantity * $netPrice;
+                // Calculate GST amount
+                $gstAmount = $perProductTotal * (($salesItem->gst ?? 0) / 100);
+                // Calculate total including GST for the item
+                $itemTotal = $perProductTotal + $gstAmount;
+
+                $items[] = [
                     'product_name' => $product ? $product->name : 'Unknown Product',
                     'quantity' => $salesItem->quantity,
                     'unit' => $salesItem->unit ? $salesItem->unit->name : 'N/A',
                     'per_item_cost' => $salesItem->s_price,
-                    'discount' => $salesItem->dis,
-                    'gst' => $salesItem->gst ?? 0, // Added GST to items array
-                    'total' => $itemTotal,
-                    'gst_amount'=> $gstTotal,
+                    'discount' => $salesItem->dis ?? 0,
+                    'net_price' => round($netPrice, 2),
+                    'per_product_total' => round($perProductTotal, 2),
+                    'gst' => $salesItem->gst ?? 0,
+                    'gst_amount' => round($gstAmount, 2),
+                    'total' => round($itemTotal, 2),
                 ];
-                $totalAmount += $itemTotal;
+
+                // Accumulate totals
+                $totalItemNetValue += $perProductTotal;
+                $totalGstAmount += $gstAmount;
             }
         }
+        // Calculate total amount (net value + GST)
+        $totalAmount = $totalItemNetValue + $totalGstAmount;
 
-        Log::info('Invoice items prepared', ['items' => $items, 'total_amount' => $totalAmount]);
-
+        Log::info('Invoice items prepared', [
+            'items' => $items,
+            'total_item_net_value' => $totalItemNetValue,
+            'total_gst_amount' => $totalGstAmount,
+            'total_amount' => $totalAmount
+        ]);
        // Apply global absolute discount
        $absoluteDiscount = $transaction->absolute_discount ?? 0;
        $payableAmount = $totalAmount - $absoluteDiscount; // Calculate payable_amount
@@ -805,11 +931,13 @@ if (!$company) {
             'invoice' => (object) $invoice,
             'transaction' => $transaction,
             'items' => $items,
-            'total_amount' => $totalAmount,
-            'absolute_discount' => $absoluteDiscount,
-            'payable_amount' => $payableAmount,
-            'paid_amount' => $paidAmount,
-            'due_amount' => $dueAmount,
+            'total_item_net_value' => round($totalItemNetValue, 2),
+            'total_gst_amount' => round($totalGstAmount, 2),
+            'total_amount' => round($totalAmount, 2),
+            'absolute_discount' => round($absoluteDiscount, 2),
+            'payable_amount' => round($payableAmount, 2),
+            'paid_amount' => round($paidAmount, 2),
+            'due_amount' => round($dueAmount, 2),
             'company' => $company,
             'customer' => $customer,
             'userDetails' => $userDetails,
@@ -828,6 +956,207 @@ if (!$company) {
         ]);
         return response()->json(['message' => 'Error generating invoice', 'error' => $e->getMessage()], 500);
     }
+}
+public function destroy(Request $request, $transactionId)
+{
+    Log::info('Delete sales bill endpoint reached', [
+        'bill_id' => $transactionId,
+    ]);
+
+    $user = Auth::user();
+    if (!$user) {
+        return response()->json(['message' => 'Unauthenticated'], 401);
+    }
+
+    // Restrict to roles 5 and 6 only
+    if (!in_array($user->rid, [1,2,3])) {
+        return response()->json(['message' => 'Unauthorized to delete sales bill'], 403);
+    }
+
+    // Check if bill exists and belongs to the user
+    $bill = DB::table('sales_bills')
+        ->where('id', $transactionId)
+        ->where('uid', $user->id)
+        ->first();
+
+    if (!$bill) {
+        return response()->json([
+            'message' => 'Sales bill not found or unauthorized',
+        ], 404);
+    }
+
+    DB::beginTransaction();
+    try {
+        // Delete related sales_items
+        DB::table('sales_items')->where('bid', $transactionId)->delete();
+
+        // Delete the sales bill
+        DB::table('sales_bills')->where('id', $transactionId)->delete();
+
+        DB::commit();
+        Log::info('Sales bill deleted successfully', [
+            'bill_id' => $transactionId,
+        ]);
+
+        return response()->json([
+            'message' => 'Sales bill deleted successfully',
+            'transaction_id' => $transactionId,
+        ], 200);
+    } catch (\Exception $e) {
+        DB::rollBack();
+        Log::error('Failed to delete sales bill', [
+            'bill_id' => $transactionId,
+            'error' => $e->getMessage(),
+        ]);
+
+        return response()->json([
+            'message' => 'Failed to delete sales bill',
+            'error' => $e->getMessage(),
+        ], 500);
+    }
+}
+public function getCustomersWithDues($cid)
+{
+    // Force JSON response
+        $request->headers->set('Accept', 'application/json');
+    $user = Auth::user();
+    if (!$user) {
+        return response()->json(['message' => 'Unauthenticated'], 401);
+    }
+
+    // Restrict to roles 1, 2, and 3 only
+    if (!in_array($user->rid, [1, 2, 3])) {
+        return response()->json(['message' => 'Unauthorized to access customer dues'], 403);
+    }
+
+    // Cast cid to integer
+    $cid = (int) $cid;
+    // Check if the user belongs to the requested company
+    if ($user->cid != $cid) {
+        return response()->json(['message' => 'Forbidden: You do not have access to this company\'s data'], 403);
+    }
+
+    // Check if cid exists in users table
+    if (!DB::table('users')->where('cid', $cid)->exists()) {
+        return response()->json(['message' => 'Invalid cid'], 422);
+    }
+
+    // Log the start of the process
+    Log::info("Fetching customers with dues for cid: {$cid}");
+
+    // Subquery to calculate the total amount per bill
+    $billTotals = DB::table('sales_items')
+        ->select('bid', DB::raw('SUM(s_price * quantity - dis) as total_amount'))
+        ->groupBy('bid');
+
+    // Log that the subquery is prepared
+    Log::info("Bill totals subquery prepared");
+
+    // Main query to get customers with outstanding dues
+    $customersWithDues = DB::table('sales_clients as sc')
+        ->join('sales_bills as sb', 'sc.id', '=', 'sb.scid')
+        ->joinSub($billTotals, 'bt', function ($join) {
+            $join->on('sb.id', '=', 'bt.bid');
+        })
+        ->select(
+            'sc.id as customer_id',
+            'sc.name as customer_name',
+            DB::raw('SUM(bt.total_amount) as total_purchase'),
+            DB::raw('SUM(sb.paid_amount) as total_paid'),
+            DB::raw('SUM(bt.total_amount - sb.paid_amount) as total_due')
+        )
+        ->where('sc.cid', $cid)
+        ->groupBy('sc.id', 'sc.name')
+        ->havingRaw('SUM(bt.total_amount - sb.paid_amount) > 0')
+        ->get();
+
+    // Log the number of customers retrieved
+    Log::info("Customers with dues retrieved", ['count' => $customersWithDues->count()]);
+
+    // Return the result as a JSON response
+    return response()->json($customersWithDues);
+}
+public function getCustomerDues($customer_id)
+{
+    // Check if the user is authenticated
+    $user = Auth::user();
+    if (!$user) {
+        return response()->json(['message' => 'Unauthenticated'], 401);
+    }
+
+    // Restrict to roles 1, 2, and 3 only
+    if (!in_array($user->rid, [1, 2, 3])) {
+        return response()->json(['message' => 'Unauthorized to access customer dues'], 403);
+    }
+
+    // Cast customer_id to integer
+    $customer_id = (int) $customer_id;
+
+    // Check if customer_id exists in sales_clients
+    if (!DB::table('sales_clients')->where('id', $customer_id)->exists()) {
+        return response()->json(['message' => 'Invalid customer_id'], 422);
+    }
+
+    // Log the start of the process
+    Log::info("Fetching dues for customer_id: {$customer_id}");
+
+    // Subquery to calculate the total amount per bill
+    $billTotals = DB::table('sales_items')
+        ->select('bid', DB::raw('SUM(s_price * quantity - dis) as total_amount'))
+        ->groupBy('bid');
+
+    // Main query to get customer details and transactions
+    $customerData = DB::table('sales_clients as sc')
+        ->join('sales_bills as sb', 'sc.id', '=', 'sb.scid')
+        ->joinSub($billTotals, 'bt', function ($join) {
+            $join->on('sb.id', '=', 'bt.bid');
+        })
+        ->select(
+            'sc.id as customer_id',
+            'sc.name as customer_name',
+            DB::raw("TO_CHAR(SUM(bt.total_amount), 'FM999999999.00') as total_purchase"),
+            DB::raw("TO_CHAR(SUM(sb.paid_amount), 'FM999999999.00') as total_paid"),
+            DB::raw("TO_CHAR(SUM(bt.total_amount - sb.paid_amount), 'FM999999999.00') as total_due"),
+            DB::raw("JSON_AGG(
+                JSON_BUILD_OBJECT(
+                    'date', TO_CHAR(sb.updated_at, 'YYYY-MM-DD'),
+                    'purchase', TO_CHAR(ROUND(bt.total_amount::numeric, 2), 'FM999999999.00'),
+                    'paid', TO_CHAR(ROUND(sb.paid_amount::numeric, 2), 'FM999999999.00'),
+                    'due', TO_CHAR(ROUND((bt.total_amount - sb.paid_amount)::numeric, 2), 'FM999999999.00')
+                )
+            ) as transactions")
+        )
+        ->where('sc.id', $customer_id)
+        ->groupBy('sc.id', 'sc.name')
+        ->havingRaw('SUM(bt.total_amount - sb.paid_amount) > 0')
+        ->first();
+
+    // Check if customer has dues
+    if (!$customerData) {
+        return response()->json(['message' => 'No dues found for this customer'], 404);
+    }
+
+    // Parse transactions JSON
+    $transactions = json_decode($customerData->transactions, true);
+
+    // Prepare formatted data
+    $formattedData = [
+        'customer_id' => $customerData->customer_id,
+        'customer_name' => $customerData->customer_name,
+        'total_purchase' => $customerData->total_purchase,
+        'total_paid' => $customerData->total_paid,
+        'total_due' => $customerData->total_due,
+        'transactions' => $transactions,
+    ];
+
+    // Log the result
+    Log::info("Customer dues retrieved", [
+        'customer_id' => $customer_id,
+        'transaction_count' => count($transactions)
+    ]);
+
+    // Return the formatted data as JSON
+    return response()->json($formattedData);
 }
 private function getInvoiceData($transactionId)
 {
@@ -927,63 +1256,4 @@ public function getCustomerStats(Request $request)
     return response()->json($customers);
 }
 
-    public function destroy(Request $request, $transactionId)
-    {
-        Log::info('Delete API endpoint reached', [
-            'transaction_id' => $transactionId,
-        ]);
-    
-        $user = Auth::user();
-        if (!$user) {
-            return response()->json(['message' => 'Unauthenticated'], 401);
-        }
-    
-        if (!in_array($user->rid, [5, 6])) {
-            return response()->json(['message' => 'Unauthorized to delete transaction'], 403);
-        }
-    
-        $transaction = TransactionSales::where('id', $transactionId)
-            ->where('uid', $user->id)
-            ->first();
-    
-        if (!$transaction) {
-            return response()->json(['message' => 'Transaction not found or unauthorized'], 404);
-        }
-    
-        DB::beginTransaction();
-        try {
-            // Delete related SalesItems and Sales
-            $sales = Sale::where('transaction_id', $transactionId)->get();
-    
-            foreach ($sales as $sale) {
-                SalesItem::where('sale_id', $sale->id)->delete();
-                $sale->delete();
-            }
-    
-            // Delete the transaction
-            $transaction->delete();
-    
-            DB::commit();
-    
-            Log::info('Transaction deleted successfully', [
-                'transaction_id' => $transactionId,
-            ]);
-    
-            return response()->json([
-                'message' => 'Transaction deleted successfully',
-                'transaction_id' => $transactionId,
-            ], 200);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Transaction deletion failed', [
-                'error' => $e->getMessage(),
-                'transaction_id' => $transactionId,
-            ]);
-    
-            return response()->json([
-                'message' => 'Transaction deletion failed',
-                'error' => $e->getMessage(),
-            ], 500);
-        }
-    }
 }

@@ -18,7 +18,7 @@ class CreatePurchaseItemsTable extends Migration
             $table->decimal('dis', 12, 2)->default(0);
 
             $table->foreign('bid')->references('id')->on('purchase_bills')->onDelete('cascade');
-            $table->foreign('unit_id')->references('id')->on('units')->onDelete('restrict');
+            //$table->foreign('unit_id')->references('id')->on('units')->onDelete('restrict');
         });
     }
 

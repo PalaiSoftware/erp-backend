@@ -30,7 +30,6 @@ class CustomerController extends Controller
         }
             
         $validated = $request->validate([
-            'cid' => 'required|integer',
             'name' => 'required|string|max:255',
             'email' => 'nullable|email',
             'phone' => 'nullable|string|max:20',
@@ -40,7 +39,7 @@ class CustomerController extends Controller
         ]);
 
         $salesClient = SalesClient::create([
-            'cid' => $validated['cid'],
+            'cid' => $user->cid,
             'uid' => $user->id,
             'name' => $validated['name'],
             'email' => $validated['email'] ?? null,

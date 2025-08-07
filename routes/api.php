@@ -14,6 +14,7 @@ use App\Http\Controllers\HelperController;
 use App\Http\Controllers\LmAuthController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\PaymentController;
+use App\Http\Controllers\ProductInfoController;
 
 
 /*
@@ -77,9 +78,17 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/customers/{customerId}', [CustomerController::class, 'getCustomer']);
     Route::get('/vendor/{vendorId}', [VendorController::class, 'getVendorById']);
     Route::get('/products/{product_id}', [ProductController::class, 'getProductById']);
-    Route::delete('/transaction-sales/{transactionId}', [SalesController::class, 'destroy'])->name('transactions.destroy');
-    Route::delete('/purchase-transactions/{transactionId}', [PurchaseController::class, 'destroy'])->name('purchase-transactions.destroy');
+    Route::delete('/destroy-sales/{transactionId}', [SalesController::class, 'destroy']);
+    Route::delete('/destroy-purchase/{transactionId}', [PurchaseController::class, 'destroy']);
     Route::get('/payment-modes', [PaymentController::class, 'index']);
+    Route::post('/product-info', [ProductInfoController::class, 'store']);
+    Route::get('/product-info/{cid}', [ProductInfoController::class, 'allProductInfo']);
+    Route::get('/product/{pid}', [ProductInfoController::class, 'getProductById']);
+    Route::put('/product-info/{pid}', [ProductInfoController::class, 'updateProductById']);
+    Route::delete('/product-info/{pid}', [ProductInfoController::class, 'destroy']);
+    Route::get('/dues/{cid}', [SalesController::class, 'getCustomersWithDues']);
+    Route::get('/customer/dues/{customer_id}', [SalesController::class, 'getCustomerDues']);
+
 });
 
 Route::get('/units', [HelperController::class, 'index']);

@@ -13,7 +13,7 @@ return new class extends Migration {
             $table->unsignedBigInteger('category_id');
             $table->string('hscode')->nullable();
             $table->timestamps();
-            $table->foreign('category_id')->references('id')->on('categories')->onDelete('restrict');
+            //$table->foreign('category_id')->references('id')->on('categories')->onDelete('restrict');
 
         });
     }

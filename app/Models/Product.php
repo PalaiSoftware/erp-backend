@@ -13,17 +13,17 @@ class Product extends Model
         'name',
         'category_id',
         'hscode',
-        'cid',
+       // 'cid',
     ];
     // Define the relationship with Category
     public function category()
     {
         return $this->belongsTo(Category::class, 'category_id');
     }
-    public function productValue()
-    {
-        return $this->hasOne(ProductValue::class, 'pid');
-    }
+    // public function productValue()
+    // {
+    //     return $this->hasOne(ProductValue::class, 'pid');
+    // }
 
 
 }

@@ -185,7 +185,7 @@ public function getTransactionsByCid(Request $request)
             ->leftJoin('purchase_clients as pc', 'pb.pcid', '=', 'pc.id')  // Join with vendors
             ->leftJoin('users as u', 'pb.uid', '=', 'u.id')                // Join with users
             ->where('u.cid', $cid)                                   // Filter by company ID
-            ->orderBy('pb.id', 'desc');      
+            ->orderBy('pb.updated_at', 'desc');      
         // Execute the query
         $transactions = $query->get();
 
@@ -219,120 +219,239 @@ public function getTransactionsByCid(Request $request)
     }
 }
 
+// public function getPurchaseDetailsByTransaction(Request $request)
+// {
+//     // Authentication check
+//     $user = Auth::user();
+//     if (!$user) {
+//         return response()->json(['message' => 'Unauthorized'], 401);
+//     }
+
+//     // Role-based access control
+//     if ($user->rid < 1 || $user->rid > 5) {
+//         return response()->json(['message' => 'Forbidden'], 403);
+//     }
+
+//     // Request validation
+//     try {
+//         $request->validate([
+//             'transaction_id' => 'required|integer'
+//         ]);
+//     } catch (\Illuminate\Validation\ValidationException $e) {
+//         return response()->json([
+//             'message' => 'Validation failed',
+//             'errors' => $e->errors(),
+//         ], 422);
+//     }
+
+//     $transactionId = $request->input('transaction_id');
+
+//     // Fetch transaction details
+//     $transaction = DB::table('purchase_bills')
+//         ->where('id', $transactionId)
+//         ->select('id', 'bill_name', 'pcid', 'uid', 'payment_mode', 'absolute_discount', 'paid_amount', 'updated_at')
+//         ->first();
+
+//     if (!$transaction) {
+//         return response()->json([
+//             'status' => 'error',
+//             'message' => 'Transaction not found'
+//         ], 404);
+//     }
+
+//     // Default values for null fields
+//     $absoluteDiscount = $transaction->absolute_discount ?? 0;
+//     $paidAmount = $transaction->paid_amount ?? 0;
+
+//     // Fetch purchase items (products) with unit name
+//     $purchaseDetails = DB::table('purchase_items as pi')
+//         ->join('products as prod', 'pi.pid', '=', 'prod.id')
+//         ->join('purchase_bills as pb', 'pi.bid', '=', 'pb.id')
+//         ->join('units as u', 'pi.unit_id', '=', 'u.id')
+//         ->select(
+//             'pi.pid as product_id',
+//             'prod.name as product_name',
+//             'pi.s_price as selling_price',
+//             'pi.p_price as per_item_cost',
+//             'pi.dis as discount',
+//             'pi.gst as gst',
+//             'pi.quantity',
+//             'pi.unit_id',
+//             'u.name as unit_name',
+//             DB::raw('ROUND(pi.quantity * (pi.p_price * (1 - COALESCE(pi.dis, 0)/100) * (1 + COALESCE(pi.gst, 0)/100)), 2) AS per_product_total')
+//         )
+//         ->where('pi.bid', $transactionId)
+//         ->get();
+
+//     if ($purchaseDetails->isEmpty()) {
+//         return response()->json([
+//             'status' => 'error',
+//             'message' => 'No purchase details found for this transaction ID'
+//         ], 404);
+//     }
+
+//     // Fetch payment modes
+//     $paymentModes = DB::table('payment_modes')->pluck('name', 'id')->toArray();
+
+//     // Map payment_mode for transaction
+//     $paymentModeName = $paymentModes[$transaction->payment_mode] ?? 'Unknown';
+
+//     // Calculate financials
+//     $totalAmount = $purchaseDetails->sum('per_product_total');
+//     $payableAmount = $totalAmount - $absoluteDiscount;
+//     $dueAmount = max(0, $payableAmount - $paidAmount);
+
+//     // Fetch vendor details
+//     $vendor = DB::table('purchase_clients')
+//         ->where('id', $transaction->pcid)
+//         ->select('name as vendor_name')
+//         ->first();
+
+//     // Fetch user details
+//     $userDetail = DB::table('users')
+//         ->where('id', $transaction->uid)
+//         ->select('name')
+//         ->first();
+
+//     // Return response
+//     return response()->json([
+//         'status' => 'success',
+//         'data' => [
+//             'products' => $purchaseDetails,
+//             'transaction_id' => $transaction->id,
+//             'bill_name' => $transaction->bill_name,
+//             'purchased_by' => $userDetail ? $userDetail->name : 'Unknown',
+//             'vendor_name' => $vendor ? $vendor->vendor_name : 'Unknown',
+//             'vendor_id' => $transaction->pcid,
+//             'payment_mode' => $paymentModeName,
+//             'date' => $transaction->updated_at,
+//             'total_amount' => round($totalAmount, 2),
+//             'absolute_discount' => round($absoluteDiscount, 2),
+//             'payable_amount' => round($payableAmount, 2),
+//             'paid_amount' => round($paidAmount, 2),
+//             'due_amount' => round($dueAmount, 2),
+//         ]
+//     ], 200);
+// }
+
 public function getPurchaseDetailsByTransaction(Request $request)
-{
-    // Authentication check
-    $user = Auth::user();
-    if (!$user) {
-        return response()->json(['message' => 'Unauthorized'], 401);
-    }
+    {
+        // Authentication check
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
 
-    // Role-based access control
-    if ($user->rid < 1 || $user->rid > 5) {
-        return response()->json(['message' => 'Forbidden'], 403);
-    }
+        // Role-based access control
+        if ($user->rid < 1 || $user->rid > 5) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
 
-    // Request validation
-    try {
-        $request->validate([
-            'transaction_id' => 'required|integer'
-        ]);
-    } catch (\Illuminate\Validation\ValidationException $e) {
+        // Request validation
+        try {
+            $request->validate([
+                'transaction_id' => 'required|integer'
+            ]);
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+            ], 422);
+        }
+
+        $transactionId = $request->input('transaction_id');
+
+        // Fetch transaction details
+        $transaction = DB::table('purchase_bills')
+            ->where('id', $transactionId)
+            ->select('id', 'bill_name', 'pcid', 'uid', 'payment_mode', 'absolute_discount', 'paid_amount', 'updated_at')
+            ->first();
+
+        if (!$transaction) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Transaction not found'
+            ], 404);
+        }
+
+        // Default values for null fields
+        $absoluteDiscount = $transaction->absolute_discount ?? 0;
+        $paidAmount = $transaction->paid_amount ?? 0;
+
+        // Fetch purchase items with calculated fields
+        $purchaseDetails = DB::table('purchase_items as pi')
+            ->join('products as prod', 'pi.pid', '=', 'prod.id')
+            ->join('purchase_bills as pb', 'pi.bid', '=', 'pb.id')
+            ->join('units as u', 'pi.unit_id', '=', 'u.id')
+            ->select(
+                'pi.pid as product_id',
+                'prod.name as product_name',
+                'pi.s_price as selling_price',
+                'pi.p_price as per_item_cost',
+                'pi.dis as discount',
+                DB::raw('ROUND(pi.p_price * (1 - COALESCE(pi.dis, 0)/100), 2) AS net_price'),
+                'pi.quantity',
+                DB::raw('ROUND(pi.quantity * pi.p_price * (1 - COALESCE(pi.dis, 0)/100), 2) AS per_product_total'),
+                'pi.gst as gst',
+                DB::raw('ROUND((pi.quantity * pi.p_price * (1 - COALESCE(pi.dis, 0)/100)) * (COALESCE(pi.gst, 0)/100), 2) AS gst_amount'),
+                'pi.unit_id',
+                'u.name as unit_name'
+            )
+            ->where('pi.bid', $transactionId)
+            ->get();
+
+        if ($purchaseDetails->isEmpty()) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'No purchase details found for this transaction ID'
+            ], 404);
+        }
+
+        // Calculate financial totals
+        $totalItemNetValue = $purchaseDetails->sum('per_product_total');
+        $totalGstAmount = $purchaseDetails->sum('gst_amount');
+        $totalAmount = $totalItemNetValue + $totalGstAmount;
+        $payableAmount = $totalAmount - $absoluteDiscount;
+        $dueAmount = max(0, $payableAmount - $paidAmount);
+
+        // Fetch payment modes
+        $paymentModes = DB::table('payment_modes')->pluck('name', 'id')->toArray();
+        $paymentModeName = $paymentModes[$transaction->payment_mode] ?? 'Unknown';
+
+        // Fetch vendor details
+        $vendor = DB::table('purchase_clients')
+            ->where('id', $transaction->pcid)
+            ->select('name as vendor_name')
+            ->first();
+
+        // Fetch user details
+        $userDetail = DB::table('users')
+            ->where('id', $transaction->uid)
+            ->select('name')
+            ->first();
+
+        // Return response
         return response()->json([
-            'message' => 'Validation failed',
-            'errors' => $e->errors(),
-        ], 422);
+            'status' => 'success',
+            'data' => [
+                'products' => $purchaseDetails,
+                'transaction_id' => $transaction->id,
+                'bill_name' => $transaction->bill_name,
+                'purchased_by' => $userDetail ? $userDetail->name : 'Unknown',
+                'vendor_name' => $vendor ? $vendor->vendor_name : 'Unknown',
+                'vendor_id' => $transaction->pcid,
+                'payment_mode' => $paymentModeName,
+                'date' => $transaction->updated_at,
+                'total_item_net_value' => round($totalItemNetValue, 2),
+                'total_gst_amount' => round($totalGstAmount, 2),
+                'total_amount' => round($totalAmount, 2),
+                'absolute_discount' => round($absoluteDiscount, 2),
+                'payable_amount' => round($payableAmount, 2),
+                'paid_amount' => round($paidAmount, 2),
+                'due_amount' => round($dueAmount, 2),
+            ]
+        ], 200);
     }
-
-    $transactionId = $request->input('transaction_id');
-
-    // Fetch transaction details
-    $transaction = DB::table('purchase_bills')
-        ->where('id', $transactionId)
-        ->select('id', 'bill_name', 'pcid', 'uid', 'payment_mode', 'absolute_discount', 'paid_amount', 'updated_at')
-        ->first();
-
-    if (!$transaction) {
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Transaction not found'
-        ], 404);
-    }
-
-    // Default values for null fields
-    $absoluteDiscount = $transaction->absolute_discount ?? 0;
-    $paidAmount = $transaction->paid_amount ?? 0;
-
-    // Fetch purchase items (products) with unit name
-    $purchaseDetails = DB::table('purchase_items as pi')
-        ->join('products as prod', 'pi.pid', '=', 'prod.id')
-        ->join('purchase_bills as pb', 'pi.bid', '=', 'pb.id')
-        ->join('units as u', 'pi.unit_id', '=', 'u.id')
-        ->select(
-            'pi.pid as product_id',
-            'prod.name as product_name',
-            'pi.s_price as selling_price',
-            'pi.p_price as per_item_cost',
-            'pi.dis as discount',
-            'pi.gst as gst',
-            'pi.quantity',
-            'pi.unit_id',
-            'u.name as unit_name',
-            DB::raw('ROUND(pi.quantity * (pi.p_price * (1 - COALESCE(pi.dis, 0)/100) * (1 + COALESCE(pi.gst, 0)/100)), 2) AS per_product_total')
-        )
-        ->where('pi.bid', $transactionId)
-        ->get();
-
-    if ($purchaseDetails->isEmpty()) {
-        return response()->json([
-            'status' => 'error',
-            'message' => 'No purchase details found for this transaction ID'
-        ], 404);
-    }
-
-    // Fetch payment modes
-    $paymentModes = DB::table('payment_modes')->pluck('name', 'id')->toArray();
-
-    // Map payment_mode for transaction
-    $paymentModeName = $paymentModes[$transaction->payment_mode] ?? 'Unknown';
-
-    // Calculate financials
-    $totalAmount = $purchaseDetails->sum('per_product_total');
-    $payableAmount = $totalAmount - $absoluteDiscount;
-    $dueAmount = max(0, $payableAmount - $paidAmount);
-
-    // Fetch vendor details
-    $vendor = DB::table('purchase_clients')
-        ->where('id', $transaction->pcid)
-        ->select('name as vendor_name')
-        ->first();
-
-    // Fetch user details
-    $userDetail = DB::table('users')
-        ->where('id', $transaction->uid)
-        ->select('name')
-        ->first();
-
-    // Return response
-    return response()->json([
-        'status' => 'success',
-        'data' => [
-            'products' => $purchaseDetails,
-            'transaction_id' => $transaction->id,
-            'bill_name' => $transaction->bill_name,
-            'purchased_by' => $userDetail ? $userDetail->name : 'Unknown',
-            'vendor_name' => $vendor ? $vendor->vendor_name : 'Unknown',
-            'vendor_id' => $transaction->pcid,
-            'payment_mode' => $paymentModeName,
-            'date' => $transaction->updated_at,
-            'total_amount' => round($totalAmount, 2),
-            'absolute_discount' => round($absoluteDiscount, 2),
-            'payable_amount' => round($payableAmount, 2),
-            'paid_amount' => round($paidAmount, 2),
-            'due_amount' => round($dueAmount, 2),
-        ]
-    ], 200);
-}
 
 public function getPurchaseWidget(Request $request)
 {
@@ -539,8 +658,8 @@ public function updateTransactionById(Request $request, $transaction_id)
 }
 public function destroy(Request $request, $transactionId)
 {
-    Log::info('Delete purchase transaction endpoint reached', [
-        'transaction_id' => $transactionId,
+    Log::info('Delete purchase bill endpoint reached', [
+        'bill_id' => $transactionId,
     ]);
 
     $user = Auth::user();
@@ -549,57 +668,48 @@ public function destroy(Request $request, $transactionId)
     }
 
     // Restrict to roles 5 and 6 only
-    if (!in_array($user->rid, [5, 6])) {
-        return response()->json(['message' => 'Unauthorized to delete purchase transaction'], 403);
+    if (!in_array($user->rid, [1,2,3])) {
+        return response()->json(['message' => 'Unauthorized to delete purchase bill'], 403);
     }
 
-    // Check if transaction exists and belongs to the user
-    $transaction = DB::table('transaction_purchases')
+    // Check if bill exists and belongs to the user
+    $bill = DB::table('purchase_bills')
         ->where('id', $transactionId)
         ->where('uid', $user->id)
         ->first();
 
-    if (!$transaction) {
+    if (!$bill) {
         return response()->json([
-            'message' => 'Transaction not found or unauthorized',
+            'message' => 'Bill not found or unauthorized',
         ], 404);
     }
 
     DB::beginTransaction();
     try {
-        // Delete related purchase_items first (foreign key constraint)
-        $purchaseIds = DB::table('purchases')
-            ->where('transaction_id', $transactionId)
-            ->pluck('id');
-
-        if ($purchaseIds->isNotEmpty()) {
-            DB::table('purchase_items')->whereIn('purchase_id', $purchaseIds)->delete();
-            DB::table('purchases')->where('transaction_id', $transactionId)->delete();
-        }
-
-        // Now delete the transaction
-        DB::table('transaction_purchases')
-            ->where('id', $transactionId)
-            ->delete();
-
+        // Delete related purchase_items
+        DB::table('purchase_items')->where('bid', $transactionId)->delete();
+        
+        // Delete the bill
+        DB::table('purchase_bills')->where('id', $transactionId)->delete();
+        
         DB::commit();
-        Log::info('Purchase transaction deleted successfully', [
-            'transaction_id' => $transactionId,
+        Log::info('Purchase bill deleted successfully', [
+            'bill_id' => $transactionId,
         ]);
-
+        
         return response()->json([
-            'message' => 'Purchase transaction deleted successfully',
+            'message' => 'Purchase bill deleted successfully',
             'transaction_id' => $transactionId,
         ], 200);
     } catch (\Exception $e) {
         DB::rollBack();
-        Log::error('Failed to delete purchase transaction', [
-            'transaction_id' => $transactionId,
+        Log::error('Failed to delete purchase bill', [
+            'bill_id' => $transactionId,
             'error' => $e->getMessage(),
         ]);
-
+        
         return response()->json([
-            'message' => 'Failed to delete purchase transaction',
+            'message' => 'Failed to delete purchase bill',
             'error' => $e->getMessage(),
         ], 500);
     }
