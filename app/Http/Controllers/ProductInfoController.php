@@ -231,7 +231,7 @@ class ProductInfoController extends Controller
             'product' => $productData,
         ], 200);
     }
-    public function destroy($id)
+    public function destroy($pid)
     {
         // // Force JSON response
         // request()->headers->set('Accept', 'application/json');
@@ -250,7 +250,7 @@ class ProductInfoController extends Controller
         }
     
         // Find the product by ID and ensure it belongs to the user's company
-        $product = ProductInfo::where('id', $id)->where('cid', $user->cid)->first();
+        $product = ProductInfo::where('id', $pid)->where('cid', $user->cid)->first();
     
         // Check if the product exists and belongs to the user's company
         if (!$product) {

@@ -1016,148 +1016,125 @@ public function destroy(Request $request, $transactionId)
     }
 }
 public function getCustomersWithDues($cid)
-{
-    // Force JSON response
-        $request->headers->set('Accept', 'application/json');
-    $user = Auth::user();
-    if (!$user) {
-        return response()->json(['message' => 'Unauthenticated'], 401);
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
+        }
+
+        if (!in_array($user->rid, [1, 2, 3])) {
+            return response()->json(['message' => 'Unauthorized to access customer dues'], 403);
+        }
+
+        $cid = (int) $cid;
+        if ($user->cid != $cid) {
+            return response()->json(['message' => 'Forbidden: You do not have access to this company\'s data'], 403);
+        }
+
+        if (!DB::table('users')->where('cid', $cid)->exists()) {
+            return response()->json(['message' => 'Invalid cid'], 422);
+        }
+
+        Log::info("Fetching customers with dues for cid: {$cid}");
+
+        $billTotals = DB::table('sales_items')
+            ->select('bid', DB::raw('SUM(s_price * quantity * (1 - dis / 100) * (1 + gst / 100)) as item_total'))
+            ->groupBy('bid');
+
+        Log::info("Bill totals subquery prepared");
+
+        $customersWithDues = DB::table('sales_clients as sc')
+            ->join('sales_bills as sb', 'sc.id', '=', 'sb.scid')
+            ->joinSub($billTotals, 'bt', function ($join) {
+                $join->on('sb.id', '=', 'bt.bid');
+            })
+            ->select(
+                'sc.id as customer_id',
+                'sc.name as customer_name',
+                DB::raw("TO_CHAR(SUM(bt.item_total - sb.absolute_discount), 'FM999999999.00') as total_purchase"),
+                DB::raw("TO_CHAR(SUM(sb.paid_amount), 'FM999999999.00') as total_paid"),
+                DB::raw("TO_CHAR(SUM(bt.item_total - sb.absolute_discount - sb.paid_amount), 'FM999999999.00') as total_due")
+            )
+            ->where('sc.cid', $cid)
+            ->groupBy('sc.id', 'sc.name')
+            ->havingRaw('SUM(bt.item_total - sb.absolute_discount - sb.paid_amount) > 0')
+            ->get();
+
+        Log::info("Customers with dues retrieved", ['count' => $customersWithDues->count()]);
+
+        return response()->json($customersWithDues);
     }
 
-    // Restrict to roles 1, 2, and 3 only
-    if (!in_array($user->rid, [1, 2, 3])) {
-        return response()->json(['message' => 'Unauthorized to access customer dues'], 403);
+    public function getCustomerDues($customer_id)
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
+        }
+
+        if (!in_array($user->rid, [1, 2, 3])) {
+            return response()->json(['message' => 'Unauthorized to access customer dues'], 403);
+        }
+
+        $customer_id = (int) $customer_id;
+
+        if (!DB::table('sales_clients')->where('id', $customer_id)->exists()) {
+            return response()->json(['message' => 'Invalid customer_id'], 422);
+        }
+
+        Log::info("Fetching dues for customer_id: {$customer_id}");
+
+        $billTotals = DB::table('sales_items')
+            ->select('bid', DB::raw('SUM(s_price * quantity * (1 - dis / 100) * (1 + gst / 100)) as item_total'))
+            ->groupBy('bid');
+
+        $customerData = DB::table('sales_clients as sc')
+            ->join('sales_bills as sb', 'sc.id', '=', 'sb.scid')
+            ->joinSub($billTotals, 'bt', function ($join) {
+                $join->on('sb.id', '=', 'bt.bid');
+            })
+            ->select(
+                'sc.id as customer_id',
+                'sc.name as customer_name',
+                DB::raw("TO_CHAR(SUM(bt.item_total - sb.absolute_discount), 'FM999999999.00') as total_purchase"),
+                DB::raw("TO_CHAR(SUM(sb.paid_amount), 'FM999999999.00') as total_paid"),
+                DB::raw("TO_CHAR(SUM(bt.item_total - sb.absolute_discount - sb.paid_amount), 'FM999999999.00') as total_due"),
+                DB::raw("JSON_AGG(
+                    JSON_BUILD_OBJECT(
+                        'date', TO_CHAR(sb.updated_at, 'YYYY-MM-DD'),
+                        'purchase', TO_CHAR(ROUND(bt.item_total - sb.absolute_discount, 2), 'FM999999999.00'),
+                        'paid', TO_CHAR(ROUND(sb.paid_amount, 2), 'FM999999999.00'),
+                        'due', TO_CHAR(ROUND(bt.item_total - sb.absolute_discount - sb.paid_amount, 2), 'FM999999999.00')
+                    )
+                ) as transactions")
+            )
+            ->where('sc.id', $customer_id)
+            ->groupBy('sc.id', 'sc.name')
+            ->havingRaw('SUM(bt.item_total - sb.absolute_discount - sb.paid_amount) > 0')
+            ->first();
+
+        if (!$customerData) {
+            return response()->json(['message' => 'No dues found for this customer'], 404);
+        }
+
+        $transactions = json_decode($customerData->transactions, true);
+
+        $formattedData = [
+            'customer_id' => $customerData->customer_id,
+            'customer_name' => $customerData->customer_name,
+            'total_purchase' => $customerData->total_purchase,
+            'total_paid' => $customerData->total_paid,
+            'total_due' => $customerData->total_due,
+            'transactions' => $transactions,
+        ];
+
+        Log::info("Customer dues retrieved", [
+            'customer_id' => $customer_id,
+            'transaction_count' => count($transactions)
+        ]);
+
+        return response()->json($formattedData);
     }
-
-    // Cast cid to integer
-    $cid = (int) $cid;
-    // Check if the user belongs to the requested company
-    if ($user->cid != $cid) {
-        return response()->json(['message' => 'Forbidden: You do not have access to this company\'s data'], 403);
-    }
-
-    // Check if cid exists in users table
-    if (!DB::table('users')->where('cid', $cid)->exists()) {
-        return response()->json(['message' => 'Invalid cid'], 422);
-    }
-
-    // Log the start of the process
-    Log::info("Fetching customers with dues for cid: {$cid}");
-
-    // Subquery to calculate the total amount per bill
-    $billTotals = DB::table('sales_items')
-        ->select('bid', DB::raw('SUM(s_price * quantity - dis) as total_amount'))
-        ->groupBy('bid');
-
-    // Log that the subquery is prepared
-    Log::info("Bill totals subquery prepared");
-
-    // Main query to get customers with outstanding dues
-    $customersWithDues = DB::table('sales_clients as sc')
-        ->join('sales_bills as sb', 'sc.id', '=', 'sb.scid')
-        ->joinSub($billTotals, 'bt', function ($join) {
-            $join->on('sb.id', '=', 'bt.bid');
-        })
-        ->select(
-            'sc.id as customer_id',
-            'sc.name as customer_name',
-            DB::raw('SUM(bt.total_amount) as total_purchase'),
-            DB::raw('SUM(sb.paid_amount) as total_paid'),
-            DB::raw('SUM(bt.total_amount - sb.paid_amount) as total_due')
-        )
-        ->where('sc.cid', $cid)
-        ->groupBy('sc.id', 'sc.name')
-        ->havingRaw('SUM(bt.total_amount - sb.paid_amount) > 0')
-        ->get();
-
-    // Log the number of customers retrieved
-    Log::info("Customers with dues retrieved", ['count' => $customersWithDues->count()]);
-
-    // Return the result as a JSON response
-    return response()->json($customersWithDues);
-}
-public function getCustomerDues($customer_id)
-{
-    // Check if the user is authenticated
-    $user = Auth::user();
-    if (!$user) {
-        return response()->json(['message' => 'Unauthenticated'], 401);
-    }
-
-    // Restrict to roles 1, 2, and 3 only
-    if (!in_array($user->rid, [1, 2, 3])) {
-        return response()->json(['message' => 'Unauthorized to access customer dues'], 403);
-    }
-
-    // Cast customer_id to integer
-    $customer_id = (int) $customer_id;
-
-    // Check if customer_id exists in sales_clients
-    if (!DB::table('sales_clients')->where('id', $customer_id)->exists()) {
-        return response()->json(['message' => 'Invalid customer_id'], 422);
-    }
-
-    // Log the start of the process
-    Log::info("Fetching dues for customer_id: {$customer_id}");
-
-    // Subquery to calculate the total amount per bill
-    $billTotals = DB::table('sales_items')
-        ->select('bid', DB::raw('SUM(s_price * quantity - dis) as total_amount'))
-        ->groupBy('bid');
-
-    // Main query to get customer details and transactions
-    $customerData = DB::table('sales_clients as sc')
-        ->join('sales_bills as sb', 'sc.id', '=', 'sb.scid')
-        ->joinSub($billTotals, 'bt', function ($join) {
-            $join->on('sb.id', '=', 'bt.bid');
-        })
-        ->select(
-            'sc.id as customer_id',
-            'sc.name as customer_name',
-            DB::raw("TO_CHAR(SUM(bt.total_amount), 'FM999999999.00') as total_purchase"),
-            DB::raw("TO_CHAR(SUM(sb.paid_amount), 'FM999999999.00') as total_paid"),
-            DB::raw("TO_CHAR(SUM(bt.total_amount - sb.paid_amount), 'FM999999999.00') as total_due"),
-            DB::raw("JSON_AGG(
-                JSON_BUILD_OBJECT(
-                    'date', TO_CHAR(sb.updated_at, 'YYYY-MM-DD'),
-                    'purchase', TO_CHAR(ROUND(bt.total_amount::numeric, 2), 'FM999999999.00'),
-                    'paid', TO_CHAR(ROUND(sb.paid_amount::numeric, 2), 'FM999999999.00'),
-                    'due', TO_CHAR(ROUND((bt.total_amount - sb.paid_amount)::numeric, 2), 'FM999999999.00')
-                )
-            ) as transactions")
-        )
-        ->where('sc.id', $customer_id)
-        ->groupBy('sc.id', 'sc.name')
-        ->havingRaw('SUM(bt.total_amount - sb.paid_amount) > 0')
-        ->first();
-
-    // Check if customer has dues
-    if (!$customerData) {
-        return response()->json(['message' => 'No dues found for this customer'], 404);
-    }
-
-    // Parse transactions JSON
-    $transactions = json_decode($customerData->transactions, true);
-
-    // Prepare formatted data
-    $formattedData = [
-        'customer_id' => $customerData->customer_id,
-        'customer_name' => $customerData->customer_name,
-        'total_purchase' => $customerData->total_purchase,
-        'total_paid' => $customerData->total_paid,
-        'total_due' => $customerData->total_due,
-        'transactions' => $transactions,
-    ];
-
-    // Log the result
-    Log::info("Customer dues retrieved", [
-        'customer_id' => $customer_id,
-        'transaction_count' => count($transactions)
-    ]);
-
-    // Return the formatted data as JSON
-    return response()->json($formattedData);
-}
 private function getInvoiceData($transactionId)
 {
     $transaction = TransactionSales::findOrFail($transactionId);
