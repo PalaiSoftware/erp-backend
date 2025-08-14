@@ -41,8 +41,11 @@ class ProductController extends Controller
                 }
             },
         ],
-        'products.*.category_id' => 'required|integer|exists:categories,id',
+        'products.*.category_id' => 'nullable|integer|exists:categories,id',
         'products.*.hscode' => 'nullable|string|max:255',
+        'products.*.p_unit' => 'nullable|integer|exists:units,id',
+        'products.*.s_unit' => 'nullable|integer|exists:units,id',
+        'products.*.c_factor' => 'nullable|numeric',
     ]);
 
     // Case-insensitive duplicate check within the request
@@ -61,8 +64,11 @@ class ProductController extends Controller
     foreach ($validatedData['products'] as $productData) {
         $product = Product::create([
             'name' => $productData['name'],
-            'category_id' => $productData['category_id'],
+            'category_id' => $productData['category_id'] ?? 1,
             'hscode' => $productData['hscode'] ?? null,
+            'p_unit' => $productData['p_unit'] ?? 1,
+            's_unit' => $productData['s_unit'] ?? 2,
+            'c_factor' => $productData['c_factor'] ?? 0,
         ]);
 
         $createdProducts[] = $product;
@@ -91,14 +97,21 @@ public function index(Request $request)
     $validated = $request->validate([
         'category_id' => 'nullable|integer|exists:categories,id',
     ]);
-
+ 
     $query = Product::leftJoin('categories', 'products.category_id', '=', 'categories.id')
+        ->leftJoin('units as primary_units', 'products.p_unit', '=', 'primary_units.id')
+        ->leftJoin('units as secondary_units', 'products.s_unit', '=', 'secondary_units.id')
         ->select(
             'products.id',
             'products.name as product_name',
             'products.category_id',
             'categories.name as category_name',
-            'products.hscode'
+            'products.hscode',
+            'products.p_unit',
+            'primary_units.name as primary_unit',
+            'products.s_unit',
+            'secondary_units.name as secondary_unit',
+            'products.c_factor'
         );
 
     // Filter by category_id if provided
@@ -124,7 +137,7 @@ public function getProductById($product_id)
     }
 
     // Authorization check (restrict access based on role)
-    if ($user->rid < 1 || $user->rid > 5) {
+    if ($user->rid < 1 || $user->rid > 3) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -136,12 +149,19 @@ public function getProductById($product_id)
     // Fetch the product by product_id
     $product = Product::where('products.id', $product_id)
         ->leftJoin('categories', 'products.category_id', '=', 'categories.id')
+        ->leftJoin('units as primary_units', 'products.p_unit', '=', 'primary_units.id')
+        ->leftJoin('units as secondary_units', 'products.s_unit', '=', 'secondary_units.id')
         ->select(
             'products.id as product_id',
             'products.name as product_name',
             'products.category_id',
             'categories.name as category_name',
-            'products.hscode'
+            'products.hscode',
+            'products.p_unit',
+            'primary_units.name as primary_unit',
+            'products.s_unit',
+            'secondary_units.name as secondary_unit',
+            'products.c_factor'
         )
         ->first();
 
@@ -165,16 +185,29 @@ public function update(Request $request, $id)
         if (!$user) {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
-        if (!in_array($user->rid, [1, 2, 3, 4, 5])) {
+        if (!in_array($user->rid, [1, 2, 3])) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'category_id' => 'required|integer|exists:categories,id',
-            'hscode' => 'nullable|string|max:255',
-        ]);
-
+        // Validation
+    $validated = $request->validate([
+        'name' => [
+            'required',
+            'string',
+            'max:255',
+            function ($attribute, $value, $fail) use ($id) {
+                // Case-insensitive database check, ignoring current product
+                if (Product::whereRaw('LOWER(name) = LOWER(?)', [$value])->where('id', '!=', $id)->exists()) {
+                    $fail($value . ' has already been taken.');
+                }
+            },
+        ],
+        'category_id' => 'nullable|integer|exists:categories,id',
+        'hscode' => 'nullable|string|max:255',
+        'p_unit' => 'nullable|integer|exists:units,id',
+        's_unit' => 'nullable|integer|exists:units,id',
+        'c_factor' => 'nullable|numeric',
+    ]);
         $product = Product::find($id);
         if (!$product) {
             return response()->json(['message' => 'Product not found'], 404);
@@ -188,7 +221,62 @@ public function update(Request $request, $id)
         ], 200);
     } catch (\Exception $e) {
         \Log::error($e->getMessage());
-        return response()->json(['message' => 'Server Error', 'error' => $e->getMessage()], 500);
+        return response()->json([ 'error' => $e->getMessage()], 500);
     }
+}
+public function getUnitsByProductId(Request $request, $product_id)
+{
+    // Force JSON response
+    $request->headers->set('Accept', 'application/json');
+
+    // Authentication and authorization checks
+    $user = Auth::user();
+    if (!$user) {
+        return response()->json(['message' => 'Unauthenticated'], 401);
+    }
+    if ($user->rid < 1 || $user->rid > 5) {
+        return response()->json(['message' => 'Forbidden'], 403);
+    }
+
+    // Validate product_id from route parameter
+    if (!is_numeric($product_id) || intval($product_id) <= 0) {
+        return response()->json([
+            'message' => 'The given data was invalid.',
+            'errors' => [
+                'product_id' => ['The product ID must be a positive integer.']
+            ]
+        ], 422);
+    }
+
+    // Fetch product with p_unit and s_unit
+    $product = Product::where('products.id', $product_id)
+        ->select('products.id', 'products.p_unit', 'products.s_unit')
+        ->first();
+
+    if (!$product) {
+        return response()->json([
+            'message' => 'The given data was invalid.',
+            'errors' => [
+                'product_id' => ['The product ID must exist in the products table.']
+            ]
+        ], 422);
+    }
+
+    // Fetch unit details for p_unit and s_unit
+    $units = Unit::whereIn('id', array_filter([$product->p_unit, $product->s_unit]))
+        ->select('id', 'name')
+        ->get()
+        ->map(function ($unit) {
+            return [
+                'id' => $unit->id,
+                'name' => $unit->name,
+            ];
+        });
+
+    if ($units->isEmpty()) {
+        return response()->json(['message' => 'Units not found for this product'], 404);
+    }
+
+    return response()->json($units, 200);
 }
 }

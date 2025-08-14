@@ -16,6 +16,7 @@ return new class extends Migration
             $table->decimal('quantity', 22, 3)->default(0);
             $table->bigInteger('unit_id')->unsigned();
             $table->decimal('dis', 12, 2)->default(0);
+            $table->decimal('gst', 5, 2)->default(0.00);
 
             $table->foreign('bid')->references('id')->on('sales_bills')->onDelete('cascade');
             //$table->foreign('unit_id')->references('id')->on('units')->onDelete('restrict');

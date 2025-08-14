@@ -13,7 +13,9 @@ class Product extends Model
         'name',
         'category_id',
         'hscode',
-       // 'cid',
+        'p_unit',
+        's_unit',
+        'c_factor',
     ];
     // Define the relationship with Category
     public function category()

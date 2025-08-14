@@ -88,6 +88,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::delete('/product-info/{pid}', [ProductInfoController::class, 'destroy']);
     Route::get('/dues/{cid}', [SalesController::class, 'getCustomersWithDues']);
     Route::get('/customer/dues/{customer_id}', [SalesController::class, 'getCustomerDues']);
+    Route::get('/units/{product_id}', [ProductController::class, 'getUnitsByProductId']);
 
 });
 

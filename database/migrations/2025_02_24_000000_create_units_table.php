@@ -18,9 +18,16 @@ return new class extends Migration
 
         // Insert sample data
         DB::table('units')->insert([
-            ['name' => 'kg'],
-            ['name' => 'liter'],
-            ['name' => 'piece'],
+            ['name' => 'Box'],
+            ['name' => 'Piece'],
+            ['name' => 'Bundle'],
+            ['name' => 'Kg'],
+            ['name' => 'Liter'],
+            ['name' => 'Packet,'],
+            ['name' => 'Carton,'],
+            ['name' => 'Dozen,'],
+            ['name' => 'Metre,'],
+
         ]);
     }
 
