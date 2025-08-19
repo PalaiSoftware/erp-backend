@@ -21,182 +21,252 @@ use App\Models\PaymentMode;
 class SalesController extends Controller
 {
 
-    public function store(Request $request)
-    {
-        Log::info('API endpoint reached', ['request' => $request->all()]);
+public function store(Request $request)
+{
+    Log::info('API endpoint reached', ['request' => $request->all()]);
 
-        // Get the authenticated user
-        $user = Auth::user();
+    // Get the authenticated user
+    $user = Auth::user();
 
-        // Check if user is authenticated
-        if (!$user) {
-            return response()->json(['message' => 'Unauthenticated'], 401);
+    // Check if user is authenticated
+    if (!$user) {
+        return response()->json(['message' => 'Unauthenticated'], 401);
+    }
+
+    // Restrict to rid 1, 2, 3, 4, or 5 only
+    if (!in_array($user->rid, [1, 2, 3, 4, 5])) {
+        return response()->json(['message' => 'Unauthorized to sale product'], 403);
+    }
+
+    // Use the cid from the authenticated user
+    $cid = $user->cid;
+    $uid = $user->id;
+
+    // Validate the request data (no 'cid' in the request)
+    try {
+        $request->validate([
+            'bill_name' => 'string|nullable|max:255',
+            'customer_id' => 'required|integer|exists:sales_clients,id',
+            'payment_mode' => 'required|integer|exists:payment_modes,id',
+            'absolute_discount' => 'nullable|numeric|min:0',
+            'total_paid' => 'required|numeric|min:0',
+            'sales_date' => 'required|date_format:Y-m-d H:i:s',
+            'products' => 'required|array',
+            'products.*.product_id' => 'required|integer|exists:products,id',
+            'products.*.quantity' => 'required|numeric|min:0',
+            'products.*.discount' => 'nullable|numeric|min:0',
+            'products.*.p_price' => 'nullable|numeric|min:0',
+            'products.*.s_price' => 'required|numeric|min:0',
+            'products.*.unit_id' => 'required|integer|exists:units,id',
+            'products.*.gst' => 'nullable|numeric|min:0',
+        ]);
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        Log::error('Validation failed', ['errors' => $e->errors()]);
+        return response()->json([
+            'message' => 'Validation failed',
+            'errors' => $e->errors()
+        ], 422);
+    }
+    
+    // Helper function: Format stock in mixed units
+    function formatStock($total, $c_factor, $p_name, $s_name, $s_unit_id) {
+        // Case 1: No secondary unit OR no conversion factor
+        if ($s_unit_id == 0 || $c_factor <= 0) {
+            return number_format($total, 3) . " " . $p_name;
+        }
+        
+        // Case 2: Has secondary unit and conversion factor
+        $primary = floor($total / $c_factor);
+        $secondary = $total % $c_factor;
+        
+        $str = "";
+        if ($primary > 0) {
+            $str .= number_format($primary, 3) . " " . $p_name;
+        }
+        if ($secondary > 0) {
+            if ($primary > 0) {
+                $str .= " ";
+            }
+            $str .= number_format($secondary, 3) . " " . $s_name;
+        }
+        return $str ?: "0 " . $p_name;
+    }
+
+    // Determine bill_name
+    if ($request->has('bill_name')) {
+        $billName = $request->bill_name;
+    } else {
+        $customer = DB::table('sales_clients')->where('id', $request->customer_id)->first();
+        $customerName = $customer->name;
+        $formattedDate = Carbon::parse($request->sales_date)->format('Y-m-d');
+        $billName = $customerName . ' - ' . $formattedDate;
+    }
+
+    // Extract product IDs from the request
+    $productIds = array_column($request->products, 'product_id');
+
+    // Fetch product details including c_factor, p_unit, and current stock in secondary units
+    $stocks = DB::table('products as p')
+        ->whereIn('p.id', $productIds)
+        ->select([
+            'p.id',
+            'p.name',
+            'p.c_factor',
+            'p.p_unit',
+            'p.s_unit', // Need this for stock formatting
+            'pu.name as p_unit_name',
+            'su.name as s_unit_name'
+        ])
+        ->leftJoin('units as pu', 'p.p_unit', '=', 'pu.id')
+        ->leftJoin('units as su', 'p.s_unit', '=', 'su.id')
+        ->selectRaw("(
+            SELECT COALESCE(SUM(
+                CASE
+                    WHEN p.c_factor > 0 AND pi.unit_id = p.p_unit THEN pi.quantity * p.c_factor
+                    ELSE pi.quantity
+                END
+            ), 0)
+            FROM purchase_items pi
+            JOIN purchase_bills pb ON pi.bid = pb.id
+            JOIN users u ON pb.uid = u.id
+            WHERE u.cid = ? AND pi.pid = p.id
+        ) - (
+            SELECT COALESCE(SUM(
+                CASE
+                    WHEN p.c_factor > 0 AND si.unit_id = p.p_unit THEN si.quantity * p.c_factor
+                    ELSE si.quantity
+                END
+            ), 0)
+            FROM sales_items si
+            JOIN sales_bills sb ON si.bid = sb.id
+            JOIN users u ON sb.uid = u.id
+            WHERE u.cid = ? AND si.pid = p.id
+        ) as current_stock_s", [$cid, $cid])
+        ->get()
+        ->keyBy('id');
+
+    // Check stock availability for each product with unit conversion
+    $errors = [];
+    foreach ($request->products as $product) {
+        $productId = $product['product_id'];
+        $requestedQuantity = $product['quantity'];
+        $requestedUnitId = $product['unit_id'];
+
+        if (!isset($stocks[$productId])) {
+            $errors[] = [
+                'product_id' => $productId,
+                'product_name' => 'Unknown',
+                'current_stock' => '0',
+                'requested_stock' => $requestedQuantity
+            ];
+            continue;
         }
 
-        // Restrict to rid 1, 2, 3, 4, or 5 only
-        if (!in_array($user->rid, [1, 2, 3, 4, 5])) {
-            return response()->json(['message' => 'Unauthorized to sale product'], 403);
-        }
+        $stock = $stocks[$productId];
+        $currentStockS = $stock->current_stock_s;  // Current stock in correct units
 
-        // Use the cid from the authenticated user
-        $cid = $user->cid;
-        $uid = $user->id;
-
-        // Validate the request data (no 'cid' in the request)
-        try {
-            $request->validate([
-                'bill_name' => 'string|nullable|max:255',
-                'customer_id' => 'required|integer|exists:sales_clients,id',
-                'payment_mode' => 'required|integer|exists:payment_modes,id',
-                'absolute_discount' => 'nullable|numeric|min:0',
-                'total_paid' => 'required|numeric|min:0',
-                'sales_date' => 'required|date_format:Y-m-d H:i:s',
-                'products' => 'required|array',
-                'products.*.product_id' => 'required|integer|exists:products,id',
-                'products.*.quantity' => 'required|numeric|min:0',
-                'products.*.discount' => 'nullable|numeric|min:0',
-                'products.*.p_price' => 'nullable|numeric|min:0', // Added p_price
-                'products.*.s_price' => 'required|numeric|min:0', // Replaced per_item_cost with s_price
-                'products.*.unit_id' => 'required|integer|exists:units,id',
-                'products.*.gst' => 'nullable|numeric|min:0', // Added GST validation
-            ]);
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            Log::error('Validation failed', ['errors' => $e->errors()]);
-            return response()->json([
-                'message' => 'Validation failed',
-                'errors' => $e->errors()
-            ], 422);
-        }
-        // Determine bill_name
-        if ($request->has('bill_name')) {
-            $billName = $request->bill_name;
+        // 🔥 FIX: Correct stock conversion for all product types
+        if ($stock->c_factor > 0 && $stock->s_unit > 0) {
+            // Products with conversion factor (Box → Piece)
+            $requestedInS = ($requestedUnitId == $stock->p_unit) 
+                ? $requestedQuantity * $stock->c_factor 
+                : $requestedQuantity;
         } else {
-            $customer = DB::table('sales_clients')->where('id', $request->customer_id)->first();
-            $customerName = $customer->name;
-            $formattedDate = Carbon::parse($request->sales_date)->format('Y-m-d');
-            $billName = $customerName . ' - ' . $formattedDate;
+            // Products without conversion (Piece/Packet) - direct comparison
+            $requestedInS = $requestedQuantity;
         }
 
-        // Extract product IDs from the request
-        $productIds = array_column($request->products, 'product_id');
+        if ($requestedInS > $currentStockS) {
+            // Format current stock correctly in error message
+            $currentStockFormatted = formatStock(
+                $currentStockS,
+                $stock->c_factor,
+                $stock->p_unit_name,
+                $stock->s_unit_name ?? 'Unit',
+                $stock->s_unit
+            );
 
-        // Fetch product details and current stock using query builder
-        $stocks = DB::table('products as p')
-            ->whereIn('p.id', $productIds)
-            ->select(['p.id', 'p.name'])
-            ->selectRaw("(
-                SELECT COALESCE(SUM(pi.quantity), 0)
-                FROM purchase_items pi
-                JOIN purchase_bills pb ON pi.bid = pb.id
-                JOIN purchase_clients pc ON pb.pcid = pc.id
-                WHERE pi.pid = p.id AND pc.cid = ?
-            ) - (
-                SELECT COALESCE(SUM(si.quantity), 0)
-                FROM sales_items si
-                JOIN sales_bills sb ON si.bid = sb.id
-                JOIN sales_clients sc ON sb.scid = sc.id
-                WHERE si.pid = p.id AND sc.cid = ?
-            ) as current_stock", [$cid, $cid])
-            ->get()
-            ->keyBy('id');
-
-        // Check stock availability for each product
-        $errors = [];
-        foreach ($request->products as $product) {
-            $productId = $product['product_id'];
-            $requestedQuantity = $product['quantity'];
-
-            if (!isset($stocks[$productId])) {
-                $errors[] = [
-                    'product_id' => $productId,
-                    'product_name' => 'Unknown',
-                    'current_stock' => 0,
-                    'requested_stock' => $requestedQuantity
-                ];
-                continue;
-            }
-
-            $stock = $stocks[$productId];
-            $currentStock = $stock->current_stock;
-
-            if ($requestedQuantity > $currentStock) {
-                $errors[] = [
-                    'product_id' => $productId,
-                    'product_name' => $stock->name,
-                    'current_stock' => $currentStock,
-                    'requested_stock' => $requestedQuantity
-                ];
-            }
-        }
-
-        // Return error response if stock check fails
-        if (!empty($errors)) {
-            return response()->json([
-                'message' => 'Stock check failed',
-                'errors' => $errors
-            ], 422);
-        }
-
-        // Proceed with the transaction if all stock checks pass
-        DB::beginTransaction();
-        try { 
-            $salesDate = $request['sales_date'];
-            $salesBill = SalesBill::create([
-                'bill_name' => $billName,
-                'scid' => $request->customer_id,
-                'uid' => $user->id,
-                'payment_mode' => $request->payment_mode,
-                'absolute_discount' => $request->absolute_discount ?? 0,
-                'paid_amount' => $request->total_paid,
-                'created_at' => $salesDate,
-                'updated_at' => $salesDate,
-            ]);
-            $billId = $salesBill->id;
-            Log::info('Created sales bill', ['bill_id' => $billId]);
-
-            foreach ($request->products as $product) {
-                $productId = $product['product_id'];
-
-                // Fetch the latest purchase price for the product and company
-                $latestPurchase = DB::table('purchase_items as pi')
-                    ->join('purchase_bills as pb', 'pi.bid', '=', 'pb.id')
-                    ->join('purchase_clients as pc', 'pb.pcid', '=', 'pc.id')
-                    ->where('pi.pid', $productId)
-                    ->where('pc.cid', $cid)
-                    ->orderBy('pb.created_at', 'desc')
-                    ->select('pi.p_price')
-                    ->first();
-
-                $p_price = $latestPurchase ? $latestPurchase->p_price : 0;
-
-                SalesItem::create([
-                    'bid' => $billId,
-                    'pid' => $productId,
-                    'p_price' => $product['p_price'] ?? 0, // Use p_price from request
-                    's_price' => $product['s_price'], // Use s_price from request
-                    'quantity' => $product['quantity'],
-                    'unit_id' => $product['unit_id'],
-                    'dis' => $product['discount'] ?? 0,
-                    'gst' => $product['gst'] ?? 0,
-                ]);
-            }
-
-            DB::commit();
-            Log::info('Sale recorded successfully', ['bill_id' => $billId]);
-
-            return response()->json([
-                'message' => 'Sale recorded successfully',
-                'bill_id' => $billId,
-            ], 201);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Sale failed', ['error' => $e->getMessage()]);
-            return response()->json([
-                'message' => 'Sale failed',
-                'error' => $e->getMessage(),
-            ], 500);
+            $errors[] = [
+                'product_id' => $productId,
+                'product_name' => $stock->name,
+                'current_stock' => $currentStockFormatted,
+                'requested_stock' => $requestedQuantity . " " . (
+                    $requestedUnitId == $stock->p_unit 
+                    ? $stock->p_unit_name 
+                    : ($stock->s_unit_name ?? 'Unit')
+                )
+            ];
         }
     }
+
+    // Return error response if stock check fails
+    if (!empty($errors)) {
+        return response()->json([
+            'message' => 'Stock check failed',
+            'errors' => $errors
+        ], 422);
+    }
+
+    // Proceed with the transaction if all stock checks pass
+    DB::beginTransaction();
+    try { 
+        $salesDate = $request['sales_date'];
+        $salesBill = SalesBill::create([
+            'bill_name' => $billName,
+            'scid' => $request->customer_id,
+            'uid' => $user->id,
+            'payment_mode' => $request->payment_mode,
+            'absolute_discount' => $request->absolute_discount ?? 0,
+            'paid_amount' => $request->total_paid,
+            'created_at' => $salesDate,
+            'updated_at' => $salesDate,
+        ]);
+        $billId = $salesBill->id;
+        Log::info('Created sales bill', ['bill_id' => $billId]);
+
+        foreach ($request->products as $product) {
+            $productId = $product['product_id'];
+
+            // Fetch the latest purchase price for the product and company
+            $latestPurchase = DB::table('purchase_items as pi')
+                ->join('purchase_bills as pb', 'pi.bid', '=', 'pb.id')
+                ->join('purchase_clients as pc', 'pb.pcid', '=', 'pc.id')
+                ->where('pi.pid', $productId)
+                ->where('pc.cid', $cid)
+                ->orderBy('pb.created_at', 'desc')
+                ->select('pi.p_price')
+                ->first();
+
+            $p_price = $latestPurchase ? $latestPurchase->p_price : 0;
+
+            SalesItem::create([
+                'bid' => $billId,
+                'pid' => $productId,
+                'p_price' => $product['p_price'] ?? 0,
+                's_price' => $product['s_price'],
+                'quantity' => $product['quantity'],
+                'unit_id' => $product['unit_id'],
+                'dis' => $product['discount'] ?? 0,
+                'gst' => $product['gst'] ?? 0,
+            ]);
+        }
+
+        DB::commit();
+        Log::info('Sale recorded successfully', ['bill_id' => $billId]);
+
+        return response()->json([
+            'message' => 'Sale recorded successfully',
+            'bill_id' => $billId,
+        ], 201);
+    } catch (\Exception $e) {
+        DB::rollBack();
+        Log::error('Sale failed', ['error' => $e->getMessage()]);
+        return response()->json([
+            'message' => 'Sale failed',
+            'error' => $e->getMessage(),
+        ], 500);
+    }
+}
 
     public function getAllInvoicesByCompany($cid)
     {
@@ -498,7 +568,7 @@ public function update(Request $request, $transactionId)
             'products.*.s_price' => 'required_with:products|numeric|min:0',
             'products.*.unit_id' => 'required_with:products|integer|exists:units,id',
             'products.*.dis' => 'nullable|numeric|min:0|max:100',
-            'products.*.gst' => 'nullable|numeric|min:0', // Added GST validation
+            'products.*.gst' => 'nullable|numeric|min:0',
             'absolute_discount' => 'nullable|numeric|min:0',
             'set_paid_amount' => 'nullable|numeric|min:0',
             'updated_at' => 'nullable|date_format:Y-m-d H:i:s',
@@ -524,6 +594,165 @@ public function update(Request $request, $transactionId)
         ], 404);
     }
 
+    $cid = $user->cid;
+
+    // Helper function: Format stock in mixed units
+    function formatStock($total, $c_factor, $p_name, $s_name, $s_unit_id) {
+        // Case 1: No secondary unit OR no conversion factor
+        if ($s_unit_id == 0 || $c_factor <= 0) {
+            return number_format($total, 3) . " " . $p_name;
+        }
+        
+        // Case 2: Has secondary unit and conversion factor
+        $primary = floor($total / $c_factor);
+        $secondary = $total % $c_factor;
+        
+        $str = "";
+        if ($primary > 0) {
+            $str .= number_format($primary, 3) . " " . $p_name;
+        }
+        if ($secondary > 0) {
+            if ($primary > 0) {
+                $str .= " ";
+            }
+            $str .= number_format($secondary, 3) . " " . $s_name;
+        }
+        return $str ?: "0 " . $p_name;
+    }
+
+    // Handle stock check if products are being updated
+    if ($request->has('products')) {
+        $products = $request->input('products', []);
+        $productIds = array_column($products, 'product_id');
+
+        // Fetch existing sales items for this transaction
+        $existingItems = DB::table('sales_items')
+            ->where('bid', $transactionId)
+            ->get(['pid', 'quantity', 'unit_id']);
+
+        // Fetch product details and current stock in secondary units
+        $stocks = DB::table('products as p')
+            ->leftJoin('units as pu', 'p.p_unit', '=', 'pu.id')
+            ->leftJoin('units as su', 'p.s_unit', '=', 'su.id')
+            ->whereIn('p.id', $productIds)
+            ->select([
+                'p.id',
+                'p.name',
+                'p.c_factor',
+                'p.p_unit',
+                'p.s_unit', // Critical for stock formatting
+                'pu.name as p_unit_name',
+                'su.name as s_unit_name'
+            ])
+            ->selectRaw("(
+                SELECT COALESCE(SUM(
+                    CASE
+                        WHEN p.c_factor > 0 AND pi.unit_id = p.p_unit THEN pi.quantity * p.c_factor
+                        ELSE pi.quantity
+                    END
+                ), 0)
+                FROM purchase_items pi
+                JOIN purchase_bills pb ON pi.bid = pb.id
+                JOIN users u ON pb.uid = u.id
+                WHERE u.cid = {$cid} AND pi.pid = p.id
+            ) as total_purchase_s")
+            ->selectRaw("(
+                SELECT COALESCE(SUM(
+                    CASE
+                        WHEN p.c_factor > 0 AND si.unit_id = p.p_unit THEN si.quantity * p.c_factor
+                        ELSE si.quantity
+                    END
+                ), 0)
+                FROM sales_items si
+                JOIN sales_bills sb ON si.bid = sb.id
+                JOIN users u ON sb.uid = u.id
+                WHERE u.cid = {$cid} AND si.pid = p.id
+            ) as total_sales_s")
+            ->get()
+            ->keyBy('id');
+
+        // Compute old_s map for products in request
+        $old_s_map = [];
+        foreach ($existingItems as $item) {
+            if (in_array($item->pid, $productIds) && isset($stocks[$item->pid])) {
+                $stock = $stocks[$item->pid];
+                
+                // 🔥 FIX 1: Correct old_s calculation
+                if ($stock->s_unit > 0 && $stock->c_factor > 0) {
+                    $old_s = ($item->unit_id == $stock->p_unit) 
+                        ? $item->quantity * $stock->c_factor 
+                        : $item->quantity;
+                } else {
+                    $old_s = $item->quantity;
+                }
+                
+                $old_s_map[$item->pid] = $old_s;
+            }
+        }
+
+        // Check stock availability
+        $errors = [];
+        foreach ($products as $product) {
+            $productId = $product['product_id'];
+            $requestedQuantity = $product['quantity'];
+            $requestedUnitId = $product['unit_id'];
+
+            if (!isset($stocks[$productId])) {
+                $errors[] = [
+                    'product_id' => $productId,
+                    'product_name' => 'Unknown',
+                    'current_stock' => '0',
+                    'requested_stock' => $requestedQuantity
+                ];
+                continue;
+            }
+
+            $stock = $stocks[$productId];
+            $current_s = $stock->total_purchase_s - $stock->total_sales_s;
+            $old_s = $old_s_map[$productId] ?? 0;
+            $available_s = $current_s + $old_s; // Stock without this transaction + old sale
+
+            // 🔥 FIX 1: Correct new_s calculation
+            if ($stock->s_unit > 0 && $stock->c_factor > 0) {
+                $new_s = ($requestedUnitId == $stock->p_unit) 
+                    ? $requestedQuantity * $stock->c_factor 
+                    : $requestedQuantity;
+            } else {
+                $new_s = $requestedQuantity;
+            }
+
+            if ($new_s > $available_s) {
+                // 🔥 FIX 2: Format current stock correctly
+                $currentStockFormatted = formatStock(
+                    $available_s,
+                    $stock->c_factor,
+                    $stock->p_unit_name,
+                    $stock->s_unit_name ?? 'Unit',
+                    $stock->s_unit
+                );
+
+                $errors[] = [
+                    'product_id' => $productId,
+                    'product_name' => $stock->name,
+                    'current_stock' => $currentStockFormatted,
+                    'requested_stock' => $requestedQuantity . " " . (
+                        $requestedUnitId == $stock->p_unit 
+                        ? $stock->p_unit_name 
+                        : ($stock->s_unit_name ?? 'Unit')
+                    )
+                ];
+            }
+        }
+
+        // Return error response if stock check fails
+        if (!empty($errors)) {
+            return response()->json([
+                'message' => 'Stock check failed',
+                'errors' => $errors
+            ], 422);
+        }
+    }
+
     // Start a database transaction
     DB::beginTransaction();
     try {
@@ -546,7 +775,7 @@ public function update(Request $request, $transactionId)
             $products = $request->input('products', []);
             $productIds = array_column($products, 'product_id');
 
-            // Fetch existing sales items
+            // Fetch existing sales items pids
             $existingItems = DB::table('sales_items')
                 ->where('bid', $transactionId)
                 ->get(['pid', 'bid']);
@@ -1058,6 +1287,7 @@ public function getCustomersWithDues($cid)
             ->where('sc.cid', $cid)
             ->groupBy('sc.id', 'sc.name')
             ->havingRaw('SUM(bt.item_total - sb.absolute_discount - sb.paid_amount) > 0')
+            ->orderBy('sb.updated_at', 'desc') 
             ->get();
 
         Log::info("Customers with dues retrieved", ['count' => $customersWithDues->count()]);
@@ -1106,6 +1336,7 @@ public function getCustomersWithDues($cid)
                         'paid', TO_CHAR(ROUND(sb.paid_amount, 2), 'FM999999999.00'),
                         'due', TO_CHAR(ROUND(bt.item_total - sb.absolute_discount - sb.paid_amount, 2), 'FM999999999.00')
                     )
+                        ORDER BY sb.updated_at DESC
                 ) as transactions")
             )
             ->where('sc.id', $customer_id)

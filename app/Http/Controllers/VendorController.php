@@ -28,17 +28,28 @@ class VendorController extends Controller
     if (!in_array($user->rid, [1, 2, 3, 4])) {
         return response()->json(['message' => 'Unauthorized to create a purchase client'], 403);
     }
+    // ✅ CRITICAL FIX: Define $cid BEFORE validation
+    $cid = (int)$user->cid;
+    
+    // ✅ EXTRA SAFETY: Check if cid is valid
+    if ($cid <= 0) {
+        return response()->json(['message' => 'Invalid company ID'], 400);
+    }
 
     try {
         // Validate the request
-        $validated = $request->validate([
+         // Validate the request
+         $validated = $request->validate([
             'name' => [
                 'required',
                 'string',
                 'max:255',
-                function ($attribute, $value, $fail) use ($request) {
-                    if (PurchaseClient::whereRaw('LOWER(name) = LOWER(?)', [$value])
-                        ->where('cid', $request->input('cid'))
+                // ✅ CORRECT WAY: Use $cid that's already defined
+                function ($attribute, $value, $fail) use ($cid, $user) {
+                    $normalizedValue = trim(strtolower($value));
+                    
+                    if (PurchaseClient::whereRaw('TRIM(LOWER(name)) = ?', [$normalizedValue])
+                        ->where('cid', $cid)
                         ->exists()) {
                         $fail($value . ' has already been taken for this company.');
                     }
@@ -209,46 +220,71 @@ public function getVendorById($vendorId)
     ], 200);
 }
 
-  public function update(Request $request, $id)
+public function update(Request $request, $id)
 {
-
     // Force JSON response
     $request->headers->set('Accept', 'application/json');
 
-            // Authentication and authorization checks
-            $user = Auth::user();
-            if (!$user) {
-                return response()->json(['message' => 'Unauthorized'], 401);
-            }
-            if (!in_array($user->rid, [1,2,3,4])) {
-                return response()->json(['message' => 'Forbidden'], 403);
-            }
-        
-            // Validate the request
-            $validated = $request->validate([
-                'name' => 'required|string|max:255',
-                'email' => 'nullable|email|unique:purchase_clients,email,' . $id, // Ensure table name matches database
-                'phone' => 'nullable|string|max:20',
-                'address' => 'nullable|string',
-                'gst_no' => 'nullable|string|max:255',
-                'pan' => 'nullable|string|max:255',
-                'uid' => 'nullable|integer',
-                'cid' => 'required|integer',
-            ]);
-        
-            // Find the purchase client by ID
-            $purchaseClient = PurchaseClient::find($id);
-            if (!$purchaseClient) {
-                return response()->json(['message' => 'Purchase Client not found'], 404);
-            }
-        
-            // Update the purchase client
-            $purchaseClient->update($validated);
-        
-            // Return response
-            return response()->json([
-                'message' => 'Purchase Client updated successfully',
-                'purchase_client' => $purchaseClient
-            ], 200);
+    // Authentication and authorization checks
+    $user = Auth::user();
+    if (!$user) {
+        return response()->json(['message' => 'Unauthorized'], 401);
+    }
+    if (!in_array($user->rid, [1, 2, 3, 4])) {
+        return response()->json(['message' => 'Forbidden'], 403);
+    }
+
+    // ✅ 1. Find vendor FIRST (before validation)
+    $purchaseClient = PurchaseClient::find($id);
+    if (!$purchaseClient) {
+        return response()->json(['message' => 'Purchase Client not found'], 404);
+    }
+
+    // ✅ 2. Get company ID from EXISTING vendor (not request)
+    $cid = (int)$purchaseClient->cid;
+
+    try {
+        // ✅ 3. Validate the request with CUSTOM name validation
+        $validated = $request->validate([
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                // ✅ CRITICAL: Custom validation for same company
+                function ($attribute, $value, $fail) use ($cid, $id) {
+                    $normalizedValue = trim(strtolower($value));
+                    
+                    // Check if name exists for OTHER vendors in SAME company
+                    $exists = PurchaseClient::whereRaw('TRIM(LOWER(name)) = ?', [$normalizedValue])
+                        ->where('cid', $cid)
+                        ->where('id', '!=', $id) // ✅ Exclude current vendor
+                        ->exists();
+                    
+                    if ($exists) {
+                        $fail($value . ' has already been taken for this company.');
+                    }
+                },
+            ],
+            'email' => 'nullable|email|unique:purchase_clients,email,' . $id,
+            'phone' => 'nullable|string|max:20',
+            'address' => 'nullable|string',
+            'gst_no' => 'nullable|string|max:255',
+            'pan' => 'nullable|string|max:255',
+        ]);
+    } catch (ValidationException $e) {
+        $errors = $e->errors();
+        if (isset($errors['name'])) {
+            return response()->json(['message' => $errors['name'][0]], 422);
         }
+        return response()->json(['errors' => $errors], 422);
+    }
+
+    // ✅ 4. Update vendor (CID automatically stays same)
+    $purchaseClient->update($validated);
+
+    return response()->json([
+        'message' => 'Purchase Client updated successfully',
+        'purchase_client' => $purchaseClient
+    ], 200);
+}
 }

@@ -171,66 +171,82 @@ class ProductInfoController extends Controller
             'product' => $product,
         ], 200);
     }
+   
     public function updateProductById($pid, Request $request)
-    {
-        // Authentication check
-        $user = Auth::user();
-        if (!$user) {
-            return response()->json(['message' => 'Unauthorized'], 401);
-        }
-
-        // Authorization check (restrict access based on role)
-        if ($user->rid < 1 || $user->rid > 3) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
-
-        // Validate that the product_id is numeric
-        if (!is_numeric($pid)) {
-            return response()->json(['message' => 'Invalid product ID'], 422);
-        }
-
-        // Validate the request data
-        $validatedData = $request->validate([
-            'name' => 'sometimes|string|max:255',
-            'hsn_code' => 'sometimes|string|max:255',
-            'description' => 'sometimes|string',
-            'purchase_price' => 'sometimes|numeric|min:0',
-            'profit_percentage' => 'sometimes|numeric|min:0|max:100',
-            'pre_gst_sale_cost' => 'sometimes|numeric|min:0',
-            'gst' => 'sometimes|numeric|min:0|max:100',
-            'post_gst_sale_cost' => 'sometimes|numeric|min:0',
-        ]);
-
-        // Fetch the product by product_id
-        $product = ProductInfo::find($pid);
-
-        // Check if the product exists
-        if (!$product) {
-            return response()->json(['message' => 'Product not found'], 404);
-        }
-
-        // Update the product with validated data
-        $product->update($validatedData);
-
-        // Prepare response data with aliased fields to match getProductById
-        $productData = [
-            'pid' => $product->id,
-            'product_name' => $product->name,
-            'hsn_code' => $product->hsn_code,
-            'description' => $product->description,
-            'purchase_price' => $product->purchase_price,
-            'profit_percentage' => $product->profit_percentage,
-            'pre_gst_sale_cost' => $product->pre_gst_sale_cost,
-            'gst' => $product->gst,
-            'post_gst_sale_cost' => $product->post_gst_sale_cost,
-        ];
-
-        // Return the updated product details
-        return response()->json([
-            'message' => 'Product updated successfully',
-            'product' => $productData,
-        ], 200);
+{
+    // Authentication check
+    $user = Auth::user();
+    if (!$user) {
+        return response()->json(['message' => 'Unauthorized'], 401);
     }
+
+    // Authorization check
+    if ($user->rid < 1 || $user->rid > 3) {
+        return response()->json(['message' => 'Forbidden'], 403);
+    }
+
+    // Validate product ID
+    if (!is_numeric($pid)) {
+        return response()->json(['message' => 'Invalid product ID'], 422);
+    }
+
+    // Validate request data
+    $validatedData = $request->validate([
+        'name' => 'sometimes|string|max:255',
+        'hsn_code' => 'sometimes|string|max:255',
+        'description' => 'sometimes|string',
+        'purchase_price' => 'sometimes|numeric|min:0',
+        'profit_percentage' => 'sometimes|numeric|min:0|max:100',
+        'pre_gst_sale_cost' => 'sometimes|numeric|min:0',
+        'gst' => 'sometimes|numeric|min:0|max:100',
+        'post_gst_sale_cost' => 'sometimes|numeric|min:0',
+    ]);
+
+    // Fetch product
+    $product = ProductInfo::find($pid);
+    if (!$product) {
+        return response()->json(['message' => 'Product not found'], 404);
+    }
+
+    // Only check duplicate if name is being updated
+    if (isset($validatedData['name']) && $validatedData['name'] !== $product->name) {
+        $cid = $user->cid;
+        $newName = trim(strtolower($validatedData['name']));
+        
+        // ✅ CRITICAL FIX: Direct cid check (no bill dependency)
+        $exists = ProductInfo::whereRaw('TRIM(LOWER(name)) = ?', [$newName])
+            ->where('cid', $cid) // ✅ Company ID from product table
+            ->where('id', '!=', $pid) // ✅ Exclude current product
+            ->exists();
+
+        if ($exists) {
+            return response()->json([
+                'message' => 'Product name already exists for your company'
+            ], 422);
+        }
+    }
+
+    // Update product
+    $product->update($validatedData);
+
+    // Prepare response
+    $productData = [
+        'pid' => $product->id,
+        'product_name' => $product->name,
+        'hsn_code' => $product->hsn_code,
+        'description' => $product->description,
+        'purchase_price' => $product->purchase_price,
+        'profit_percentage' => $product->profit_percentage,
+        'pre_gst_sale_cost' => $product->pre_gst_sale_cost,
+        'gst' => $product->gst,
+        'post_gst_sale_cost' => $product->post_gst_sale_cost,
+    ];
+
+    return response()->json([
+        'message' => 'Product updated successfully',
+        'product' => $productData,
+    ], 200);
+}
     public function destroy($pid)
     {
         // // Force JSON response

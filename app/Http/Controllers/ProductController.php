@@ -43,9 +43,24 @@ class ProductController extends Controller
         ],
         'products.*.category_id' => 'nullable|integer|exists:categories,id',
         'products.*.hscode' => 'nullable|string|max:255',
-        'products.*.p_unit' => 'nullable|integer|exists:units,id',
+        'products.*.p_unit' => [
+            'required',  // ← will trigger if missing
+            'integer',
+            'exists:units,id',
+            function ($attribute, $value, $fail) {
+                // ← will trigger if value is 0
+                if ($value === 0) {
+                    $fail('None is not applicable. Select any other unit.');
+                }
+            },
+        ],
         'products.*.s_unit' => 'nullable|integer|exists:units,id',
         'products.*.c_factor' => 'nullable|numeric',
+    ], [
+        // Custom error messages
+        'products.*.p_unit.required' => 'Primary unit is required.',
+        'products.*.p_unit.integer' => 'Primary unit must be a valid number.',
+        'products.*.p_unit.exists' => 'Selected primary unit does not exist.',
     ]);
 
     // Case-insensitive duplicate check within the request
@@ -64,10 +79,10 @@ class ProductController extends Controller
     foreach ($validatedData['products'] as $productData) {
         $product = Product::create([
             'name' => $productData['name'],
-            'category_id' => $productData['category_id'] ?? 1,
+            'category_id' => $productData['category_id'] ?? 0,
             'hscode' => $productData['hscode'] ?? null,
-            'p_unit' => $productData['p_unit'] ?? 1,
-            's_unit' => $productData['s_unit'] ?? 2,
+            'p_unit' => $productData['p_unit'],
+            's_unit' => $productData['s_unit'] ?? 0,
             'c_factor' => $productData['c_factor'] ?? 0,
         ]);
 
@@ -204,9 +219,24 @@ public function update(Request $request, $id)
         ],
         'category_id' => 'nullable|integer|exists:categories,id',
         'hscode' => 'nullable|string|max:255',
-        'p_unit' => 'nullable|integer|exists:units,id',
-        's_unit' => 'nullable|integer|exists:units,id',
-        'c_factor' => 'nullable|numeric',
+        'products.*.p_unit' => [
+            'required',  // ← will trigger if missing
+            'integer',
+            'exists:units,id',
+            function ($attribute, $value, $fail) {
+                // ← will trigger if value is 0
+                if ($value === 0) {
+                    $fail('None is not applicable. Select any other unit.');
+                }
+            },
+        ],
+        'products.*.s_unit' => 'nullable|integer|exists:units,id',
+        'products.*.c_factor' => 'nullable|numeric',
+    ], [
+        // Custom error messages
+        'products.*.p_unit.required' => 'Primary unit is required.',
+        'products.*.p_unit.integer' => 'Primary unit must be a valid number.',
+        'products.*.p_unit.exists' => 'Selected primary unit does not exist.',
     ]);
         $product = Product::find($id);
         if (!$product) {
