@@ -6,12 +6,13 @@ use Illuminate\Http\Request;
 use App\Models\Product;
 use App\Models\ProductValue; 
 use App\Models\Unit;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log; 
 
 class ProductController extends Controller
 {
-    public function store(Request $request)
+public function store(Request $request)
 {
     // Force JSON response
     $request->headers->set('Accept', 'application/json');
@@ -23,11 +24,11 @@ class ProductController extends Controller
     }
 
     // Role restriction
-    if (!in_array($user->rid, [1, 2, 3,4])) {
+    if (!in_array($user->rid, [1, 2, 3, 4])) {
         return response()->json(['message' => 'Unauthorized to add product'], 403);
     }
 
-    // Validation
+    // Validation (without c_factor conditional rules)
     $validatedData = $request->validate([
         'products' => 'required|array',
         'products.*.name' => [
@@ -35,7 +36,6 @@ class ProductController extends Controller
             'string',
             'max:255',
             function ($attribute, $value, $fail) {
-                // Case-insensitive database check
                 if (Product::whereRaw('LOWER(name) = LOWER(?)', [$value])->exists()) {
                     $fail($value . ' has already been taken.');
                 }
@@ -44,35 +44,67 @@ class ProductController extends Controller
         'products.*.category_id' => 'nullable|integer|exists:categories,id',
         'products.*.hscode' => 'nullable|string|max:255',
         'products.*.p_unit' => [
-            'required',  // ← will trigger if missing
+            'required',
             'integer',
             'exists:units,id',
             function ($attribute, $value, $fail) {
-                // ← will trigger if value is 0
                 if ($value === 0) {
                     $fail('None is not applicable. Select any other unit.');
                 }
             },
         ],
         'products.*.s_unit' => 'nullable|integer|exists:units,id',
-        'products.*.c_factor' => 'nullable|numeric',
+        'products.*.c_factor' => 'nullable|numeric', // Simplified rule
     ], [
-        // Custom error messages
         'products.*.p_unit.required' => 'Primary unit is required.',
         'products.*.p_unit.integer' => 'Primary unit must be a valid number.',
         'products.*.p_unit.exists' => 'Selected primary unit does not exist.',
     ]);
 
-    // Case-insensitive duplicate check within the request
+    // Case-insensitive duplicate check within request
     $names = collect($validatedData['products'])->pluck('name');
-    $lowercaseNames = $names->map(function ($name) {
-        return strtolower($name);
-    });
+    $lowercaseNames = $names->map('strtolower');
     if ($lowercaseNames->duplicates()->isNotEmpty()) {
         return response()->json([
             'message' => "Duplicate product names found in the request (case-insensitive)."
         ], 422);
     }
+
+    // ===== CRITICAL FIX: Manual c_factor validation =====
+    $cFactorErrors = [];
+    
+    foreach ($validatedData['products'] as $index => $product) {
+        $pUnit = $product['p_unit'];
+        $sUnit = $product['s_unit'] ?? 0; // Handles missing s_unit
+        $cFactor = $product['c_factor'] ?? 0; // Handles missing c_factor
+
+        // Skip if p_unit is invalid (shouldn't happen due to prior validation)
+        if ($pUnit <= 0) continue;
+
+        // Case 1: Only primary unit (s_unit not provided)
+        if ($sUnit === 0) {
+            if ($cFactor !== 0) {
+                $cFactorErrors["products.{$index}.c_factor"][] = 
+                    'When only primary unit is provided and secondary unit is None, c_factor must be 0.';
+            }
+        } 
+        // Case 2: Both units provided
+        else {
+            if ($cFactor === 0 || $cFactor < 1) {
+                $cFactorErrors["products.{$index}.c_factor"][] = 
+                    'When both primary and secondary units are provided, c_factor must be at least 1.';
+            }
+        }
+    }
+
+    // Return errors if any
+    if (!empty($cFactorErrors)) {
+        return response()->json([
+            'message' => 'Validation failed',
+            'errors' => $cFactorErrors
+        ], 422);
+    }
+    // ===== END FIX =====
 
     // Create products
     $createdProducts = [];
@@ -193,6 +225,194 @@ public function getProductById($product_id)
         'product' => $product,
     ], 200);
 }
+// public function update(Request $request, $id)
+// {
+//     try {
+//         $user = Auth::user();
+//         if (!$user) {
+//             return response()->json(['message' => 'Unauthorized'], 401);
+//         }
+//         if (!in_array($user->rid, [1, 2, 3])) {
+//             return response()->json(['message' => 'Forbidden'], 403);
+//         }
+
+//         // Validation
+//     $validated = $request->validate([
+//         'name' => [
+//             'required',
+//             'string',
+//             'max:255',
+//             function ($attribute, $value, $fail) use ($id) {
+//                 // Case-insensitive database check, ignoring current product
+//                 if (Product::whereRaw('LOWER(name) = LOWER(?)', [$value])->where('id', '!=', $id)->exists()) {
+//                     $fail($value . ' has already been taken.');
+//                 }
+//             },
+//         ],
+//         'category_id' => 'nullable|integer|exists:categories,id',
+//         'hscode' => 'nullable|string|max:255',
+//         'products.*.p_unit' => [
+//             'required',  // ← will trigger if missing
+//             'integer',
+//             'exists:units,id',
+//             function ($attribute, $value, $fail) {
+//                 // ← will trigger if value is 0
+//                 if ($value === 0) {
+//                     $fail('None is not applicable. Select any other unit.');
+//                 }
+//             },
+//         ],
+//         'products.*.s_unit' => 'nullable|integer|exists:units,id',
+//         'products.*.c_factor' => 'nullable|numeric',
+//     ], [
+//         // Custom error messages
+//         'products.*.p_unit.required' => 'Primary unit is required.',
+//         'products.*.p_unit.integer' => 'Primary unit must be a valid number.',
+//         'products.*.p_unit.exists' => 'Selected primary unit does not exist.',
+//     ]);
+
+//          // CORRECTED c_factor VALIDATION (single product)
+//         $pUnit = $validated['p_unit'];
+//         $sUnit = $validated['s_unit'] ?? 0; // Default to 0 if not provided
+//         $cFactor = $validated['c_factor'] ?? 0; // Default to 0 if not provided
+
+//         $errors = [];
+
+//         // Case 1: Secondary unit is 0 ("None") → c_factor must be 0
+//         if ($sUnit == 0) {
+//             if ($cFactor != 0) {
+//                 $errors['c_factor'][] = 'When secondary unit is "None", conversion factor must be 0.';
+//             }
+//         }
+//         // Case 2: Secondary unit > 0 → c_factor must be ≥1
+//         elseif ($sUnit > 0) {
+//             if ($cFactor < 1) {
+//                 $errors['c_factor'][] = 'When secondary unit is provided, conversion factor must be at least 1.';
+//             }
+//         }
+
+//         // Return errors if any
+//         if (!empty($errors)) {
+//             return response()->json([
+//                 'message' => 'Validation failed',
+//                 'errors' => $errors
+//             ], 422);
+//         }
+
+//         $product = Product::find($id);
+//         if (!$product) {
+//             return response()->json(['message' => 'Product not found'], 404);
+//         }
+
+//         $product->update($validated);
+
+//         return response()->json([
+//             'message' => 'Product updated successfully',
+//             'product' => $product
+//         ], 200);
+//     } catch (\Exception $e) {
+//         \Log::error($e->getMessage());
+//         return response()->json([ 'error' => $e->getMessage()], 500);
+//     }
+// }
+// public function update(Request $request, $id)
+// {
+//     try {
+//         $user = Auth::user();
+//         if (!$user) {
+//             return response()->json(['message' => 'Unauthorized'], 401);
+//         }
+//         if (!in_array($user->rid, [1, 2, 3])) {
+//             return response()->json(['message' => 'Forbidden'], 403);
+//         }
+
+//         $product = Product::find($id);
+//         if (!$product) {
+//             return response()->json(['message' => 'Product not found'], 404);
+//         }
+
+//         // ===== FIX: Corrected validation rules (top-level fields) =====
+//         $validated = $request->validate([
+//             'name' => [
+//                 'required',
+//                 'string',
+//                 'max:255',
+//                 function ($attribute, $value, $fail) use ($id) {
+//                     if (Product::whereRaw('LOWER(name) = LOWER(?)', [$value])
+//                         ->where('id', '!=', $id)
+//                         ->exists()) {
+//                         $fail($value . ' has already been taken.');
+//                     }
+//                 },
+//             ],
+//             'category_id' => 'nullable|integer|exists:categories,id',
+//             'hscode' => 'nullable|string|max:255',
+//             'p_unit' => [
+//                 'required',
+//                 'integer',
+//                 'exists:units,id',
+//                 function ($attribute, $value, $fail) {
+//                     if ($value === 0) {
+//                         $fail('None is not applicable. Select any other unit.');
+//                     }
+//                 },
+//             ],
+//             's_unit' => 'nullable|integer|exists:units,id',
+//             'c_factor' => 'nullable|numeric',
+//         ], [
+//             'p_unit.required' => 'Primary unit is required.',
+//             'p_unit.integer' => 'Primary unit must be a valid number.',
+//             'p_unit.exists' => 'Selected primary unit does not exist.',
+//         ]);
+
+//          // ===== CRITICAL FIX: Manual c_factor validation =====
+//     $cFactorErrors = [];
+    
+//     foreach ($validatedData['products'] as $index => $product) {
+//         $pUnit = $product['p_unit'];
+//         $sUnit = $product['s_unit'] ?? 0; // Handles missing s_unit
+//         $cFactor = $product['c_factor'] ?? 0; // Handles missing c_factor
+
+//         // Skip if p_unit is invalid (shouldn't happen due to prior validation)
+//         if ($pUnit <= 0) continue;
+
+//         // Case 1: Only primary unit (s_unit not provided)
+//         if ($sUnit === 0) {
+//             if ($cFactor !== 0) {
+//                 $cFactorErrors["products.{$index}.c_factor"][] = 
+//                     'When only primary unit is provided and secondary unit is None, c_factor must be 0.';
+//             }
+//         } 
+//         // Case 2: Both units provided
+//         else {
+//             if ($cFactor === 0 || $cFactor < 1) {
+//                 $cFactorErrors["products.{$index}.c_factor"][] = 
+//                     'When both primary and secondary units are provided, c_factor must be at least 1.';
+//             }
+//         }
+//     }
+
+//     // Return errors if any
+//     if (!empty($cFactorErrors)) {
+//         return response()->json([
+//             'message' => 'Validation failed',
+//             'errors' => $cFactorErrors
+//         ], 422);
+//     }
+//     // ===== END FIX =====
+
+//         $product->update($validated);
+
+//         return response()->json([
+//             'message' => 'Product updated successfully',
+//             'product' => $product->refresh()
+//         ], 200);
+//     } catch (\Exception $e) {
+//         \Log::error($e->getMessage());
+//         return response()->json(['error' => $e->getMessage()], 500);
+//     }
+// }
+
 public function update(Request $request, $id)
 {
     try {
@@ -204,54 +424,82 @@ public function update(Request $request, $id)
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        // Validation
-    $validated = $request->validate([
-        'name' => [
-            'required',
-            'string',
-            'max:255',
-            function ($attribute, $value, $fail) use ($id) {
-                // Case-insensitive database check, ignoring current product
-                if (Product::whereRaw('LOWER(name) = LOWER(?)', [$value])->where('id', '!=', $id)->exists()) {
-                    $fail($value . ' has already been taken.');
-                }
-            },
-        ],
-        'category_id' => 'nullable|integer|exists:categories,id',
-        'hscode' => 'nullable|string|max:255',
-        'products.*.p_unit' => [
-            'required',  // ← will trigger if missing
-            'integer',
-            'exists:units,id',
-            function ($attribute, $value, $fail) {
-                // ← will trigger if value is 0
-                if ($value === 0) {
-                    $fail('None is not applicable. Select any other unit.');
-                }
-            },
-        ],
-        'products.*.s_unit' => 'nullable|integer|exists:units,id',
-        'products.*.c_factor' => 'nullable|numeric',
-    ], [
-        // Custom error messages
-        'products.*.p_unit.required' => 'Primary unit is required.',
-        'products.*.p_unit.integer' => 'Primary unit must be a valid number.',
-        'products.*.p_unit.exists' => 'Selected primary unit does not exist.',
-    ]);
         $product = Product::find($id);
         if (!$product) {
             return response()->json(['message' => 'Product not found'], 404);
+        }
+
+        // CORRECTED VALIDATION (top-level fields, NOT array-based)
+        $validated = $request->validate([
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                function ($attribute, $value, $fail) use ($id) {
+                    if (Product::whereRaw('LOWER(name) = LOWER(?)', [$value])
+                        ->where('id', '!=', $id)
+                        ->exists()) {
+                        $fail('This product name is already in use.');
+                    }
+                },
+            ],
+            'category_id' => 'nullable|integer|exists:categories,id',
+            'hscode' => 'nullable|string|max:255',
+            'p_unit' => [
+                'required',
+                'integer',
+                'exists:units,id',
+                function ($attribute, $value, $fail) {
+                    if ($value === 0) {
+                        $fail('Primary unit cannot be "None". Please select a valid unit.');
+                    }
+                },
+            ],
+            's_unit' => 'nullable|integer|exists:units,id', // Allow 0 as valid "None"
+            'c_factor' => 'nullable|numeric',
+        ], [
+            'p_unit.required' => 'Primary unit is required.',
+            'p_unit.integer' => 'Primary unit must be a valid number.',
+            'p_unit.exists' => 'Selected primary unit does not exist.',
+        ]);
+
+        // CORRECTED c_factor VALIDATION (single product)
+        $pUnit = $validated['p_unit'];
+        $sUnit = $validated['s_unit'] ?? 0; // Default to 0 if not provided
+        $cFactor = $validated['c_factor'] ?? 0; // Default to 0 if not provided
+
+        $errors = [];
+
+        // Case 1: Secondary unit is 0 ("None") → c_factor must be 0
+        if ($pUnit>0 && $sUnit == 0) {
+            if ($cFactor != 0) {
+                $errors['c_factor'][] = 'When secondary unit is "None", conversion factor must be 0.';
+            }
+        }
+        // Case 2: Secondary unit > 0 → c_factor must be ≥1
+        elseif ($pUnit>0 && $sUnit >0) {
+            if ($cFactor < 1) {
+                $errors['c_factor'][] = 'When secondary unit is provided, conversion factor must be at least 1.';
+            }
+        }
+
+        // Return errors if any
+        if (!empty($errors)) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => $errors
+            ], 422);
         }
 
         $product->update($validated);
 
         return response()->json([
             'message' => 'Product updated successfully',
-            'product' => $product
+            'product' => $product->refresh()
         ], 200);
     } catch (\Exception $e) {
         \Log::error($e->getMessage());
-        return response()->json([ 'error' => $e->getMessage()], 500);
+        return response()->json(['error' => $e->getMessage()], 500);
     }
 }
 public function getUnitsByProductId(Request $request, $product_id)

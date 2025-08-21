@@ -67,6 +67,28 @@ public function store(Request $request)
             'errors' => $e->errors()
         ], 422);
     }
+    // ✅ CRITICAL: Calculate total purchase amount
+    $totalPurchase = 0;
+    foreach ($request->products as $product) {
+        $itemTotal = $product['s_price'] * $product['quantity'];
+        $itemTotal -= $itemTotal * ($product['discount'] / 100);
+        $itemTotal += $itemTotal * ($product['gst'] / 100);
+        $totalPurchase += $itemTotal;
+    }
+    
+    $totalPurchase -= $request->absolute_discount ?? 0;
+    $totalPaid = $request->total_paid;
+    $dueAmount = $totalPurchase - $totalPaid;
+
+    // ✅ CRITICAL: Mobile number validation for due
+    if ($dueAmount > 0) {
+        $customer = SalesClient::find($request->customer_id);
+        if (!$customer || empty($customer->phone)) {
+            return response()->json([
+                'message' => 'Mobile number is required for credit sales'
+            ], 422);
+        }
+    }
     
     // Helper function: Format stock in mixed units
     function formatStock($total, $c_factor, $p_name, $s_name, $s_unit_id) {
@@ -583,7 +605,32 @@ public function update(Request $request, $transactionId)
             'errors' => $e->errors(),
         ], 422);
     }
+    
+    // ✅ CRITICAL FIX: Use correct paid amount variable
+    $totalPurchase = 0;
+    foreach ($request->products as $product) {
+        $itemTotal = $product['s_price'] * $product['quantity'];
+        $itemTotal -= $itemTotal * ($product['dis'] / 100);
+        $itemTotal += $itemTotal * ($product['gst'] / 100);
+        $totalPurchase += $itemTotal;
+    }
+    
+    $totalPurchase -= $request->absolute_discount ?? 0;
+    
+    // ✅ CORRECT: Use set_paid_amount instead of total_paid
+    $totalPaid = $request->set_paid_amount ?? $transaction->paid_amount;
+    $dueAmount = $totalPurchase - $totalPaid;
 
+    // ✅ CRITICAL: Only validate mobile if dueAmount is ACTUALLY positive
+    if ($dueAmount > 0.001) { // Allow small floating point errors
+        $customer = SalesClient::find($request->customer_id);
+        if (!$customer || empty($customer->phone)) {
+            return response()->json([
+                'message' => 'Mobile number is required for credit sales'
+            ], 422);
+        }
+    }
+    
     // Check if the transaction exists
     $transaction = SalesBill::where('id', $transactionId)->first();
     if (!$transaction) {
@@ -1251,7 +1298,7 @@ public function getCustomersWithDues($cid)
             return response()->json(['message' => 'Unauthenticated'], 401);
         }
 
-        if (!in_array($user->rid, [1, 2, 3])) {
+        if (!in_array($user->rid, [1, 2, 3,4])) {
             return response()->json(['message' => 'Unauthorized to access customer dues'], 403);
         }
 
@@ -1287,7 +1334,6 @@ public function getCustomersWithDues($cid)
             ->where('sc.cid', $cid)
             ->groupBy('sc.id', 'sc.name')
             ->havingRaw('SUM(bt.item_total - sb.absolute_discount - sb.paid_amount) > 0')
-            ->orderBy('sb.updated_at', 'desc') 
             ->get();
 
         Log::info("Customers with dues retrieved", ['count' => $customersWithDues->count()]);
@@ -1302,7 +1348,7 @@ public function getCustomersWithDues($cid)
             return response()->json(['message' => 'Unauthenticated'], 401);
         }
 
-        if (!in_array($user->rid, [1, 2, 3])) {
+        if (!in_array($user->rid, [1, 2, 3,4])) {
             return response()->json(['message' => 'Unauthorized to access customer dues'], 403);
         }
 
