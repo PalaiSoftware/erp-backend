@@ -67,6 +67,7 @@ public function register(Request $request)
             'mobile' => $request->mobile,
             'country' => $request->country,
             'password' => Hash::make($request->password),
+            //'rid' => 3,
             'rid' => $request->rid,
             'blocked' => 0,
             'cid' => $client->id, // Set cid during creation

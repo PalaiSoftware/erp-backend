@@ -163,19 +163,22 @@ public function index(Request $request)
             return response()->json(['message' => 'Forbidden: You do not have access to this company\'s data'], 403);
          }
     
-        $purchaseClients = PurchaseClient::where('cid', $validated['cid'])
-            ->select(
-                'id',
-                'name',
-                'email',
-                'phone',
-                'address',
-                'gst_no',
-                'pan'
-            )
-            ->orderBy('id','desc')
-            ->get();
-    
+         $purchaseClients = PurchaseClient::where('purchase_clients.cid', $validated['cid'])
+         ->leftJoin('users', 'purchase_clients.uid', '=', 'users.id')
+         ->select(
+             'purchase_clients.id',
+             'purchase_clients.name',
+             'purchase_clients.email',
+             'purchase_clients.phone',
+             'purchase_clients.address',
+             'purchase_clients.gst_no',
+             'purchase_clients.pan',
+             'purchase_clients.uid',
+             'users.name as created_by'  // Added: Get the user's name
+         )
+         ->orderBy('purchase_clients.id', 'desc')
+         ->get();
+         
         return response()->json([
             'message' => 'Purchase clients retrieved successfully',
             'purchase_clients' => $purchaseClients,
@@ -204,7 +207,7 @@ public function getVendorById($vendorId)
     }
 
     // Fetch purchase client details
-    $purchaseClient = PurchaseClient::select('id', 'name', 'email', 'phone', 'address', 'gst_no', 'pan', 'uid', 'cid', 'created_at', 'updated_at')
+    $purchaseClient = PurchaseClient::select('id', 'name', 'email', 'phone', 'address', 'gst_no', 'pan','uid')
         ->find($vendorId);
 
     if (!$purchaseClient) {
@@ -213,6 +216,17 @@ public function getVendorById($vendorId)
             'message' => 'Purchase client not found'
         ], 404);
     }
+    // Check if the current user is the one who created this vendor
+if ($purchaseClient->uid != $user->id) {
+    \Log::warning('Unauthorized vendor access attempt', [
+        'vendor_id' => $vendorId,
+        'user_id' => $user->id,
+        'vendor_creator_id' => $purchaseClient->uid
+    ]);
+    return response()->json([
+        'message' => 'Forbidden: You do not have permission to view this vendor'
+    ], 403);
+}
 
     return response()->json([
         'status' => 'success',
@@ -239,6 +253,17 @@ public function update(Request $request, $id)
     if (!$purchaseClient) {
         return response()->json(['message' => 'Purchase Client not found'], 404);
     }
+    // Check if the current user is the one who created this vendor
+if ($purchaseClient->uid != $user->id) {
+    \Log::warning('Unauthorized vendor update attempt', [
+        'vendor_id' => $id,
+        'user_id' => $user->id,
+        'vendor_creator_id' => $purchaseClient->uid
+    ]);
+    return response()->json([
+        'message' => 'Forbidden: You do not have permission to update this vendor'
+    ], 403);
+}
 
     // ✅ 2. Get company ID from EXISTING vendor (not request)
     $cid = (int)$purchaseClient->cid;

@@ -184,7 +184,7 @@ public function getProductById($product_id)
     }
 
     // Authorization check (restrict access based on role)
-    if ($user->rid < 1 || $user->rid > 3) {
+    if ($user->rid < 1 || $user->rid > 5) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 
@@ -512,9 +512,9 @@ public function getUnitsByProductId(Request $request, $product_id)
     if (!$user) {
         return response()->json(['message' => 'Unauthenticated'], 401);
     }
-    if ($user->rid < 1 || $user->rid > 5) {
-        return response()->json(['message' => 'Forbidden'], 403);
-    }
+    // if ($user->rid < 1 || $user->rid > 5) {
+    //     return response()->json(['message' => 'Forbidden'], 403);
+    // }
 
     // Validate product_id from route parameter
     if (!is_numeric($product_id) || intval($product_id) <= 0) {

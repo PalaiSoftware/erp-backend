@@ -132,22 +132,35 @@ class CustomerController extends Controller
              return response()->json(['message' => 'Forbidden: You do not have access to this company\'s data'], 403);
           }
     
-        // Retrieve sales clients where cid matches the provided value
-        $salesClients = SalesClient::where('cid', $validated['cid'])
-                            ->orderBy('id','desc')
-                            ->get()
-                            ->map(function ($salesClient) {
-                                return [
-                                    'id' => $salesClient->id,
-                                    'name' => $salesClient->name,
-                                    'email' => $salesClient->email,
-                                    'phone' => $salesClient->phone,
-                                    'address' => $salesClient->address,
-                                    'pan' => $salesClient->pan,
-                                    'gst_no' => $salesClient->gst_no,
-                                ];
-                            });
-    
+        // Retrieve sales clients where cid matches the provided value with user name
+       $salesClients = SalesClient::where('sales_clients.cid', $validated['cid'])
+       ->leftJoin('users', 'sales_clients.uid', '=', 'users.id')
+      ->select(
+        'sales_clients.id',
+        'sales_clients.name',
+        'sales_clients.email',
+        'sales_clients.phone',
+        'sales_clients.address',
+        'sales_clients.pan',
+        'sales_clients.gst_no',
+        'sales_clients.uid',
+       'users.name as created_by'  // Get the user's name
+       )
+    ->orderBy('sales_clients.id', 'desc')
+    ->get()
+    ->map(function ($salesClient) {
+        return [
+            'id' => $salesClient->id,
+            'name' => $salesClient->name,
+            'email' => $salesClient->email,
+            'phone' => $salesClient->phone,
+            'address' => $salesClient->address,
+            'pan' => $salesClient->pan,
+            'gst_no' => $salesClient->gst_no,
+            'uid' => $salesClient->uid,
+            'created_by' => $salesClient->created_by,  // Added to response
+        ];
+    });
         return response()->json([
             'message' => 'Sales clients retrieved successfully',
             'sales_clients' => $salesClients,
@@ -171,12 +184,40 @@ public function getCustomer($customerId)
 
     try {
         // Fetch the sales client by ID
-        $salesClient = SalesClient::where('id', $customerId)->first();
+        // $salesClient = SalesClient::where('id', $customerId)->first();
 
-        if (!$salesClient) {
-            Log::warning("Sales client not found", ['sales_client_id' => $customerId]);
-            return response()->json(['message' => 'Sales client not found'], 404);
-        }
+        // if (!$salesClient) {
+        //     Log::warning("Sales client not found", ['sales_client_id' => $customerId]);
+        //     return response()->json(['message' => 'Sales client not found'], 404);
+        // }
+        // // Check if the current user is the one who created this customer
+        // if ($salesClient->uid != $user->id) {
+        //     Log::warning('Unauthorized customer access attempt', [
+        //         'customer_id' => $customerId,
+        //         'user_id' => $user->id,
+        //         'customer_creator_id' => $salesClient->uid
+        //     ]);
+        //     return response()->json([
+        //         'message' => 'Forbidden: You do not have permission to view this customer'
+        //     ], 403);
+        // }
+        // Fetch the sales client ONCE and check if it exists
+    $salesClient = SalesClient::find($id);
+    if (!$salesClient) {
+        return response()->json(['message' => 'Sales client not found'], 404);
+    }
+    
+    // Check if the current user is the one who created this customer
+    if ($salesClient->uid != $user->id) {
+        Log::warning('Unauthorized customer update attempt', [
+            'customer_id' => $id,
+            'user_id' => $user->id,
+            'customer_creator_id' => $salesClient->uid
+        ]);
+        return response()->json([
+            'message' => 'Forbidden: You do not have permission to update this customer'
+        ], 403);
+    }
 
         // Prepare sales client data
         $salesClientData = [
@@ -188,9 +229,9 @@ public function getCustomer($customerId)
             'gst_no' => $salesClient->gst_no ?? null,
             'pan' => $salesClient->pan ?? null,
             'uid' => $salesClient->uid,
-            'cid' => $salesClient->cid,
-            'created_at' => Carbon::parse($salesClient->created_at)->format('Y-m-d H:i:s'),
-            'updated_at' => $salesClient->updated_at ? Carbon::parse($salesClient->updated_at)->format('Y-m-d H:i:s') : null,
+            // 'cid' => $salesClient->cid,
+            // 'created_at' => Carbon::parse($salesClient->created_at)->format('Y-m-d H:i:s'),
+            // 'updated_at' => $salesClient->updated_at ? Carbon::parse($salesClient->updated_at)->format('Y-m-d H:i:s') : null,
         ];
 
         Log::info('Sales client data retrieved successfully', ['sales_client_id' => $customerId]);
@@ -222,9 +263,22 @@ public function update(Request $request, $id)
         return response()->json(['message' => 'Unauthorized to update sales client'], 403);
     }
     
-    // Check if the sales client exists
-    if (!SalesClient::where('id', $id)->exists()) {
+    // Fetch the sales client ONCE and check if it exists
+    $salesClient = SalesClient::find($id);
+    if (!$salesClient) {
         return response()->json(['message' => 'Sales client not found'], 404);
+    }
+    
+    // Check if the current user is the one who created this customer
+    if ($salesClient->uid != $user->id) {
+        Log::warning('Unauthorized customer update attempt', [
+            'customer_id' => $id,
+            'user_id' => $user->id,
+            'customer_creator_id' => $salesClient->uid
+        ]);
+        return response()->json([
+            'message' => 'Forbidden: You do not have permission to update this customer'
+        ], 403);
     }
     
     // Validate the request data, cid is required

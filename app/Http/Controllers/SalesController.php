@@ -290,41 +290,134 @@ public function store(Request $request)
     }
 }
 
-    public function getAllInvoicesByCompany($cid)
-    {
-        // Get the authenticated user
-        $user = Auth::user();
-        if (!$user) {
-            return response()->json(['message' => 'Unauthorized'], 401);
-        }
-        $uid = $user->id;
+//     public function getAllInvoicesByCompany($cid)
+//     {
+//         // Get the authenticated user
+//         $user = Auth::user();
+//         if (!$user) {
+//             return response()->json(['message' => 'Unauthorized'], 401);
+//         }
+//         $uid = $user->id;
 
-        // Restrict access to users with rid between 5 and 10 inclusive
-        if ($user->rid < 1 || $user->rid > 5) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
+//         // Restrict access to users with rid between 5 and 10 inclusive
+//         if ($user->rid < 1 || $user->rid > 5) {
+//             return response()->json(['message' => 'Forbidden'], 403);
+//         }
 
-        // Check if the user belongs to the requested company
-        if ($user->cid != $cid) {
-            return response()->json(['message' => 'Forbidden: You do not have access to this company\'s data'], 403);
-        }
-    try {
+//         // Check if the user belongs to the requested company
+//         if ($user->cid != $cid) {
+//             return response()->json(['message' => 'Forbidden: You do not have access to this company\'s data'], 403);
+//         }
+//     try {
         
-        // Build the query with the purchase_bills table
+//         // Build the query with the purchase_bills table
+//         $query = DB::table('sales_bills as sb')
+//             ->select(
+//                 'sb.id as transaction_id',          // Bill ID as transaction ID
+//                 'sb.bill_name as bill_name',
+//                 'sc.name as customer_name',           // Vendor name from purchase_clients
+//                 'sb.scid as customer_id',             // Vendor ID from purchase_bills
+//                 'sb.payment_mode',                  // Payment mode integer
+//                 'sb.updated_at as date',            // Date of the transaction
+//                 'u.name as sales_by'            // Name of the user who made the purchase
+//             )
+//             ->leftJoin('sales_clients as sc', 'sb.scid', '=', 'sc.id')  // Join with vendors
+//             ->leftJoin('users as u', 'sb.uid', '=', 'u.id')                // Join with users
+//             ->where('u.cid', $cid)                                         // Filter by company ID
+//             ->orderBy('sb.updated_at', 'desc');
+//         // Execute the query
+//         $transactions = $query->get();
+
+//         // Fetch payment modes from the database
+//         $paymentModes = DB::table('payment_modes')->pluck('name', 'id')->toArray();
+
+//         // Map payment_mode from integer to string
+//         $transactions = $transactions->map(function ($transaction) use ($paymentModes) {
+//             $transaction->payment_mode = $paymentModes[$transaction->payment_mode] ?? 'Unknown';
+//             return $transaction;
+//         });
+
+//         // Handle empty results
+//         if ($transactions->isEmpty()) {
+//             Log::info('No transactions found for cid', ['cid' => $cid]);
+//             return response()->json([
+//                 'status' => 'error',
+//                 'message' => 'No transactions found for this customer ID'
+//             ], 404);
+//         }
+
+//         // Return successful response
+//         Log::info('Transactions retrieved successfully', ['cid' => $cid, 'count' => $transactions->count()]);
+//         return response()->json([
+//             'status' => 'success',
+//             'data' => $transactions
+//         ], 200);
+//     } catch (\Exception $e) {
+//         Log::error('Failed to fetch transactions', ['cid' => $cid, 'error' => $e->getMessage()]);
+//         return response()->json(['message' => 'Failed to fetch transactions', 'error' => $e->getMessage()], 500);
+//     }
+// }
+
+public function getAllInvoicesByCompany($cid)
+{
+    // Get the authenticated user
+    $user = Auth::user();
+    if (!$user) {
+        return response()->json(['message' => 'Unauthorized'], 401);
+    }
+    $uid = $user->id;
+
+    // Check if the user belongs to the requested company
+    if ($user->cid != $cid) {
+        return response()->json(['message' => 'Forbidden: You do not have access to this company\'s data'], 403);
+    }
+    
+    // Determine which RIDs the user can view based on their own RID
+    $allowedRids = [];
+    switch ($user->rid) {
+        case 1: // Admin - can see everyone
+            $allowedRids = [1, 2, 3, 4, 5];
+            break;
+        case 2: // Superuser - can see Superuser, Moderator, Authenticated, Anonymous
+            $allowedRids = [2, 3, 4, 5];
+            break;
+        case 3: // Moderator - can see Moderator, Authenticated, Anonymous
+            $allowedRids = [3, 4, 5];
+            break;
+        case 4: // Authenticated - can only see Authenticated
+        case 5: // Anonymous - can only see Anonymous
+            $allowedRids = [$user->rid];
+            break;
+        default:
+            // For safety, deny access if rid is not recognized
+            return response()->json(['message' => 'Forbidden: Invalid role'], 403);
+    }
+    
+    Log::info('Company access verified for getAllInvoicesByCompany', [
+        'cid' => $cid, 
+        'user_rid' => $user->rid,
+        'allowed_rids' => $allowedRids
+    ]);
+
+    try {
+        // Build the query with the sales_bills table
         $query = DB::table('sales_bills as sb')
             ->select(
                 'sb.id as transaction_id',          // Bill ID as transaction ID
                 'sb.bill_name as bill_name',
-                'sc.name as customer_name',           // Vendor name from purchase_clients
-                'sb.scid as customer_id',             // Vendor ID from purchase_bills
+                'sc.name as customer_name',         // Customer name from sales_clients
+                'sb.scid as customer_id',           // Customer ID from sales_bills
                 'sb.payment_mode',                  // Payment mode integer
                 'sb.updated_at as date',            // Date of the transaction
-                'u.name as sales_by'            // Name of the user who made the purchase
+                'u.name as sales_by',               // Name of the user who made the sale
+                'u.rid as seller_rid'               // For debugging visibility
             )
-            ->leftJoin('sales_clients as sc', 'sb.scid', '=', 'sc.id')  // Join with vendors
-            ->leftJoin('users as u', 'sb.uid', '=', 'u.id')                // Join with users
-            ->where('u.cid', $cid)                                         // Filter by company ID
+            ->leftJoin('sales_clients as sc', 'sb.scid', '=', 'sc.id')  // Join with customers
+            ->leftJoin('users as u', 'sb.uid', '=', 'u.id')             // Join with users
+            ->where('u.cid', $cid)                                      // Filter by company ID
+            ->whereIn('u.rid', $allowedRids)                            // Role-based filter
             ->orderBy('sb.updated_at', 'desc');
+            
         // Execute the query
         $transactions = $query->get();
 
@@ -339,7 +432,10 @@ public function store(Request $request)
 
         // Handle empty results
         if ($transactions->isEmpty()) {
-            Log::info('No transactions found for cid', ['cid' => $cid]);
+            Log::info('No transactions found for cid', [
+                'cid' => $cid, 
+                'allowed_rids' => $allowedRids
+            ]);
             return response()->json([
                 'status' => 'error',
                 'message' => 'No transactions found for this customer ID'
@@ -347,14 +443,26 @@ public function store(Request $request)
         }
 
         // Return successful response
-        Log::info('Transactions retrieved successfully', ['cid' => $cid, 'count' => $transactions->count()]);
+        Log::info('Transactions retrieved successfully', [
+            'cid' => $cid, 
+            'count' => $transactions->count(),
+            'allowed_rids' => $allowedRids
+        ]);
+        
         return response()->json([
             'status' => 'success',
             'data' => $transactions
         ], 200);
     } catch (\Exception $e) {
-        Log::error('Failed to fetch transactions', ['cid' => $cid, 'error' => $e->getMessage()]);
-        return response()->json(['message' => 'Failed to fetch transactions', 'error' => $e->getMessage()], 500);
+        Log::error('Failed to fetch transactions', [
+            'cid' => $cid, 
+            'user_rid' => $user->rid,
+            'error' => $e->getMessage()
+        ]);
+        return response()->json([
+            'message' => 'Failed to fetch transactions', 
+            'error' => $e->getMessage()
+        ], 500);
     }
 }
   
@@ -640,6 +748,17 @@ public function update(Request $request, $transactionId)
             'message' => 'Transaction not found'
         ], 404);
     }
+    // Check if the current user is the one who created this transaction
+if ($transaction->uid != $user->id) {
+    \Log::warning('Unauthorized transaction update attempt', [
+        'transaction_id' => $transactionId,
+        'user_id' => $user->id,
+        'transaction_owner_id' => $transaction->uid
+    ]);
+    return response()->json([
+        'message' => 'Forbidden: You do not have permission to update this transaction'
+    ], 403);
+}
 
     $cid = $user->cid;
 

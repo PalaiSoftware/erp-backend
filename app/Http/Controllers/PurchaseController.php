@@ -7,6 +7,7 @@ use App\Models\PurchaseBill;
 use App\Models\PurchaseItem;
 use App\Models\PaymentMode;
 use App\Models\Product;
+use App\Models\ProductInfo;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -29,6 +30,11 @@ class PurchaseController extends Controller
         // Restrict to rid 1, 2, 3,4
         if (!in_array($user->rid, [1, 2, 3,4])) {
             return response()->json(['message' => 'Unauthorized to purchase product'], 403);
+        }
+        // Get company ID from user
+        $cid = $user->cid;
+        if (!$cid) {
+            return response()->json(['message' => 'User company ID not found'], 400);
         }
 
         // Log the incoming request before validation
@@ -95,9 +101,10 @@ if ($request->filled('bill_name')) {
             // Step 2: Process each product
             foreach ($validated['products'] as $product) {
                 // Create purchase item record
+                $pid = (int) $product['product_id']; // Explicitly cast to integer
                 PurchaseItem::create([
                     'bid' => $billId,
-                    'pid' => $product['product_id'],
+                    'pid' => $pid,
                     'p_price' => $product['p_price'],
                     's_price' => $product['s_price'] ?? 0,
                     'quantity' => $product['quantity'],
@@ -115,9 +122,123 @@ if ($request->filled('bill_name')) {
                     'dis' => $product['dis'] ?? 0,
                     'gst' => $product['gst'] ?? 0, 
                 ]);
+                // Step 3: Update or create product_info (per cid and pid)
+                $productModel = Product::find($pid);
+                if (!$productModel) {
+                    throw new \Exception("Product not found for pid: {$pid}");
+                }
+
+                $new_unit = $product['unit_id'];
+                $new_p_price = $product['p_price'];
+                $new_s_price = $product['s_price'] ?? 0;
+                $new_gst = $product['gst'] ?? 0;
+
+                // Check if product_info record exists for pid and cid
+                $info = ProductInfo::where('pid', $pid)->where('cid', $cid)->first();
+
+                // Prepare data for create or update
+                $current_unit = $info ? $info->unit_id : $new_unit;
+                $converted_p = $new_p_price;
+                $converted_s = $new_s_price;
+
+                // Handle unit conversion if necessary
+                if ($info && $new_unit != $current_unit) {
+                    $p_unit = $productModel->p_unit; // e.g., box
+                    $s_unit = $productModel->s_unit; // e.g., piece
+                    $c_factor = $productModel->c_factor; // e.g., 20 pieces per box
+
+                    if ($c_factor == 0) {
+                        throw new \Exception("Conversion factor is zero for product ID {$pid}, cannot convert units");
+                    }
+
+                    // Convert new prices to the stored unit in product_info
+                    // c_factor = number of secondary units (piece) per primary unit (box)
+                    if ($new_unit == $p_unit && $current_unit == $s_unit) {
+                        // New in box, stored in piece: divide by c_factor
+                        $converted_p = $new_p_price / $c_factor;
+                        $converted_s = $new_s_price / $c_factor;
+                    } elseif ($new_unit == $s_unit && $current_unit == $p_unit) {
+                        // New in piece, stored in box: multiply by c_factor
+                        $converted_p = $new_p_price * $c_factor;
+                        $converted_s = $new_s_price * $c_factor;
+                    } else {
+                        throw new \Exception("Unsupported unit conversion for product ID {$pid}: new unit {$new_unit}, current unit {$current_unit}");
+                    }
+
+                    Log::info('Prices converted for product', [
+                        'pid' => $pid,
+                        'cid' => $cid,
+                        'original_p_price' => $new_p_price,
+                        'converted_p_price' => $converted_p,
+                        'original_s_price' => $new_s_price,
+                        'converted_s_price' => $converted_s,
+                        'new_unit' => $new_unit,
+                        'current_unit' => $current_unit,
+                        'c_factor' => $c_factor,
+                    ]);
+                }
+
+                // Prepare data for create or update
+                $productInfoData = [
+                    'pid' => $pid,
+                    'hsn_code' => $productModel->hscode,
+                    'description' => null,
+                    'unit_id' => $current_unit,
+                    'purchase_price' => $converted_p,
+                    'profit_percentage' => 0,
+                    'pre_gst_sale_cost' => $converted_s,
+                    'gst' => $new_gst,
+                    'post_gst_sale_cost' => $converted_s * (1 + ($new_gst / 100)),
+                    'uid' => $user->id,
+                    'cid' => $cid,
+                    'created_at' => $purchaseDate,
+                    'updated_at' => $purchaseDate,
+                ];
+
+                if (!$info) {
+                    // Create new product_info record
+                    ProductInfo::create($productInfoData);
+                    Log::info('Product info created', [
+                        'pid' => $pid,
+                        'cid' => $cid,
+                        'unit_id' => $current_unit,
+                        'purchase_price' => $converted_p,
+                        'pre_gst_sale_cost' => $converted_s,
+                        'gst' => $new_gst,
+                    ]);
+                } else {
+                    // Update existing product_info record for specific pid and cid
+                    $affectedRows = ProductInfo::where('pid', $pid)
+                        ->where('cid', $cid)
+                        ->update([
+                            'purchase_price' => $converted_p,
+                            'pre_gst_sale_cost' => $converted_s,
+                            'gst' => $new_gst,
+                            'post_gst_sale_cost' => $converted_s * (1 + ($new_gst / 100)),
+                            'updated_at' => $purchaseDate,
+                        ]);
+
+                    if ($affectedRows !== 1) {
+                        Log::warning('Unexpected number of rows updated in product_info', [
+                            'pid' => $pid,
+                            'cid' => $cid,
+                            'affected_rows' => $affectedRows,
+                        ]);
+                    }
+
+                    Log::info('Product info updated', [
+                        'pid' => $pid,
+                        'cid' => $cid,
+                        'unit_id' => $current_unit,
+                        'purchase_price' => $converted_p,
+                        'pre_gst_sale_cost' => $converted_s,
+                        'gst' => $new_gst,
+                        'affected_rows' => $affectedRows,
+                    ]);
+                }
             }
 
-            // Step 3: Commit the transaction
+            // Step 4: Commit the transaction
             DB::commit();
             Log::info('Transaction committed', ['bill_id' => $billId]);
 
@@ -138,6 +259,87 @@ if ($request->filled('bill_name')) {
             ], 500);
         }
 }   
+// public function getTransactionsByCid(Request $request)
+// {
+//     // Get the authenticated user
+//     $user = Auth::user();
+//     if (!$user) {
+//         return response()->json(['message' => 'Unauthorized'], 401);
+//     }
+
+//     // Extract uid from the authenticated user
+//     $uid = $user->id;
+
+//     // Restrict access to users with rid between 1 and 5 inclusive
+//     if ($user->rid < 1 || $user->rid > 5) {
+//         return response()->json(['message' => 'Forbidden'], 403);
+//     }
+
+//     // Validate the request data
+//     $request->validate([
+//         'cid' => 'required|integer'
+//     ]);
+
+//     // Extract cid from the request
+//     $cid = $request->input('cid');
+
+//     // Check if the user belongs to the requested company
+//     if ($user->cid != $cid) {
+//         return response()->json(['message' => 'Forbidden: You do not have access to this company\'s data'], 403);
+//     }
+
+//     try {
+//         // Log successful validation
+//         Log::info('Validation passed successfully for getTransactionsByCid', ['cid' => $cid]);
+
+//         // Build the query with the purchase_bills table
+//         $query = DB::table('purchase_bills as pb')
+//             ->select(
+//                 'pb.id as transaction_id',          // Bill ID as transaction ID
+//                 'pb.bill_name as bill_name',
+//                 'pc.name as vendor_name',           // Vendor name from purchase_clients
+//                 'pb.pcid as vendor_id',             // Vendor ID from purchase_bills
+//                 'pb.payment_mode',                  // Payment mode integer
+//                 'pb.updated_at as date',            // Date of the transaction
+//                 'u.name as purchased_by'            // Name of the user who made the purchase
+//             )
+//             ->leftJoin('purchase_clients as pc', 'pb.pcid', '=', 'pc.id')  // Join with vendors
+//             ->leftJoin('users as u', 'pb.uid', '=', 'u.id')                // Join with users
+//             ->where('u.cid', $cid)                                   // Filter by company ID
+//             ->orderBy('pb.updated_at', 'desc');      
+//         // Execute the query
+//         $transactions = $query->get();
+
+//         // Fetch payment modes from the database
+//         $paymentModes = DB::table('payment_modes')->pluck('name', 'id')->toArray();
+
+//         // Map payment_mode from integer to string
+//         $transactions = $transactions->map(function ($transaction) use ($paymentModes) {
+//             $transaction->payment_mode = $paymentModes[$transaction->payment_mode] ?? 'Unknown';
+//             return $transaction;
+//         });
+
+//         // Handle empty results
+//         if ($transactions->isEmpty()) {
+//             Log::info('No transactions found for cid', ['cid' => $cid]);
+//             return response()->json([
+//                 'status' => 'error',
+//                 'message' => 'No transactions found for this customer ID'
+//             ], 404);
+//         }
+
+//         // Return successful response
+//         Log::info('Transactions retrieved successfully', ['cid' => $cid, 'count' => $transactions->count()]);
+//         return response()->json([
+//             'status' => 'success',
+//             'data' => $transactions
+//         ], 200);
+//     } catch (\Exception $e) {
+//         Log::error('Failed to fetch transactions', ['cid' => $cid, 'error' => $e->getMessage()]);
+//         return response()->json(['message' => 'Failed to fetch transactions', 'error' => $e->getMessage()], 500);
+//     }
+// }
+
 public function getTransactionsByCid(Request $request)
 {
     // Get the authenticated user
@@ -148,11 +350,7 @@ public function getTransactionsByCid(Request $request)
 
     // Extract uid from the authenticated user
     $uid = $user->id;
-
-    // Restrict access to users with rid between 1 and 5 inclusive
-    if ($user->rid < 1 || $user->rid > 5) {
-        return response()->json(['message' => 'Forbidden'], 403);
-    }
+    $userRid = $user->rid;
 
     // Validate the request data
     $request->validate([
@@ -167,9 +365,34 @@ public function getTransactionsByCid(Request $request)
         return response()->json(['message' => 'Forbidden: You do not have access to this company\'s data'], 403);
     }
 
+    // Determine which RIDs the user can view based on their own RID
+    $allowedRids = [];
+    switch ($userRid) {
+        case 1: // Admin - can see everyone
+            $allowedRids = [1, 2, 3, 4, 5];
+            break;
+        case 2: // Superuser - can see Superuser, Moderator, Authenticated, Anonymous
+            $allowedRids = [2, 3, 4, 5];
+            break;
+        case 3: // Moderator - can see Moderator, Authenticated, Anonymous
+            $allowedRids = [3, 4, 5];
+            break;
+        case 4: // Authenticated - can only see Authenticated
+        case 5: // Anonymous - can only see Anonymous
+            $allowedRids = [$userRid];
+            break;
+        default:
+            // For safety, deny access if rid is not recognized
+            return response()->json(['message' => 'Forbidden: Invalid role'], 403);
+    }
+
     try {
         // Log successful validation
-        Log::info('Validation passed successfully for getTransactionsByCid', ['cid' => $cid]);
+        Log::info('Validation passed successfully for getTransactionsByCid', [
+            'cid' => $cid, 
+            'user_rid' => $userRid,
+            'allowed_rids' => $allowedRids
+        ]);
 
         // Build the query with the purchase_bills table
         $query = DB::table('purchase_bills as pb')
@@ -180,12 +403,15 @@ public function getTransactionsByCid(Request $request)
                 'pb.pcid as vendor_id',             // Vendor ID from purchase_bills
                 'pb.payment_mode',                  // Payment mode integer
                 'pb.updated_at as date',            // Date of the transaction
-                'u.name as purchased_by'            // Name of the user who made the purchase
+                'u.name as purchased_by',           // Name of the user who made the purchase
+                'u.rid as purchaser_rid'            // Include RID for debugging
             )
             ->leftJoin('purchase_clients as pc', 'pb.pcid', '=', 'pc.id')  // Join with vendors
             ->leftJoin('users as u', 'pb.uid', '=', 'u.id')                // Join with users
-            ->where('u.cid', $cid)                                   // Filter by company ID
+            ->where('u.cid', $cid)                                        // Filter by company ID
+            ->whereIn('u.rid', $allowedRids)                              // NEW: Filter by allowed RIDs
             ->orderBy('pb.updated_at', 'desc');      
+
         // Execute the query
         $transactions = $query->get();
 
@@ -200,7 +426,7 @@ public function getTransactionsByCid(Request $request)
 
         // Handle empty results
         if ($transactions->isEmpty()) {
-            Log::info('No transactions found for cid', ['cid' => $cid]);
+            Log::info('No transactions found for cid', ['cid' => $cid, 'allowed_rids' => $allowedRids]);
             return response()->json([
                 'status' => 'error',
                 'message' => 'No transactions found for this customer ID'
@@ -208,14 +434,26 @@ public function getTransactionsByCid(Request $request)
         }
 
         // Return successful response
-        Log::info('Transactions retrieved successfully', ['cid' => $cid, 'count' => $transactions->count()]);
+        Log::info('Transactions retrieved successfully', [
+            'cid' => $cid, 
+            'count' => $transactions->count(),
+            'allowed_rids' => $allowedRids
+        ]);
+        
         return response()->json([
             'status' => 'success',
             'data' => $transactions
         ], 200);
     } catch (\Exception $e) {
-        Log::error('Failed to fetch transactions', ['cid' => $cid, 'error' => $e->getMessage()]);
-        return response()->json(['message' => 'Failed to fetch transactions', 'error' => $e->getMessage()], 500);
+        Log::error('Failed to fetch transactions', [
+            'cid' => $cid, 
+            'user_rid' => $userRid,
+            'error' => $e->getMessage()
+        ]);
+        return response()->json([
+            'message' => 'Failed to fetch transactions', 
+            'error' => $e->getMessage()
+        ], 500);
     }
 }
 
@@ -227,7 +465,7 @@ public function getPurchaseDetailsByTransaction(Request $request)
             return response()->json(['message' => 'Unauthorized'], 401);
         }
 
-        // Role-based access control
+        //Role-based access control
         if ($user->rid < 1 || $user->rid > 4) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
@@ -258,7 +496,7 @@ public function getPurchaseDetailsByTransaction(Request $request)
                 'message' => 'Transaction not found'
             ], 404);
         }
-
+        
         // Default values for null fields
         $absoluteDiscount = $transaction->absolute_discount ?? 0;
         $paidAmount = $transaction->paid_amount ?? 0;
@@ -446,6 +684,17 @@ public function updateTransactionById(Request $request, $transaction_id)
             'message' => 'Transaction not found'
         ], 404);
     }
+    // Check if the current user is the one who created this transaction
+if ($transaction->uid != $user->id) {
+    \Log::warning('Unauthorized transaction update attempt', [
+        'transaction_id' => $transaction_id,
+        'user_id' => $user->id,
+        'transaction_owner_id' => $transaction->uid
+    ]);
+    return response()->json([
+        'message' => 'Forbidden: You do not have permission to update this transaction'
+    ], 403);
+}
 
     // Start a database transaction
     DB::beginTransaction();
@@ -553,7 +802,7 @@ public function destroy(Request $request, $transactionId)
     }
 
     // Restrict to roles 5 and 6 only
-    if (!in_array($user->rid, [1,2,3])) {
+    if (!in_array($user->rid, [1,2,3,4])) {
         return response()->json(['message' => 'Unauthorized to delete purchase bill'], 403);
     }
 
@@ -565,7 +814,7 @@ public function destroy(Request $request, $transactionId)
 
     if (!$bill) {
         return response()->json([
-            'message' => 'Bill not found or unauthorized',
+            'message' => 'Unauthorized to delete purchase bill',
         ], 404);
     }
 
