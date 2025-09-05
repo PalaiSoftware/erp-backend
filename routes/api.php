@@ -81,7 +81,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::delete('/destroy-sales/{transactionId}', [SalesController::class, 'destroy']);
     Route::delete('/destroy-purchase/{transactionId}', [PurchaseController::class, 'destroy']);
     Route::get('/payment-modes', [PaymentController::class, 'index']);
-    Route::post('/product-info', [ProductInfoController::class, 'store']);
+    //Route::post('/product-info', [ProductInfoController::class, 'store']);
     Route::get('/product-info/{cid}', [ProductInfoController::class, 'allProductInfo']);
     Route::get('/product/{pid}', [ProductInfoController::class, 'getProductById']);
     Route::put('/product-info/{pid}', [ProductInfoController::class, 'updateProductById']);

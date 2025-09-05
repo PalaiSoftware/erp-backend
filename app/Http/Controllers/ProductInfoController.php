@@ -10,93 +10,95 @@ use App\Models\ProductInfo;
 
 class ProductInfoController extends Controller
 {
-    public function store(Request $request)
-    {
-        // Force JSON response
-        $request->headers->set('Accept', 'application/json');
+    // public function store(Request $request)
+    // {
+    //     // Force JSON response
+    //     $request->headers->set('Accept', 'application/json');
 
-        // Get the authenticated user
-        $user = Auth::user();
+    //     // Get the authenticated user
+    //     $user = Auth::user();
 
-        // Check if user is authenticated
-        if (!$user) {
-            return response()->json(['message' => 'Unauthenticated'], 401);
-        }
+    //     // Check if user is authenticated
+    //     if (!$user) {
+    //         return response()->json(['message' => 'Unauthenticated'], 401);
+    //     }
 
-        // Restrict to rid 1, 2, 3
-        if (!in_array($user->rid, [1, 2, 3])) {
-            return response()->json(['message' => 'Unauthorized to add product Info'], 403);
-        }
+    //     // Restrict to rid 1, 2, 3
+    //     if (!in_array($user->rid, [1, 2, 3])) {
+    //         return response()->json(['message' => 'Unauthorized to add product Info'], 403);
+    //     }
 
-        // Validate the products array
-        $validated = $request->validate([
-            'products' => 'required|array|min:1',
-            'products.*.name' => [
-                'required',
-                'string',
-                'max:255',
-                function ($attribute, $value, $fail) use ($user) {
-                    // Case-insensitive database check for unique name within the same company
-                    if (ProductInfo::whereRaw('LOWER(name) = LOWER(?)', [$value])
-                        ->where('cid', $user->cid)
-                        ->exists()) {
-                        $fail($value . ' has already been taken for this company.');
-                    }
-                },
-            ],
-            'products.*.hsn_code' => 'nullable|string|max:255',
-            'products.*.description'=> 'nullable|string|max:500',
-            'products.*.purchase_price' => 'nullable|numeric|min:0',
-            'products.*.profit_percentage' => 'nullable|numeric|min:0',
-            'products.*.gst' => 'nullable|numeric|min:0',
-        ]);
+    //     // Validate the products array
+    //     $validated = $request->validate([
+    //         'products' => 'required|array|min:1',
+    //         'products.*.name' => [
+    //             'required',
+    //             'string',
+    //             'max:255',
+    //             function ($attribute, $value, $fail) use ($user) {
+    //                 // Case-insensitive database check for unique name within the same company
+    //                 if (ProductInfo::whereRaw('LOWER(name) = LOWER(?)', [$value])
+    //                     ->where('cid', $user->cid)
+    //                     ->exists()) {
+    //                     $fail($value . ' has already been taken for this company.');
+    //                 }
+    //             },
+    //         ],
+    //         'products.*.hsn_code' => 'nullable|string|max:255',
+    //         'products.*.description'=> 'nullable|string|max:500',
+    //         'products.*.purchase_price' => 'nullable|numeric|min:0',
+    //         'products.*.profit_percentage' => 'nullable|numeric|min:0',
+    //         'products.*.gst' => 'nullable|numeric|min:0',
+    //     ]);
 
-        $createdProducts = [];
+    //     $createdProducts = [];
 
-        // Use a transaction to ensure data consistency
-        DB::beginTransaction();
-        try {
-            foreach ($validated['products'] as $productData) {
-                // Set default values for optional fields
-                $purchase_price = $productData['purchase_price'] ?? 0;
-                $profit_percentage = $productData['profit_percentage'] ?? 0;
-                $gst = $productData['gst'] ?? 0;
+    //     // Use a transaction to ensure data consistency
+    //     DB::beginTransaction();
+    //     try {
+    //         foreach ($validated['products'] as $productData) {
+    //             // Set default values for optional fields
+    //             $purchase_price = $productData['purchase_price'] ?? 0;
+    //             $profit_percentage = $productData['profit_percentage'] ?? 0;
+    //             $gst = $productData['gst'] ?? 0;
 
-                // Calculate pre_gst_sale_cost and post_gst_sale_cost only if purchase_price is non-zero
-                $pre_gst_sale_cost = $purchase_price > 0
-                    ? round($purchase_price * (1 + $profit_percentage / 100), 2)
-                    : 0;
-                $post_gst_sale_cost = $pre_gst_sale_cost > 0
-                    ? round($pre_gst_sale_cost * (1 + $gst / 100), 2)
-                    : 0;
+    //             // Calculate pre_gst_sale_cost and post_gst_sale_cost only if purchase_price is non-zero
+    //             $pre_gst_sale_cost = $purchase_price > 0
+    //                 ? round($purchase_price * (1 + $profit_percentage / 100), 2)
+    //                 : 0;
+    //             $post_gst_sale_cost = $pre_gst_sale_cost > 0
+    //                 ? round($pre_gst_sale_cost * (1 + $gst / 100), 2)
+    //                 : 0;
 
-                $product = ProductInfo::create([
-                    'name' => $productData['name'],
-                    'hsn_code' => $productData['hsn_code'] ?? null,
-                    'description' => $productData['description'] ?? null,
-                    'purchase_price' => $purchase_price,
-                    'profit_percentage' => $profit_percentage,
-                    'pre_gst_sale_cost' => $pre_gst_sale_cost,
-                    'gst' => $gst,
-                    'post_gst_sale_cost' => $post_gst_sale_cost,
-                    'uid' => $user->id,
-                    'cid' => $user->cid,
-                ]);
+    //             $product = ProductInfo::create([
+    //                 'name' => $productData['name'],
+    //                 'hsn_code' => $productData['hsn_code'] ?? null,
+    //                 'description' => $productData['description'] ?? null,
+    //                 'purchase_price' => $purchase_price,
+    //                 'profit_percentage' => $profit_percentage,
+    //                 'pre_gst_sale_cost' => $pre_gst_sale_cost,
+    //                 'gst' => $gst,
+    //                 'post_gst_sale_cost' => $post_gst_sale_cost,
+    //                 'uid' => $user->id,
+    //                 'cid' => $user->cid,
+    //             ]);
 
-                $createdProducts[] = $product;
-            }
+    //             $createdProducts[] = $product;
+    //         }
 
-            DB::commit();
-            return response()->json([
-                'message' => 'Product recorded successfully',
-                'products' => $createdProducts,
-            ], 201);
-        } catch (\Exception $e) {
-            DB::rollBack();
-            Log::error('Failed to create products: ' . $e->getMessage());
-            return response()->json(['message' => 'Failed to create products', 'error' => $e->getMessage()], 500);
-        }
-    }
+    //         DB::commit();
+    //         return response()->json([
+    //             'message' => 'Product recorded successfully',
+    //             'products' => $createdProducts,
+    //         ], 201);
+    //     } catch (\Exception $e) {
+    //         DB::rollBack();
+    //         Log::error('Failed to create products: ' . $e->getMessage());
+    //         return response()->json(['message' => 'Failed to create products', 'error' => $e->getMessage()], 500);
+    //     }
+    // }
+
+
     // public function allProductInfo($cid)
     // {
     
@@ -201,6 +203,53 @@ class ProductInfoController extends Controller
             ], 500);
         }
     }
+    // public function getProductById($pid)
+    // {
+    //     // Authentication check
+    //     $user = Auth::user();
+    //     if (!$user) {
+    //         return response()->json(['message' => 'Unauthorized'], 401);
+    //     }
+    
+    //     // Authorization check (restrict access based on role)
+    //     if ($user->rid < 1 || $user->rid > 3) {
+    //         return response()->json(['message' => 'Forbidden'], 403);
+    //     }
+    
+    //     // Validate that the product_id is numeric
+    //     if (!is_numeric($pid)) {
+    //         return response()->json(['message' => 'Invalid product ID'], 422);
+    //     }
+    
+    //     // Fetch the product by product_id
+    //     $product = ProductInfo::where('id', $pid)
+    //     ->select(
+    //             'id as pid',
+    //             'name as product_name',
+    //             'hsn_code',
+    //             'description',
+    //             'purchase_price',
+    //             'profit_percentage',
+    //             'pre_gst_sale_cost',
+    //             'gst',
+    //             'post_gst_sale_cost'
+    //        )
+    //    ->first();
+    
+    //     // Check if the product exists
+    //     if (!$product) {
+    //         return response()->json([
+    //             'message' => 'Product not found',
+    //         ], 404);
+    //     }
+    
+    //     // Return the product details
+    //     return response()->json([
+    //         'message' => 'Product retrieved successfully',
+    //         'product' => $product,
+    //     ], 200);
+    // }
+
     public function getProductById($pid)
     {
         // Authentication check
@@ -208,124 +257,85 @@ class ProductInfoController extends Controller
         if (!$user) {
             return response()->json(['message' => 'Unauthorized'], 401);
         }
-    
+
         // Authorization check (restrict access based on role)
-        if ($user->rid < 1 || $user->rid > 3) {
+        if (!in_array($user->rid, [1, 2, 3])) {
             return response()->json(['message' => 'Forbidden'], 403);
         }
-    
+
         // Validate that the product_id is numeric
-        if (!is_numeric($pid)) {
+        if (!is_numeric($pid) || intval($pid) <= 0) {
             return response()->json(['message' => 'Invalid product ID'], 422);
         }
-    
-        // Fetch the product by product_id
-        $product = ProductInfo::where('id', $pid)
-        ->select(
-                'id as pid',
-                'name as product_name',
-                'hsn_code',
-                'description',
-                'purchase_price',
-                'profit_percentage',
-                'pre_gst_sale_cost',
-                'gst',
-                'post_gst_sale_cost'
-           )
-       ->first();
-    
-        // Check if the product exists
-        if (!$product) {
+
+        $cid = $user->cid;
+        $pid = (int) $pid;
+
+        // Fetch the product by pid and cid with joins
+        try {
+            $product = ProductInfo::where('product_info.pid', $pid)
+                ->where('product_info.cid', $cid)
+                ->join('products', 'product_info.pid', '=', 'products.id')
+                ->join('units', 'product_info.unit_id', '=', 'units.id')
+                ->select(
+                    'product_info.pid',
+                    'products.name as product_name',
+                    'product_info.hsn_code',
+                    'product_info.description',
+                    'product_info.unit_id',
+                    'units.name as unit_name',
+                    'product_info.purchase_price',
+                    'product_info.profit_percentage',
+                    'product_info.pre_gst_sale_cost',
+                    'product_info.gst',
+                    'product_info.post_gst_sale_cost'
+                )
+                ->first();
+
+            // Check if the product exists
+            if (!$product) {
+                Log::warning('Product not found for pid and cid', [
+                    'pid' => $pid,
+                    'cid' => $cid,
+                    'user_id' => $user->id,
+                ]);
+                return response()->json([
+                    'message' => 'Product not found for this company',
+                ], 404);
+            }
+
+            Log::info('Product retrieved successfully', [
+                'pid' => $pid,
+                'cid' => $cid,
+                'user_id' => $user->id,
+            ]);
+
+            // Return the product details
             return response()->json([
-                'message' => 'Product not found',
-            ], 404);
+                'message' => 'Product retrieved successfully',
+                'product' => $product,
+            ], 200);
+        } catch (\Exception $e) {
+            Log::error('Failed to fetch product', [
+                'pid' => $pid,
+                'cid' => $cid,
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return response()->json([
+                'message' => 'Failed to fetch product',
+                'error' => $e->getMessage(),
+            ], 500);
         }
-    
-        // Return the product details
-        return response()->json([
-            'message' => 'Product retrieved successfully',
-            'product' => $product,
-        ], 200);
     }
    
-//     public function updateProductById($pid, Request $request)
-// {
-//     // Authentication check
-//     $user = Auth::user();
-//     if (!$user) {
-//         return response()->json(['message' => 'Unauthorized'], 401);
-//     }
-
-//     // Authorization check
-//     if ($user->rid < 1 || $user->rid > 3) {
-//         return response()->json(['message' => 'Forbidden'], 403);
-//     }
-
-//     // Validate product ID
-//     if (!is_numeric($pid)) {
-//         return response()->json(['message' => 'Invalid product ID'], 422);
-//     }
-
-//     // Validate request data
-//     $validatedData = $request->validate([
-//         'name' => 'sometimes|string|max:255',
-//         'hsn_code' => 'sometimes|string|max:255',
-//         'description' => 'sometimes|string',
-//         'purchase_price' => 'sometimes|numeric|min:0',
-//         'profit_percentage' => 'sometimes|numeric|min:0|max:100',
-//         'pre_gst_sale_cost' => 'sometimes|numeric|min:0',
-//         'gst' => 'sometimes|numeric|min:0|max:100',
-//         'post_gst_sale_cost' => 'sometimes|numeric|min:0',
-//     ]);
-
-//     // Fetch product
-//     $product = ProductInfo::find($pid);
-//     if (!$product) {
-//         return response()->json(['message' => 'Product not found'], 404);
-//     }
-
-//     // Only check duplicate if name is being updated
-//     if (isset($validatedData['name']) && $validatedData['name'] !== $product->name) {
-//         $cid = $user->cid;
-//         $newName = trim(strtolower($validatedData['name']));
-        
-//         // ✅ CRITICAL FIX: Direct cid check (no bill dependency)
-//         $exists = ProductInfo::whereRaw('TRIM(LOWER(name)) = ?', [$newName])
-//             ->where('cid', $cid) // ✅ Company ID from product table
-//             ->where('id', '!=', $pid) // ✅ Exclude current product
-//             ->exists();
-
-//         if ($exists) {
-//             return response()->json([
-//                 'message' => 'Product name already exists for your company'
-//             ], 422);
-//         }
-//     }
-
-//     // Update product
-//     $product->update($validatedData);
-
-//     // Prepare response
-//     $productData = [
-//         'pid' => $product->id,
-//         'product_name' => $product->name,
-//         'hsn_code' => $product->hsn_code,
-//         'description' => $product->description,
-//         'purchase_price' => $product->purchase_price,
-//         'profit_percentage' => $product->profit_percentage,
-//         'pre_gst_sale_cost' => $product->pre_gst_sale_cost,
-//         'gst' => $product->gst,
-//         'post_gst_sale_cost' => $product->post_gst_sale_cost,
-//     ];
-
-//     return response()->json([
-//         'message' => 'Product updated successfully',
-//         'product' => $productData,
-//     ], 200);
-// }
 
 public function updateProductById($pid, Request $request)
 {
+    // Force JSON response
+    $request->headers->set('Accept', 'application/json');
+
     // Authentication check
     $user = Auth::user();
     if (!$user) {
@@ -338,7 +348,7 @@ public function updateProductById($pid, Request $request)
     }
 
     // Validate product ID
-    if (!is_numeric($pid)) {
+    if (!is_numeric($pid) || intval($pid) <= 0) {
         return response()->json(['message' => 'Invalid product ID'], 422);
     }
 
@@ -348,9 +358,8 @@ public function updateProductById($pid, Request $request)
     // Validate request data
     try {
         $validatedData = $request->validate([
-            'name' => 'sometimes|string|max:255',
-            'hsn_code' => 'sometimes|string|max:255',
-            'description' => 'sometimes|string|nullable',
+            'hsn_code' => 'sometimes|string|max:255|nullable',
+            'description' => 'sometimes|string|max:500|nullable',
             'unit_id' => 'sometimes|integer|exists:units,id',
             'purchase_price' => 'sometimes|numeric|min:0',
             'profit_percentage' => 'sometimes|numeric|min:0|max:100',
@@ -362,6 +371,7 @@ public function updateProductById($pid, Request $request)
         Log::error('Validation failed for updateProductById', [
             'pid' => $pid,
             'cid' => $cid,
+            'user_id' => $user->id,
             'errors' => $e->errors(),
             'request_data' => $request->all(),
         ]);
@@ -372,38 +382,17 @@ public function updateProductById($pid, Request $request)
     }
 
     // Fetch product_info for the specific pid and cid
-    $productInfo = ProductInfo::where('pid', $pid)->where('cid', $cid)->first();
-    if (!$productInfo) {
+    $product = ProductInfo::where('pid', $pid)->where('cid', $cid)->first();
+    if (!$product) {
+        Log::warning('Product not found in product_info', [
+            'pid' => $pid,
+            'cid' => $cid,
+            'user_id' => $user->id,
+        ]);
         return response()->json(['message' => 'Product not found for this company'], 404);
     }
 
-    // Fetch the product from products table
-    $product = Product::find($pid);
-    if (!$product) {
-        return response()->json(['message' => 'Product not found in products table'], 404);
-    }
-
-    // Check for duplicate name in products table
-    if (isset($validatedData['name']) && trim(strtolower($validatedData['name'])) !== trim(strtolower($product->name))) {
-        $newName = trim(strtolower($validatedData['name']));
-        $exists = Product::whereRaw('TRIM(LOWER(name)) = ?', [$newName])
-            ->where('id', '!=', $pid)
-            ->whereExists(function ($query) use ($cid) {
-                $query->select(\DB::raw(1))
-                    ->from('product_info')
-                    ->whereColumn('product_info.pid', 'products.id')
-                    ->where('product_info.cid', $cid);
-            })
-            ->exists();
-
-        if ($exists) {
-            return response()->json([
-                'message' => 'Product name already exists for your company'
-            ], 422);
-        }
-    }
-
-    // Prepare data for product_info update
+    // Prepare data for update
     $productInfoData = [];
     foreach (['hsn_code', 'description', 'unit_id', 'purchase_price', 'profit_percentage', 'pre_gst_sale_cost', 'gst', 'post_gst_sale_cost'] as $field) {
         if (isset($validatedData[$field])) {
@@ -411,14 +400,24 @@ public function updateProductById($pid, Request $request)
         }
     }
 
-    // Ensure post_gst_sale_cost consistency if pre_gst_sale_cost or gst is updated
-    if (isset($validatedData['pre_gst_sale_cost']) || isset($validatedData['gst'])) {
-        $pre_gst_sale_cost = $validatedData['pre_gst_sale_cost'] ?? $productInfo->pre_gst_sale_cost;
-        $gst = $validatedData['gst'] ?? $productInfo->gst;
-        $productInfoData['post_gst_sale_cost'] = $pre_gst_sale_cost * (1 + ($gst / 100));
+    // Recalculate pre_gst_sale_cost and post_gst_sale_cost if purchase_price, profit_percentage, or gst is provided
+    if (isset($validatedData['purchase_price']) || isset($validatedData['profit_percentage']) || isset($validatedData['gst'])) {
+        $purchase_price = $validatedData['purchase_price'] ?? $product->purchase_price;
+        $profit_percentage = $validatedData['profit_percentage'] ?? $product->profit_percentage;
+        $gst = $validatedData['gst'] ?? $product->gst;
+
+        // Calculate pre_gst_sale_cost
+        $productInfoData['pre_gst_sale_cost'] = $purchase_price > 0
+            ? round($purchase_price * (1 + $profit_percentage / 100), 2)
+            : 0;
+
+        // Calculate post_gst_sale_cost
+        $productInfoData['post_gst_sale_cost'] = $productInfoData['pre_gst_sale_cost'] > 0
+            ? round($productInfoData['pre_gst_sale_cost'] * (1 + $gst / 100), 2)
+            : 0;
     }
 
-    // Update product_info
+    // Update product_info if there are changes
     if (!empty($productInfoData)) {
         $affectedRows = ProductInfo::where('pid', $pid)
             ->where('cid', $cid)
@@ -428,50 +427,45 @@ public function updateProductById($pid, Request $request)
             Log::warning('Unexpected number of rows updated in product_info', [
                 'pid' => $pid,
                 'cid' => $cid,
+                'user_id' => $user->id,
                 'affected_rows' => $affectedRows,
+                'data' => $productInfoData,
             ]);
         }
 
         Log::info('Product info updated', [
             'pid' => $pid,
             'cid' => $cid,
+            'user_id' => $user->id,
             'data' => $productInfoData,
-            'affected_rows' => $affectedRows,
         ]);
     }
 
-    // Update product name in products table
-    if (isset($validatedData['name'])) {
-        $product->name = $validatedData['name'];
-        $product->save();
-        Log::info('Product name updated in products table', [
-            'pid' => $pid,
-            'new_name' => $validatedData['name'],
-        ]);
-    }
-
-    // Fetch updated product_info and unit name
-    $updatedProductInfo = ProductInfo::where('pid', $pid)
+    // Fetch updated product_info
+    $updatedProduct = ProductInfo::where('pid', $pid)
         ->where('cid', $cid)
-        ->join('units', 'product_info.unit_id', '=', 'units.id')
-        ->select('product_info.*', 'units.name as unit_name')
         ->first();
+
+    if (!$updatedProduct) {
+        Log::error('Failed to fetch updated product_info', [
+            'pid' => $pid,
+            'cid' => $cid,
+            'user_id' => $user->id,
+        ]);
+        return response()->json(['message' => 'Failed to fetch updated product data'], 500);
+    }
 
     // Prepare response
     $productData = [
-        'pid' => $updatedProductInfo->pid,
-        'product_name' => $product->name,
-        'hsn_code' => $updatedProductInfo->hsn_code,
-        'description' => $updatedProductInfo->description,
-        'unit_id' => $updatedProductInfo->unit_id,
-        'unit_name' => $updatedProductInfo->unit_name,
-        'purchase_price' => $updatedProductInfo->purchase_price,
-        'profit_percentage' => $updatedProductInfo->profit_percentage,
-        'pre_gst_sale_cost' => $updatedProductInfo->pre_gst_sale_cost,
-        'gst' => $updatedProductInfo->gst,
-        'post_gst_sale_cost' => $updatedProductInfo->post_gst_sale_cost,
-        'uid' => $updatedProductInfo->uid,
-        'updated_at' => $updatedProductInfo->updated_at,
+        'pid' => $updatedProduct->pid,
+        'hsn_code' => $updatedProduct->hsn_code,
+        'description' => $updatedProduct->description,
+        'unit_id' => $updatedProduct->unit_id,
+        'purchase_price' => $updatedProduct->purchase_price,
+        'profit_percentage' => $updatedProduct->profit_percentage,
+        'pre_gst_sale_cost' => $updatedProduct->pre_gst_sale_cost,
+        'gst' => $updatedProduct->gst,
+        'post_gst_sale_cost' => $updatedProduct->post_gst_sale_cost,
     ];
 
     return response()->json([
@@ -479,39 +473,113 @@ public function updateProductById($pid, Request $request)
         'product' => $productData,
     ], 200);
 }
-    public function destroy($pid)
-    {
-        // // Force JSON response
-        // request()->headers->set('Accept', 'application/json');
+
+// public function destroy($pid)
+//     {
+//         // // Force JSON response
+//         // request()->headers->set('Accept', 'application/json');
     
+//         // Get the authenticated user
+//         $user = Auth::user();
+    
+//         // Check if user is authenticated
+//         if (!$user) {
+//             return response()->json(['message' => 'Unauthenticated'], 401);
+//         }
+    
+//         // Restrict to rid 1, 2, 3
+//         if (!in_array($user->rid, [1, 2, 3])) {
+//             return response()->json(['message' => 'Unauthorized to delete product'], 403);
+//         }
+    
+//         // Find the product by ID and ensure it belongs to the user's company
+//         $product = ProductInfo::where('id', $pid)->where('cid', $user->cid)->first();
+    
+//         // Check if the product exists and belongs to the user's company
+//         if (!$product) {
+//             return response()->json(['message' => 'Product not found or not authorized'], 404);
+//         }
+    
+//         // Attempt to delete the product
+//         try {
+//             $product->delete();
+//             return response()->json(['message' => 'Product deleted successfully'], 200);
+//         } catch (\Exception $e) {
+//             Log::error('Failed to delete product: ' . $e->getMessage());
+//             return response()->json(['message' => 'Failed to delete product', 'error' => $e->getMessage()], 500);
+//         }
+//     }
+
+public function destroy($pid)
+    {
+        // Force JSON response
+        request()->headers->set('Accept', 'application/json');
+
         // Get the authenticated user
         $user = Auth::user();
-    
+
         // Check if user is authenticated
         if (!$user) {
             return response()->json(['message' => 'Unauthenticated'], 401);
         }
-    
+
         // Restrict to rid 1, 2, 3
         if (!in_array($user->rid, [1, 2, 3])) {
             return response()->json(['message' => 'Unauthorized to delete product'], 403);
         }
-    
-        // Find the product by ID and ensure it belongs to the user's company
-        $product = ProductInfo::where('id', $pid)->where('cid', $user->cid)->first();
-    
-        // Check if the product exists and belongs to the user's company
+
+        // Validate product ID
+        if (!is_numeric($pid) || intval($pid) <= 0) {
+            return response()->json(['message' => 'Invalid product ID'], 422);
+        }
+
+        $cid = $user->cid;
+        $pid = (int) $pid;
+
+        // Check if the product exists for the given pid and cid
+        $product = ProductInfo::where('pid', $pid)->where('cid', $cid)->first();
         if (!$product) {
+            Log::warning('Product not found for deletion', [
+                'pid' => $pid,
+                'cid' => $cid,
+                'user_id' => $user->id,
+            ]);
             return response()->json(['message' => 'Product not found or not authorized'], 404);
         }
-    
+
         // Attempt to delete the product
         try {
-            $product->delete();
+            $affectedRows = ProductInfo::where('pid', $pid)
+                ->where('cid', $cid)
+                ->delete();
+
+            if ($affectedRows !== 1) {
+                Log::warning('Unexpected number of rows deleted in product_info', [
+                    'pid' => $pid,
+                    'cid' => $cid,
+                    'user_id' => $user->id,
+                    'affected_rows' => $affectedRows,
+                ]);
+            }
+
+            Log::info('Product deleted successfully', [
+                'pid' => $pid,
+                'cid' => $cid,
+                'user_id' => $user->id,
+            ]);
+
             return response()->json(['message' => 'Product deleted successfully'], 200);
         } catch (\Exception $e) {
-            Log::error('Failed to delete product: ' . $e->getMessage());
-            return response()->json(['message' => 'Failed to delete product', 'error' => $e->getMessage()], 500);
+            Log::error('Failed to delete product', [
+                'pid' => $pid,
+                'cid' => $cid,
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+            ]);
+            return response()->json([
+                'message' => 'Failed to delete product',
+                'error' => $e->getMessage(),
+            ], 500);
         }
     }
 }
