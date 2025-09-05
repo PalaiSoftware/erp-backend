@@ -502,19 +502,72 @@ public function update(Request $request, $id)
         return response()->json(['error' => $e->getMessage()], 500);
     }
 }
+// public function getUnitsByProductId(Request $request, $product_id)
+// {
+//     // Force JSON response
+//     $request->headers->set('Accept', 'application/json');
+
+//     // Authentication and authorization checks
+//     $user = Auth::user();
+//     if (!$user) {
+//         return response()->json(['message' => 'Unauthenticated'], 401);
+//     }
+//     // if ($user->rid < 1 || $user->rid > 5) {
+//     //     return response()->json(['message' => 'Forbidden'], 403);
+//     // }
+
+//     // Validate product_id from route parameter
+//     if (!is_numeric($product_id) || intval($product_id) <= 0) {
+//         return response()->json([
+//             'message' => 'The given data was invalid.',
+//             'errors' => [
+//                 'product_id' => ['The product ID must be a positive integer.']
+//             ]
+//         ], 422);
+//     }
+
+//     // Fetch product with p_unit and s_unit
+//     $product = Product::where('products.id', $product_id)
+//         ->select('products.id', 'products.p_unit', 'products.s_unit')
+//         ->first();
+
+//     if (!$product) {
+//         return response()->json([
+//             'message' => 'The given data was invalid.',
+//             'errors' => [
+//                 'product_id' => ['The product ID must exist in the products table.']
+//             ]
+//         ], 422);
+//     }
+
+//     // Fetch unit details for p_unit and s_unit
+//     $units = Unit::whereIn('id', array_filter([$product->p_unit, $product->s_unit]))
+//         ->select('id', 'name')
+//         ->get()
+//         ->map(function ($unit) {
+//             return [
+//                 'id' => $unit->id,
+//                 'name' => $unit->name,
+//             ];
+//         });
+
+//     if ($units->isEmpty()) {
+//         return response()->json(['message' => 'Units not found for this product'], 404);
+//     }
+
+//     return response()->json($units, 200);
+// }
+
 public function getUnitsByProductId(Request $request, $product_id)
 {
     // Force JSON response
     $request->headers->set('Accept', 'application/json');
 
-    // Authentication and authorization checks
+    // Authentication check
     $user = Auth::user();
     if (!$user) {
         return response()->json(['message' => 'Unauthenticated'], 401);
     }
-    // if ($user->rid < 1 || $user->rid > 5) {
-    //     return response()->json(['message' => 'Forbidden'], 403);
-    // }
 
     // Validate product_id from route parameter
     if (!is_numeric($product_id) || intval($product_id) <= 0) {
@@ -526,35 +579,86 @@ public function getUnitsByProductId(Request $request, $product_id)
         ], 422);
     }
 
-    // Fetch product with p_unit and s_unit
-    $product = Product::where('products.id', $product_id)
-        ->select('products.id', 'products.p_unit', 'products.s_unit')
-        ->first();
+    $cid = $user->cid;
+    $product_id = (int) $product_id;
 
-    if (!$product) {
+    try {
+        // Fetch product with p_unit, s_unit, and product_info data
+        $product = Product::where('products.id', $product_id)
+            ->leftJoin('product_info', function ($join) use ($cid) {
+                $join->on('product_info.pid', '=', 'products.id')
+                     ->where('product_info.cid', '=', $cid);
+            })
+            ->select(
+                'products.id',
+                'products.p_unit',
+                'products.s_unit',
+                'product_info.purchase_price',
+                'product_info.post_gst_sale_cost'
+            )
+            ->first();
+
+        if (!$product) {
+            Log::warning('Product not found', [
+                'product_id' => $product_id,
+                'cid' => $cid,
+                'user_id' => $user->id,
+            ]);
+            return response()->json([
+                'message' => 'The given data was invalid.',
+                'errors' => [
+                    'product_id' => ['The product ID not exist in the products table.']
+                ]
+            ], 422);
+        }
+
+        // Fetch unit details for p_unit and s_unit
+        $units = Unit::whereIn('id', array_filter([$product->p_unit, $product->s_unit]))
+            ->select('id', 'name')
+            ->get()
+            ->map(function ($unit) {
+                return [
+                    'id' => $unit->id,
+                    'name' => $unit->name,
+                ];
+            });
+
+        if ($units->isEmpty()) {
+            Log::warning('Units not found for product', [
+                'product_id' => $product_id,
+                'cid' => $cid,
+                'user_id' => $user->id,
+            ]);
+            return response()->json(['message' => 'Units not found for this product'], 404);
+        }
+
+        Log::info('Units and product info retrieved successfully', [
+            'product_id' => $product_id,
+            'cid' => $cid,
+            'user_id' => $user->id,
+            'unit_count' => $units->count(),
+        ]);
+
+        // Prepare response
         return response()->json([
-            'message' => 'The given data was invalid.',
-            'errors' => [
-                'product_id' => ['The product ID must exist in the products table.']
+            'units' => $units,
+            'product_info' => [
+                'purchase_price' => $product->purchase_price ?? 0.00,
+                'post_gst_sale_cost' => $product->post_gst_sale_cost ?? 0.00,
             ]
-        ], 422);
+        ], 200);
+    } catch (\Exception $e) {
+        Log::error('Failed to fetch units and product info', [
+            'product_id' => $product_id,
+            'cid' => $cid,
+            'user_id' => $user->id,
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString(),
+        ]);
+        return response()->json([
+            'message' => 'Failed to fetch data',
+            'error' => $e->getMessage(),
+        ], 500);
     }
-
-    // Fetch unit details for p_unit and s_unit
-    $units = Unit::whereIn('id', array_filter([$product->p_unit, $product->s_unit]))
-        ->select('id', 'name')
-        ->get()
-        ->map(function ($unit) {
-            return [
-                'id' => $unit->id,
-                'name' => $unit->name,
-            ];
-        });
-
-    if ($units->isEmpty()) {
-        return response()->json(['message' => 'Units not found for this product'], 404);
-    }
-
-    return response()->json($units, 200);
 }
 }
