@@ -8,14 +8,23 @@ use Illuminate\Support\Facades\Validator;
 
 class CategoryController extends Controller
 {
-    /**
-     * Add a new category
-     */
+    
     public function addCategory(Request $request)
     {
         // Validate the request
         $validator = Validator::make($request->all(), [
-            'name' => 'required|string|max:255|unique:categories,name'
+            'name' => [
+                'required',
+                'string',
+                'max:255',
+                function ($attribute, $value, $fail) {
+                    $exists = Category::whereRaw('LOWER(name) = ?', [trim(strtolower($value))])
+                        ->exists();
+                    if ($exists) {
+                        $fail('The category name already exists.');
+                    }
+                },
+            ],
         ]);
 
         if ($validator->fails()) {
@@ -29,7 +38,10 @@ class CategoryController extends Controller
 
         return response()->json([
             'message' => 'Category added successfully',
-            'category' => $category
+            'category' => [
+                'id' => $category->id,
+                'name' => $category->name,
+            ]
         ], 201);
     }
 
