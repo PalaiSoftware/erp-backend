@@ -632,6 +632,165 @@ public function getPurchaseWidget(Request $request)
     ], 200);
 }
 
+// public function updateTransactionById(Request $request, $transaction_id)
+// {
+//     // Authentication check
+//     $user = Auth::user();
+//     if (!$user) {
+//         return response()->json(['message' => 'Unauthorized'], 401);
+//     }
+
+//     // Restrict access to users with rid between 5 and 10 inclusive
+//     if ($user->rid < 1 || $user->rid > 4) {
+//         return response()->json(['message' => 'Forbidden'], 403);
+//     }
+
+//     // Validation rules
+//     try {
+//         $request->validate([
+//             'bill_name' => 'nullable|string|max:255',
+//             'payment_mode' => 'nullable|integer|exists:payment_modes,id',
+//             'vendor_id' => 'nullable|integer|exists:purchase_clients,id',
+//             'products' => 'nullable|array',
+//             'products.*.product_id' => 'required_with:products|integer|exists:products,id',
+//             'products.*.quantity' => 'required_with:products|numeric|min:0',
+//             'products.*.p_price' => 'required_with:products|numeric|min:0',
+//             'products.*.s_price' => 'required_with:products|numeric|min:0',
+//             'products.*.unit_id' => 'required_with:products|integer|exists:units,id',
+//             'products.*.dis' => 'nullable|numeric|min:0|max:100',
+//             'products.*.gst' => 'nullable|numeric|min:0', // Added GST validation
+//             'updated_at' => 'nullable|date_format:Y-m-d H:i:s',
+//             'absolute_discount' => 'nullable|numeric|min:0',
+//             'set_paid_amount' => 'nullable|numeric|min:0',
+//         ]);
+//         \Log::info('Validation passed successfully for updateTransactionById', ['transaction_id' => $transaction_id]);
+//     } catch (\Illuminate\Validation\ValidationException $e) {
+//         \Log::error('Validation failed for updateTransactionById', [
+//             'errors' => $e->errors(),
+//             'request_data' => $request->all()
+//         ]);
+//         return response()->json([
+//             'message' => 'Validation failed',
+//             'errors' => $e->errors(),
+//         ], 422);
+//     }
+
+//     // Check if the transaction exists
+//     $transaction = PurchaseBill::where('id', $transaction_id)->first();
+//     if (!$transaction) {
+//         \Log::info('Transaction not found', ['transaction_id' => $transaction_id]);
+//         return response()->json([
+//             'status' => 'error',
+//             'message' => 'Transaction not found'
+//         ], 404);
+//     }
+//     // Check if the current user is the one who created this transaction
+// if ($transaction->uid != $user->id) {
+//     \Log::warning('Unauthorized transaction update attempt', [
+//         'transaction_id' => $transaction_id,
+//         'user_id' => $user->id,
+//         'transaction_owner_id' => $transaction->uid
+//     ]);
+//     return response()->json([
+//         'message' => 'Forbidden: You do not have permission to update this transaction'
+//     ], 403);
+// }
+
+//     // Start a database transaction
+//     DB::beginTransaction();
+//     try {
+//         // Prepare update data for purchase_bills
+//         $updateData = [
+//             'updated_at' => $request->input('updated_at', now()),
+//             'created_at' => $request->input('updated_at', now()),
+//             'bill_name' => $request->input('bill_name', $transaction->bill_name),
+//             'pcid' => $request->input('vendor_id', $transaction->pcid),
+//             'payment_mode' => $request->input('payment_mode', $transaction->payment_mode),
+//             'absolute_discount' => $request->input('absolute_discount', $transaction->absolute_discount),
+//             'paid_amount' => $request->input('set_paid_amount', $transaction->paid_amount),
+//         ];
+
+//         // Update purchase_bills
+//         PurchaseBill::where('id', $transaction_id)->update($updateData);
+
+//         // Handle products if provided
+//         if ($request->has('products')) {
+//             $products = $request->input('products', []);
+//             $productIds = array_column($products, 'product_id');
+
+//             // Fetch existing purchase items
+//             $existingItems = DB::table('purchase_items')
+//                 ->where('bid', $transaction_id)
+//                 ->get(['pid', 'bid']);
+
+//             // Products to remove
+//             $existingProductIds = $existingItems->pluck('pid')->toArray();
+//             $productIdsToRemove = array_diff($existingProductIds, $productIds);
+
+//             // Remove products not in request
+//             if (!empty($productIdsToRemove)) {
+//                 DB::table('purchase_items')
+//                     ->where('bid', $transaction_id)
+//                     ->whereIn('pid', $productIdsToRemove)
+//                     ->delete();
+//             }
+
+//             // Insert or update products
+//             foreach ($products as $product) {
+//                 $item = DB::table('purchase_items')
+//                     ->where('bid', $transaction_id)
+//                     ->where('pid', $product['product_id'])
+//                     ->first();
+
+//                 if ($item) {
+//                     // Update existing item
+//                     DB::table('purchase_items')
+//                         ->where('bid', $transaction_id)
+//                         ->where('pid', $product['product_id'])
+//                         ->update([
+//                             'p_price' => $product['p_price'],
+//                             's_price' => $product['s_price'],
+//                             'quantity' => $product['quantity'],
+//                             'unit_id' => $product['unit_id'],
+//                             'dis' => $product['dis'] ?? $product['discount'] ?? 0,
+//                             'gst' => $product['gst'] ?? $product['gst'] ?? 0,
+//                         ]);
+//                 } else {
+//                     // Insert new item
+//                     DB::table('purchase_items')->insert([
+//                         'bid' => $transaction_id,
+//                         'pid' => $product['product_id'],
+//                         'p_price' => $product['p_price'],
+//                         's_price' => $product['s_price'],
+//                         'quantity' => $product['quantity'],
+//                         'unit_id' => $product['unit_id'],
+//                         'dis' => $product['dis'] ?? $product['discount'] ?? 0,
+//                         'gst' => $product['gst'] ?? $product['gst'] ?? 0,
+//                     ]);
+//                 }
+//             }
+//         }
+
+//         DB::commit();
+//         \Log::info('Transaction updated successfully', ['transaction_id' => $transaction_id]);
+//         return response()->json([
+//             'status' => 'success',
+//             'message' => 'Transaction updated successfully'
+//         ], 200);
+//     } catch (\Exception $e) {
+//         DB::rollBack();
+//         \Log::error('Failed to update transaction', [
+//             'transaction_id' => $transaction_id,
+//             'error' => $e->getMessage()
+//         ]);
+//         return response()->json([
+//             'status' => 'error',
+//             'message' => 'Failed to update transaction',
+//             'error' => $e->getMessage()
+//         ], 500);
+//     }
+// }
+
 public function updateTransactionById(Request $request, $transaction_id)
 {
     // Authentication check
@@ -684,25 +843,35 @@ public function updateTransactionById(Request $request, $transaction_id)
             'message' => 'Transaction not found'
         ], 404);
     }
+
     // Check if the current user is the one who created this transaction
-if ($transaction->uid != $user->id) {
-    \Log::warning('Unauthorized transaction update attempt', [
-        'transaction_id' => $transaction_id,
-        'user_id' => $user->id,
-        'transaction_owner_id' => $transaction->uid
-    ]);
-    return response()->json([
-        'message' => 'Forbidden: You do not have permission to update this transaction'
-    ], 403);
-}
+    if ($transaction->uid != $user->id) {
+        \Log::warning('Unauthorized transaction update attempt', [
+            'transaction_id' => $transaction_id,
+            'user_id' => $user->id,
+            'transaction_owner_id' => $transaction->uid
+        ]);
+        return response()->json([
+            'message' => 'Forbidden: You do not have permission to update this transaction'
+        ], 403);
+    }
+
+    // Get company ID from user
+    $cid = $user->cid;
+    if (!$cid) {
+        return response()->json(['message' => 'User company ID not found'], 400);
+    }
 
     // Start a database transaction
     DB::beginTransaction();
     try {
+        // Define purchaseDate for timestamps
+        $purchaseDate = $request->input('updated_at', now());
+
         // Prepare update data for purchase_bills
         $updateData = [
-            'updated_at' => $request->input('updated_at', now()),
-            'created_at' => $request->input('updated_at', now()),
+            'updated_at' => $purchaseDate,
+            'created_at' => $purchaseDate,
             'bill_name' => $request->input('bill_name', $transaction->bill_name),
             'pcid' => $request->input('vendor_id', $transaction->pcid),
             'payment_mode' => $request->input('payment_mode', $transaction->payment_mode),
@@ -742,30 +911,159 @@ if ($transaction->uid != $user->id) {
                     ->where('pid', $product['product_id'])
                     ->first();
 
+                $productData = [
+                    'p_price' => $product['p_price'],
+                    's_price' => $product['s_price'],
+                    'quantity' => $product['quantity'],
+                    'unit_id' => $product['unit_id'],
+                    'dis' => $product['dis'] ?? $product['discount'] ?? 0,
+                    'gst' => $product['gst'] ?? $product['gst'] ?? 0,
+                ];
+
                 if ($item) {
                     // Update existing item
                     DB::table('purchase_items')
                         ->where('bid', $transaction_id)
                         ->where('pid', $product['product_id'])
-                        ->update([
-                            'p_price' => $product['p_price'],
-                            's_price' => $product['s_price'],
-                            'quantity' => $product['quantity'],
-                            'unit_id' => $product['unit_id'],
-                            'dis' => $product['dis'] ?? $product['discount'] ?? 0,
-                            'gst' => $product['gst'] ?? $product['gst'] ?? 0,
-                        ]);
-                } else {
-                    // Insert new item
-                    DB::table('purchase_items')->insert([
-                        'bid' => $transaction_id,
-                        'pid' => $product['product_id'],
-                        'p_price' => $product['p_price'],
-                        's_price' => $product['s_price'],
+                        ->update($productData);
+                    Log::info('Purchase item updated', [
+                        'bill_id' => $transaction_id,
+                        'product_id' => $product['product_id'],
                         'quantity' => $product['quantity'],
                         'unit_id' => $product['unit_id'],
-                        'dis' => $product['dis'] ?? $product['discount'] ?? 0,
-                        'gst' => $product['gst'] ?? $product['gst'] ?? 0,
+                        'dis' => $product['dis'] ?? 0,
+                        'gst' => $product['gst'] ?? 0, 
+                    ]);
+                } else {
+                    // Insert new item
+                    $productData['bid'] = $transaction_id;
+                    $productData['pid'] = $product['product_id'];
+                    DB::table('purchase_items')->insert($productData);
+                    Log::info('Purchase item created', [
+                        'bill_id' => $transaction_id,
+                        'product_id' => $product['product_id'],
+                        'quantity' => $product['quantity'],
+                        'unit_id' => $product['unit_id'],
+                        'dis' => $product['dis'] ?? 0,
+                        'gst' => $product['gst'] ?? 0, 
+                    ]);
+                }
+            }
+
+            // Process product_info for each provided product
+            foreach ($products as $product) {
+                $pid = (int) $product['product_id']; // Explicitly cast to integer
+                $productModel = Product::find($pid);
+                if (!$productModel) {
+                    throw new \Exception("Product not found for pid: {$pid}");
+                }
+
+                $new_unit = $product['unit_id'];
+                $new_p_price = $product['p_price'];
+                $new_s_price = $product['s_price'] ?? 0;
+                $new_gst = $product['gst'] ?? 0;
+
+                // Check if product_info record exists for pid and cid
+                $info = ProductInfo::where('pid', $pid)->where('cid', $cid)->first();
+
+                // Prepare data for create or update
+                $current_unit = $info ? $info->unit_id : $new_unit;
+                $converted_p = $new_p_price;
+                $converted_s = $new_s_price;
+
+                // Handle unit conversion if necessary
+                if ($info && $new_unit != $current_unit) {
+                    $p_unit = $productModel->p_unit; // e.g., box
+                    $s_unit = $productModel->s_unit; // e.g., piece
+                    $c_factor = $productModel->c_factor; // e.g., 20 pieces per box
+
+                    if ($c_factor == 0) {
+                        throw new \Exception("Conversion factor is zero for product ID {$pid}, cannot convert units");
+                    }
+
+                    // Convert new prices to the stored unit in product_info
+                    // c_factor = number of secondary units (piece) per primary unit (box)
+                    if ($new_unit == $p_unit && $current_unit == $s_unit) {
+                        // New in box, stored in piece: divide by c_factor
+                        $converted_p = $new_p_price / $c_factor;
+                        $converted_s = $new_s_price / $c_factor;
+                    } elseif ($new_unit == $s_unit && $current_unit == $p_unit) {
+                        // New in piece, stored in box: multiply by c_factor
+                        $converted_p = $new_p_price * $c_factor;
+                        $converted_s = $new_s_price * $c_factor;
+                    } else {
+                        throw new \Exception("Unsupported unit conversion for product ID {$pid}: new unit {$new_unit}, current unit {$current_unit}");
+                    }
+
+                    Log::info('Prices converted for product', [
+                        'pid' => $pid,
+                        'cid' => $cid,
+                        'original_p_price' => $new_p_price,
+                        'converted_p_price' => $converted_p,
+                        'original_s_price' => $new_s_price,
+                        'converted_s_price' => $converted_s,
+                        'new_unit' => $new_unit,
+                        'current_unit' => $current_unit,
+                        'c_factor' => $c_factor,
+                    ]);
+                }
+
+                // Prepare data for create or update
+                $productInfoData = [
+                    'pid' => $pid,
+                    'hsn_code' => $productModel->hscode,
+                    'description' => null,
+                    'unit_id' => $current_unit,
+                    'purchase_price' => $converted_p,
+                    'profit_percentage' => 0,
+                    'pre_gst_sale_cost' => $converted_s,
+                    'gst' => $new_gst,
+                    'post_gst_sale_cost' => $converted_s * (1 + ($new_gst / 100)),
+                    'uid' => $user->id,
+                    'cid' => $cid,
+                    'created_at' => $purchaseDate,
+                    'updated_at' => $purchaseDate,
+                ];
+
+                if (!$info) {
+                    // Create new product_info record
+                    ProductInfo::create($productInfoData);
+                    Log::info('Product info created', [
+                        'pid' => $pid,
+                        'cid' => $cid,
+                        'unit_id' => $current_unit,
+                        'purchase_price' => $converted_p,
+                        'pre_gst_sale_cost' => $converted_s,
+                        'gst' => $new_gst,
+                    ]);
+                } else {
+                    // Update existing product_info record for specific pid and cid
+                    $affectedRows = ProductInfo::where('pid', $pid)
+                        ->where('cid', $cid)
+                        ->update([
+                            'purchase_price' => $converted_p,
+                            'pre_gst_sale_cost' => $converted_s,
+                            'gst' => $new_gst,
+                            'post_gst_sale_cost' => $converted_s * (1 + ($new_gst / 100)),
+                            'updated_at' => $purchaseDate,
+                        ]);
+
+                    if ($affectedRows !== 1) {
+                        Log::warning('Unexpected number of rows updated in product_info', [
+                            'pid' => $pid,
+                            'cid' => $cid,
+                            'affected_rows' => $affectedRows,
+                        ]);
+                    }
+
+                    Log::info('Product info updated', [
+                        'pid' => $pid,
+                        'cid' => $cid,
+                        'unit_id' => $current_unit,
+                        'purchase_price' => $converted_p,
+                        'pre_gst_sale_cost' => $converted_s,
+                        'gst' => $new_gst,
+                        'affected_rows' => $affectedRows,
                     ]);
                 }
             }
