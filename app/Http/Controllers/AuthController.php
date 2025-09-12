@@ -409,4 +409,340 @@ public function UserPromoteDemote(Request $request)
         ]
     ], 200);
 }
+public function getCompanyDetail(Request $request, $cid)
+{
+    // Get the authenticated user
+    $user = Auth::user();
+    if (!$user) {
+        return response()->json(['message' => 'Unauthorized'], 401);
+    }
+
+    // Restrict access to users with rid 1, 2, or 3
+    if (!in_array($user->rid, [1, 2, 3])) {
+        return response()->json([
+            'message' => 'Forbidden: Only Admin, Superuser, and Moderator can view company details'
+        ], 403);
+    }
+
+    // Validate CID is a positive integer
+    if (!is_numeric($cid) || $cid <= 0) {
+        return response()->json([
+            'message' => 'Validation failed',
+            'errors' => ['cid' => ['The cid must be a positive integer.']]
+        ], 422);
+    }
+
+    // Check if the user belongs to the requested company
+    if ($user->cid != $cid) {
+        return response()->json([
+            'message' => 'Forbidden: You do not have access to get this company data'
+        ], 403);
+    }
+
+    try {
+        // Fetch client details
+        $client = DB::table('clients')
+            ->where('id', $cid)
+            ->first();
+
+        if (!$client) {
+            Log::info('Client not found', ['cid' => $cid]);
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Client not found'
+            ], 404);
+        }
+        // Determine company status based on blocked field
+        $companyStatus = $client->blocked == 0 ? 'active' : 'blocked';
+
+        // Return client details
+        return response()->json([
+            'status' => 'success',
+            'data' => [
+                'id' => $client->id,
+                'name' => $client->name,
+                'address' => $client->address,
+                'phone' => $client->phone,
+                'gst_no' => $client->gst_no,
+                'pan' => $client->pan,
+                'company_status' => $companyStatus,
+            ]
+        ], 200);
+    } catch (\Exception $e) {
+        Log::error('Failed to fetch client details', ['cid' => $cid, 'error' => $e->getMessage()]);
+        return response()->json([
+            'message' => 'Failed to fetch client details',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
+
+public function updateCompanyDetails(Request $request, $cid)
+{
+    // Get the authenticated user
+    $user = Auth::user();
+    if (!$user) {
+        return response()->json(['message' => 'Unauthorized'], 401);
+    }
+
+    // Restrict access to users with rid 1, 2, or 3
+    if (!in_array($user->rid, [1, 2, 3])) {
+        return response()->json([
+            'message' => 'Forbidden: Only Admin, Superuser, and Moderator can update company details'
+        ], 403);
+    }
+
+    // Validate CID is a positive integer
+    if (!is_numeric($cid) || $cid <= 0) {
+        return response()->json([
+            'message' => 'Validation failed',
+            'errors' => ['cid' => ['The cid must be a positive integer.']]
+        ], 422);
+    }
+
+    // Check if the user belongs to the requested company
+    if ($user->cid != $cid) {
+        return response()->json([
+            'message' => 'Forbidden: You do not have permission to update this company\'s details'
+        ], 403);
+    }
+
+    try {
+        // Validate the request data
+        $validated = $request->validate([
+            'name' => 'sometimes|string|max:255',
+            'address' => 'sometimes|string|max:500',
+            'phone' => 'sometimes|string|max:20',
+            'gst_no' => 'sometimes|string|max:20',
+            'pan' => 'sometimes|string|max:20',
+        ]);
+
+        // Check if the client exists
+        $client = DB::table('clients')->where('id', $cid)->first();
+        if (!$client) {
+            Log::info('Client not found for update', ['cid' => $cid]);
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Client not found'
+            ], 404);
+        }
+        //   blocked = 0 means company is UNBLOCKED (active) - CAN BE UPDATED
+        //   blocked = 1 means company is BLOCKED - CANNOT BE UPDATED
+        if ($client->blocked == 1) {
+            Log::warning('Attempt to update blocked company', ['cid' => $cid]);
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Cannot update details for a blocked company'
+            ], 403);
+        }
+
+        // Update the client details
+        DB::table('clients')
+            ->where('id', $cid)
+            ->update(array_merge($validated, ['updated_at' => now()]));
+
+        // Fetch the updated client details
+        $updatedClient = DB::table('clients')->where('id', $cid)->first();
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Company details updated successfully',
+        ], 200);
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        Log::error('Validation failed for company update', [
+            'cid' => $cid,
+            'errors' => $e->errors()
+        ]);
+        return response()->json([
+            'message' => 'Validation failed',
+            'errors' => $e->errors(),
+        ], 422);
+    } catch (\Exception $e) {
+        Log::error('Failed to update company details', ['cid' => $cid, 'error' => $e->getMessage()]);
+        return response()->json([
+            'message' => 'Failed to update company details',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
+
+public function getUserDetailsById(Request $request, $userId)
+{
+    // Get the authenticated user
+    $currentUser = Auth::user();
+    if (!$currentUser) {
+        return response()->json(['message' => 'Unauthorized'], 401);
+    }
+
+    // Validate user ID is a positive integer
+    if (!is_numeric($userId) || $userId <= 0) {
+        return response()->json([
+            'message' => 'Validation failed',
+            'errors' => ['user_id' => ['The user_id must be a positive integer.']]
+        ], 422);
+    }
+
+    //  Fetch user with company name =====
+    $targetUser = DB::table('users')
+        ->leftJoin('clients', 'users.cid', '=', 'clients.id')
+        ->where('users.id', $userId)
+        ->select(
+            'users.*',
+            'clients.name as company_name'
+        )
+        ->first();
+    
+    
+    if (!$targetUser) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'User not found'
+        ], 404);
+    }
+
+    // Check if users belong to the same company
+    if ($currentUser->cid != $targetUser->cid) {
+        return response()->json([
+            'message' => 'Forbidden: You do not have access to this user\'s data'
+        ], 403);
+    }
+
+    // Check access permissions based on current user's rid
+    if ($currentUser->id != $userId) { // If not requesting own details
+        // Only users with rid 1, 2, or 3 can view other users in the same company
+        if (!in_array($currentUser->rid, [1, 2, 3])) {
+            return response()->json([
+                'message' => 'Forbidden: You do not have permission to view other users\' details'
+            ], 403);
+        }
+    }
+
+    // Fetch role name from roles table
+    $roleName = DB::table('roles')->where('id', $targetUser->rid)->value('role') ?? 'Unknown';
+    
+    // Determine user status based on blocked field
+    $userStatus = $targetUser->blocked == 0 ? 'active' : 'blocked';
+    
+    // Return user details (excluding sensitive information)
+    return response()->json([
+        'status' => 'success',
+        'data' => [
+            'id' => $targetUser->id,
+            'name' => $targetUser->name,
+            'email' => $targetUser->email,
+            'mobile' => $targetUser->mobile,
+            'country' => $targetUser->country,
+            'role' => $roleName,
+            'company_name' => $targetUser->company_name,  // Added company name
+            'user_status' => $userStatus,
+        ]
+    ], 200);
+}
+
+public function updateUserDetails(Request $request, $userId)
+{
+    // Get the authenticated user
+    $currentUser = Auth::user();
+    if (!$currentUser) {
+        return response()->json(['message' => 'Unauthorized'], 401);
+    }
+
+    // Validate user ID is a positive integer
+    if (!is_numeric($userId) || $userId <= 0) {
+        return response()->json([
+            'message' => 'Validation failed',
+            'errors' => ['user_id' => ['The user_id must be a positive integer.']]
+        ], 422);
+    }
+
+    // Fetch the target user details
+    $targetUser = DB::table('users')->where('id', $userId)->first();
+    
+    if (!$targetUser) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'User not found'
+        ], 404);
+    }
+    // Check if the user is blocked
+    // In our database schema:
+    //   blocked = 0 means user is UNBLOCKED (active) - CAN BE UPDATED
+    //   blocked = 1 means user is BLOCKED - CANNOT BE UPDATED
+    if ($targetUser->blocked == 1) {
+        \Log::warning('Attempt to update blocked user', [
+            'user_id' => $userId,
+            'current_user' => $currentUser->id
+        ]);
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Cannot update details for a blocked user'
+        ], 403);
+    }
+   
+    // Check if users belong to the same company
+    if ($currentUser->cid != $targetUser->cid) {
+        return response()->json([
+            'message' => 'Forbidden: You do not have access to update this user\'s data'
+        ], 403);
+    }
+
+    // Check access permissions based on current user's rid
+    if ($currentUser->id != $userId) { // If not updating own details
+        // Only users with rid 1, 2, or 3 can update other users in the same company
+        if (!in_array($currentUser->rid, [1, 2, 3])) {
+            return response()->json([
+                'message' => 'Forbidden: You do not have permission to update other users\' details'
+            ], 403);
+        }
+    }
+
+    try {
+        // Validate the request data
+        $validated = $request->validate([
+            'name' => 'sometimes|string|max:255',
+            'email' => 'sometimes|email|unique:users,email,' . $userId,
+            'mobile' => 'sometimes|string|max:20',
+            'country' => 'sometimes|string|max:50',
+        ]);
+
+        // Update the user details
+        DB::table('users')
+            ->where('id', $userId)
+            ->update(array_merge($validated, ['updated_at' => now()]));
+
+        // Fetch the updated user details with company name and role
+        $updatedUser = DB::table('users')
+            ->leftJoin('clients', 'users.cid', '=', 'clients.id')
+            ->leftJoin('roles', 'users.rid', '=', 'roles.id')
+            ->where('users.id', $userId)
+            ->select(
+                'users.*',
+                'clients.name as company_name',
+                'roles.role as role_name'
+            )
+            ->first();
+
+        // Determine user status based on blocked field
+        $userStatus = $updatedUser->blocked == 0 ? 'active' : 'blocked';
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'User details updated successfully',
+        ], 200);
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return response()->json([
+            'message' => 'Validation failed',
+            'errors' => $e->errors(),
+        ], 422);
+    } catch (\Exception $e) {
+        \Log::error('Failed to update user details', [
+            'user_id' => $userId, 
+            'error' => $e->getMessage()
+        ]);
+        return response()->json([
+            'message' => 'Failed to update user details',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
 }
