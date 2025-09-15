@@ -93,7 +93,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::put('/clients/{cid}', [AuthController::class, 'updateCompanyDetails']);
     Route::get('/user/{userId}', [AuthController::class, 'getUserDetailsById']);
     Route::put('/user/{userId}', [AuthController::class, 'updateUserDetails']);
-
+    Route::post('/change-password/{userId}', [AuthController::class, 'changeUserPassword']);
 });
 
 Route::get('/units', [HelperController::class, 'index']);

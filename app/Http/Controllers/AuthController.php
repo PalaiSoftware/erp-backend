@@ -639,6 +639,114 @@ public function getUserDetailsById(Request $request, $userId)
     ], 200);
 }
 
+// public function updateUserDetails(Request $request, $userId)
+// {
+//     // Get the authenticated user
+//     $currentUser = Auth::user();
+//     if (!$currentUser) {
+//         return response()->json(['message' => 'Unauthorized'], 401);
+//     }
+
+//     // Validate user ID is a positive integer
+//     if (!is_numeric($userId) || $userId <= 0) {
+//         return response()->json([
+//             'message' => 'Validation failed',
+//             'errors' => ['user_id' => ['The user_id must be a positive integer.']]
+//         ], 422);
+//     }
+
+//     // Fetch the target user details
+//     $targetUser = DB::table('users')->where('id', $userId)->first();
+    
+//     if (!$targetUser) {
+//         return response()->json([
+//             'status' => 'error',
+//             'message' => 'User not found'
+//         ], 404);
+//     }
+//     // Check if the user is blocked
+//     // In our database schema:
+//     //   blocked = 0 means user is UNBLOCKED (active) - CAN BE UPDATED
+//     //   blocked = 1 means user is BLOCKED - CANNOT BE UPDATED
+//     if ($targetUser->blocked == 1) {
+//         \Log::warning('Attempt to update blocked user', [
+//             'user_id' => $userId,
+//             'current_user' => $currentUser->id
+//         ]);
+//         return response()->json([
+//             'status' => 'error',
+//             'message' => 'Cannot update details for a blocked user'
+//         ], 403);
+//     }
+   
+//     // Check if users belong to the same company
+//     if ($currentUser->cid != $targetUser->cid) {
+//         return response()->json([
+//             'message' => 'Forbidden: You do not have access to update this user\'s data'
+//         ], 403);
+//     }
+
+//     // Check access permissions based on current user's rid
+//     if ($currentUser->id != $userId) { // If not updating own details
+//         // Only users with rid 1, 2, or 3 can update other users in the same company
+//         if (!in_array($currentUser->rid, [1, 2, 3])) {
+//             return response()->json([
+//                 'message' => 'Forbidden: You do not have permission to update other users\' details'
+//             ], 403);
+//         }
+//     }
+
+//     try {
+//         // Validate the request data
+//         $validated = $request->validate([
+//             'name' => 'sometimes|string|max:255',
+//             'email' => 'sometimes|email|unique:users,email,' . $userId,
+//             'mobile' => 'sometimes|string|max:20',
+//             'country' => 'sometimes|string|max:50',
+//         ]);
+
+//         // Update the user details
+//         DB::table('users')
+//             ->where('id', $userId)
+//             ->update(array_merge($validated, ['updated_at' => now()]));
+
+//         // Fetch the updated user details with company name and role
+//         $updatedUser = DB::table('users')
+//             ->leftJoin('clients', 'users.cid', '=', 'clients.id')
+//             ->leftJoin('roles', 'users.rid', '=', 'roles.id')
+//             ->where('users.id', $userId)
+//             ->select(
+//                 'users.*',
+//                 'clients.name as company_name',
+//                 'roles.role as role_name'
+//             )
+//             ->first();
+
+//         // Determine user status based on blocked field
+//         $userStatus = $updatedUser->blocked == 0 ? 'active' : 'blocked';
+
+//         return response()->json([
+//             'status' => 'success',
+//             'message' => 'User details updated successfully',
+//         ], 200);
+//     } catch (\Illuminate\Validation\ValidationException $e) {
+//         return response()->json([
+//             'message' => 'Validation failed',
+//             'errors' => $e->errors(),
+//         ], 422);
+//     } catch (\Exception $e) {
+//         \Log::error('Failed to update user details', [
+//             'user_id' => $userId, 
+//             'error' => $e->getMessage()
+//         ]);
+//         return response()->json([
+//             'message' => 'Failed to update user details',
+//             'error' => $e->getMessage()
+//         ], 500);
+//     }
+// }
+
+
 public function updateUserDetails(Request $request, $userId)
 {
     // Get the authenticated user
@@ -664,10 +772,8 @@ public function updateUserDetails(Request $request, $userId)
             'message' => 'User not found'
         ], 404);
     }
+    
     // Check if the user is blocked
-    // In our database schema:
-    //   blocked = 0 means user is UNBLOCKED (active) - CAN BE UPDATED
-    //   blocked = 1 means user is BLOCKED - CANNOT BE UPDATED
     if ($targetUser->blocked == 1) {
         \Log::warning('Attempt to update blocked user', [
             'user_id' => $userId,
@@ -686,15 +792,47 @@ public function updateUserDetails(Request $request, $userId)
         ], 403);
     }
 
-    // Check access permissions based on current user's rid
+    // ====== UPDATED PERMISSION LOGIC ======
+    // Check access permissions based on role hierarchy
     if ($currentUser->id != $userId) { // If not updating own details
-        // Only users with rid 1, 2, or 3 can update other users in the same company
-        if (!in_array($currentUser->rid, [1, 2, 3])) {
+        // Role hierarchy validation:
+        // - rid=1 can update all lower roles (2,3,4,5)
+        // - rid=2 can update rid 3,4,5 (but NOT other rid=2)
+        // - rid=3 can update rid 4,5 (but NOT other rid=2/3)
+        // - rid=4/5 can ONLY update self (handled by this if-block)
+        
+        if ($currentUser->rid == 1) {
+            // Super Admin: Allow if target has higher rid number (lower role)
+            if ($targetUser->rid <= 1) {
+                return response()->json([
+                    'message' => 'Forbidden: Admin can only update lower roles'
+                ], 403);
+            }
+        } 
+        elseif ($currentUser->rid == 2) {
+            // Admin: Allow only for rid 3,4,5
+            if ($targetUser->rid <= 2) {
+                return response()->json([
+                    'message' => 'Forbidden: SuperUser can only update lower roles'
+                ], 403);
+            }
+        } 
+        elseif ($currentUser->rid == 3) {
+            // Manager: Allow only for rid 4,5
+            if ($targetUser->rid <= 3) {
+                return response()->json([
+                    'message' => 'Forbidden: Moderator can only update Staff roles'
+                ], 403);
+            }
+        } 
+        else {
+            // Staff (rid=4/5): Cannot update others
             return response()->json([
-                'message' => 'Forbidden: You do not have permission to update other users\' details'
+                'message' => 'Forbidden: Staff members can only update their own details'
             ], 403);
         }
     }
+    // ====== END UPDATED PERMISSION LOGIC ======
 
     try {
         // Validate the request data
@@ -722,9 +860,6 @@ public function updateUserDetails(Request $request, $userId)
             )
             ->first();
 
-        // Determine user status based on blocked field
-        $userStatus = $updatedUser->blocked == 0 ? 'active' : 'blocked';
-
         return response()->json([
             'status' => 'success',
             'message' => 'User details updated successfully',
@@ -741,6 +876,155 @@ public function updateUserDetails(Request $request, $userId)
         ]);
         return response()->json([
             'message' => 'Failed to update user details',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
+public function changeUserPassword(Request $request, $userId)
+{
+    // Get the authenticated user
+    $currentUser = Auth::user();
+    if (!$currentUser) {
+        return response()->json(['message' => 'Unauthorized'], 401);
+    }
+
+    // Validate user ID is a positive integer
+    if (!is_numeric($userId) || $userId <= 0) {
+        return response()->json([
+            'message' => 'Validation failed',
+            'errors' => ['user_id' => ['The user_id must be a positive integer.']]
+        ], 422);
+    }
+
+    // Fetch the target user details
+    $targetUser = DB::table('users')->where('id', $userId)->first();
+    
+    if (!$targetUser) {
+        return response()->json([
+            'status' => 'error',
+            'message' => 'User not found'
+        ], 404);
+    }
+
+    // Check if the user is blocked
+    if ($targetUser->blocked == 1) {
+        \Log::warning('Attempt to change password for blocked user', [
+            'user_id' => $userId,
+            'current_user' => $currentUser->id
+        ]);
+        return response()->json([
+            'status' => 'error',
+            'message' => 'Cannot change password for a blocked user'
+        ], 403);
+    }
+
+    // Check if users belong to the same company
+    if ($currentUser->cid != $targetUser->cid) {
+        return response()->json([
+            'message' => 'Forbidden: You do not have access to change this user\'s password'
+        ], 403);
+    }
+
+    // ====== UPDATED PERMISSION LOGIC ======
+    // Check access permissions based on role hierarchy
+    if ($currentUser->id != $userId) { // If not changing own password
+        // Role hierarchy validation:
+        // - rid=1 can change self + all lower roles (rid 2,3,4,5)
+        // - rid=2 can change self + rid 3,4,5 (but NOT other rid=2)
+        // - rid=3 can change self + rid 4,5 (but NOT other rid=2/3)
+        // - rid=4/5 can ONLY change self
+        
+        if ($currentUser->rid == 1) {
+            // Super Admin: Block if target has same or higher role (rid<=1)
+            if ($targetUser->rid <= 1) {
+                return response()->json([
+                    'message' => 'Forbidden: Super Admin can only change lower roles password'
+                ], 403);
+            }
+        } 
+        elseif ($currentUser->rid == 2) {
+            // Admin: Block if target has same or higher role (rid<=2)
+            if ($targetUser->rid <= 2) {
+                return response()->json([
+                    'message' => 'Forbidden: SuperUser can only change lower roles password'
+                ], 403);
+            }
+        } 
+        elseif ($currentUser->rid == 3) {
+            // Manager: Block if target has same or higher role (rid<=3)
+            if ($targetUser->rid <= 3) {
+                return response()->json([
+                    'message' => 'Forbidden: Moderator can only change Staff password'
+                ], 403);
+            }
+        } 
+        else {
+            // Staff (rid=4/5): Cannot change others
+            return response()->json([
+                'message' => 'Forbidden: Staff members can only change their own password'
+            ], 403);
+        }
+    }
+    // ====== END UPDATED PERMISSION LOGIC ======
+
+    try {
+        // Validation rules
+        $rules = [
+            'new_password' => 'required|string|confirmed',
+            'new_password_confirmation' => 'required|string',
+            'email' => 'required|email'  // Required for email verification
+        ];
+        
+        // Only require old_password for self
+        if ($currentUser->id == $userId) {
+            $rules['old_password'] = 'required|string';
+        }
+        
+        // Validate the request data
+        $validated = $request->validate($rules);
+
+        // Verify email matches the user's email
+        if ($validated['email'] !== $targetUser->email) {
+            return response()->json([
+                'message' => 'The provided email does not match the user\'s email'
+            ], 422);
+        }
+
+        // Verify old password for self
+        if ($currentUser->id == $userId) {
+            if (!Hash::check($validated['old_password'], $targetUser->password)) {
+                return response()->json([
+                    'message' => 'The provided old password is incorrect'
+                ], 422);
+            }
+        }
+
+        // Update the password
+        $newPasswordHash = Hash::make($validated['new_password']);
+        
+        DB::table('users')
+            ->where('id', $userId)
+            ->update([
+                'password' => $newPasswordHash,
+                'updated_at' => now()
+            ]);
+
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Password updated successfully'
+        ], 200);
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        return response()->json([
+            'message' => 'Validation failed',
+            'errors' => $e->errors(),
+        ], 422);
+    } catch (\Exception $e) {
+        \Log::error('Failed to update password', [
+            'user_id' => $userId, 
+            'error' => $e->getMessage()
+        ]);
+        return response()->json([
+            'message' => 'Failed to update password',
             'error' => $e->getMessage()
         ], 500);
     }
