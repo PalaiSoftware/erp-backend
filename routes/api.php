@@ -94,13 +94,19 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/user/{userId}', [AuthController::class, 'getUserDetailsById']);
     Route::put('/user/{userId}', [AuthController::class, 'updateUserDetails']);
     Route::post('/change-password/{userId}', [AuthController::class, 'changeUserPassword']);
+    Route::post('/add-unit', [HelperController::class, 'addUnit']);
+    Route::get('/units', [HelperController::class, 'index']);
+    Route::get('/unit/{unitId}', [HelperController::class, 'getUnit']);
+    Route::put('/unit/{unitId}', [HelperController::class, 'updateUnit']);
+    Route::post('/categories', [CategoryController::class, 'addCategory']);
+    Route::get('/categories', [CategoryController::class, 'getCategories']);
 });
 
-Route::get('/units', [HelperController::class, 'index']);
-Route::post('/add-unit', [HelperController::class, 'addUnit']);
+//Route::get('/units', [HelperController::class, 'index']);
+//Route::post('/add-unit', [HelperController::class, 'addUnit']);
 Route::get('/widget/total-purchases/{cid}', [WidgetController::class, 'getTotalPurchases']);
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/company-stats', [HelperController::class, 'getCompanyStats']);
-Route::post('/categories', [CategoryController::class, 'addCategory']);
-Route::get('/categories', [CategoryController::class, 'getCategories']);
+//Route::post('/categories', [CategoryController::class, 'addCategory']);
+//Route::get('/categories', [CategoryController::class, 'getCategories']);

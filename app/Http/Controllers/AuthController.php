@@ -938,7 +938,7 @@ public function changeUserPassword(Request $request, $userId)
             // Super Admin: Block if target has same or higher role (rid<=1)
             if ($targetUser->rid <= 1) {
                 return response()->json([
-                    'message' => 'Forbidden: Super Admin can only change lower roles password'
+                    'message' => 'Forbidden: Admin can only change lower roles password'
                 ], 403);
             }
         } 

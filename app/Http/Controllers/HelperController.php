@@ -222,14 +222,35 @@ public function getMultipleProductStock(Request $request, $cid)
 
 public function index()
 {
+    // Authentication and authorization checks
+    $user = Auth::user();
+    if (!$user) {
+        return response()->json(['message' => 'Unauthorized'], 401);
+    }
+    if ($user->rid < 1 || $user->rid > 5) {
+        return response()->json(['message' => 'Forbidden'], 403);
+    }
     // Fetch all units with all fields
     $units = Unit::all();
+   //$units = Unit::where('id', '>', 0)->get();
     
     // Return as JSON response
     return response()->json($units);
 }
 public function addUnit(Request $request)
-    {
+{
+    // Force JSON response
+     $request->headers->set('Accept', 'application/json');
+
+    // Auth check
+    $user = Auth::user();
+    if (!$user) {
+        return response()->json(['message' => 'Unauthenticated'], 401);
+    }
+     // Role restriction
+     if (!in_array($user->rid, [1, 2, 3, 4])) {
+        return response()->json(['message' => 'Unauthorized to add unit'], 403);
+    }
         // Validate the request data
         $request->validate([
             'name' => 'required|string|max:50',
@@ -258,5 +279,82 @@ public function addUnit(Request $request)
                 'error' => $e->getMessage(),
             ], 500);
         }
+    }
+    public function getUnit($unitId)
+    {
+        // Validate unit ID is a positive integer (0 is NOT allowed)
+        if (!is_numeric($unitId) || $unitId <= 0 || floor($unitId) != $unitId) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => ['unit_id' => ['The unit_id must be a positive integer.']]
+            ], 422);
+        }
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+        if ($user->rid < 1 || $user->rid > 5) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+        $unit = DB::table('units')->where('id', $unitId)->first();
+        
+        if (!$unit) {
+            return response()->json(['message' => 'Unit not found'], 404);
+        }
+        
+        return response()->json($unit);
+    }
+    public function updateUnit(Request $request, $unitId)
+    {
+        // Validate unit ID is a positive integer (0 is NOT allowed)
+        if (!is_numeric($unitId) || $unitId <= 0 || floor($unitId) != $unitId) {
+            return response()->json([
+                'message' => 'Validation failed',
+                'errors' => ['unit_id' => ['The unit_id must be a positive integer.']]
+            ], 422);
+        }
+        
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+        if ($user->rid < 1 || $user->rid > 5) {
+            return response()->json(['message' => 'Forbidden'], 403);
+        }
+        
+        // Validate input
+        $request->validate([
+            'name' => 'required|string|max:50'
+        ]);
+    
+        // Check if unit exists
+        $unit = DB::table('units')->where('id', $unitId)->first();
+        if (!$unit) {
+            return response()->json(['message' => 'Unit not found'], 404);
+        }
+    
+        // Check if new name already exists (excluding current unit)
+        $exists = DB::table('units')
+            ->where('name', $request->name)
+            ->where('id', '!=', $unitId)
+            ->exists();
+    
+        if ($exists) {
+            return response()->json([
+                'message' => 'Unit name already exists'
+            ], 409); // Conflict status code
+        }
+    
+        // Update the unit (without updated_at since it doesn't exist in your table)
+        DB::table('units')
+            ->where('id', $unitId)
+            ->update([
+                'name' => $request->name
+            ]);
+    
+        return response()->json([
+            'status' => 'success',
+            'message' => 'Unit updated successfully'
+        ]);
     }
 }
