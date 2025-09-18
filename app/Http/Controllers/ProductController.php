@@ -35,9 +35,17 @@ public function store(Request $request)
             'required',
             'string',
             'max:255',
-            function ($attribute, $value, $fail) {
-                if (Product::whereRaw('LOWER(name) = LOWER(?)', [$value])->exists()) {
-                    $fail($value . ' has already been taken.');
+            // function ($attribute, $value, $fail) {
+            //     if (Product::whereRaw('LOWER(name) = LOWER(?)', [$value])->exists()) {
+            //         $fail($value . ' has already been taken.');
+            //     }
+            // },
+            function ($attribute, $value, $fail) use ($user) { // Pass $user into closure
+                // Check for duplicate ONLY within current company (cid)
+                if (Product::where('cid', $user->cid) // Add cid condition
+                            ->whereRaw('LOWER(name) = LOWER(?)', [$value])
+                            ->exists()) {
+                    $fail($value . ' already exists in your company.');
                 }
             },
         ],
@@ -116,6 +124,8 @@ public function store(Request $request)
             'p_unit' => $productData['p_unit'],
             's_unit' => $productData['s_unit'] ?? 0,
             'c_factor' => $productData['c_factor'] ?? 0,
+            'uid' => $user->id,
+            'cid' => $user->cid,
         ]);
 
         $createdProducts[] = $product;
@@ -148,6 +158,7 @@ public function index(Request $request)
     $query = Product::leftJoin('categories', 'products.category_id', '=', 'categories.id')
         ->leftJoin('units as primary_units', 'products.p_unit', '=', 'primary_units.id')
         ->leftJoin('units as secondary_units', 'products.s_unit', '=', 'secondary_units.id')
+        ->leftJoin('users', 'products.uid', '=', 'users.id') // JOIN users table
         ->select(
             'products.id',
             'products.name as product_name',
@@ -158,8 +169,10 @@ public function index(Request $request)
             'primary_units.name as primary_unit',
             'products.s_unit',
             'secondary_units.name as secondary_unit',
-            'products.c_factor'
-        );
+            'products.c_factor',
+            'users.name as created_by'
+        )
+        ->where('products.cid', $user->cid); // CRITICAL: Filter by current user's company
 
     // Filter by category_id if provided
     if ($request->has('category_id')) {
@@ -424,22 +437,35 @@ public function update(Request $request, $id)
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        $product = Product::find($id);
-        if (!$product) {
-            return response()->json(['message' => 'Product not found'], 404);
-        }
+        // Find product and verify it belongs to current company
+        $product = Product::where('id', $id)
+            ->where('cid', $user->cid) // CRITICAL: Only allow products from current company
+            ->first();
 
+        if (!$product) {
+            return response()->json(['message' => 'Product not found or not authorized'], 404);
+        }
         // CORRECTED VALIDATION (top-level fields, NOT array-based)
         $validated = $request->validate([
             'name' => [
                 'required',
                 'string',
                 'max:255',
-                function ($attribute, $value, $fail) use ($id) {
+                // function ($attribute, $value, $fail) use ($id) {
+                //     if (Product::whereRaw('LOWER(name) = LOWER(?)', [$value])
+                //         ->where('id', '!=', $id)
+                //         ->exists()) {
+                //         $fail('This product name is already in use.');
+                //     }
+                // },
+
+                function ($attribute, $value, $fail) use ($id, $user) {
+                    // Check duplicate ONLY within current company
                     if (Product::whereRaw('LOWER(name) = LOWER(?)', [$value])
                         ->where('id', '!=', $id)
+                        ->where('cid', $user->cid) // Company-specific filter
                         ->exists()) {
-                        $fail('This product name is already in use.');
+                        $fail('This product name is already in use in your company.');
                     }
                 },
             ],

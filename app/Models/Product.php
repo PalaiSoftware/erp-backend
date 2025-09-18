@@ -16,6 +16,8 @@ class Product extends Model
         'p_unit',
         's_unit',
         'c_factor',
+        'cid',
+        'uid',
     ];
     // Define the relationship with Category
     public function category()
