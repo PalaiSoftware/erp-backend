@@ -61,28 +61,40 @@
             width: 100%;
             border-collapse: collapse;
             margin-top: 15px;
+            page-break-inside: auto;
         }
         table.items-table th,
         table.items-table td {
             border: 1px solid #ddd;
-            padding: 8px;
+            padding: 6px;
             text-align: left;
+            font-size: 12px;
         }
         table.items-table th {
             background-color: #f4f4f4;
             font-weight: bold;
-            font-size: 13px;
             color: #333;
         }
         table.items-table td {
-            font-size: 13px;
             color: #555;
+        }
+
+        /* Keep table header/footer inside PDF pages */
+        thead {
+            display: table-header-group; /* Repeats header on each page */
+        }
+        tfoot {
+            display: table-row-group;
+        }
+        tr {
+            page-break-inside: avoid; /* Don’t split rows across pages */
         }
 
         /* Footer Section */
         .footer-section {
             margin-top: 15px;
             text-align: right;
+            page-break-inside: avoid;
         }
         .footer-section p {
             margin: 4px 0;
@@ -125,7 +137,6 @@
                     <p><strong>Invoice Number:</strong> {{ $invoice->number }}</p>
                     <p><strong>Bill Date:</strong> {{ $transaction->updated_at }}</p>
                     <p><strong>Payment Mode:</strong> {{ $payment_mode }}</p>
-
                     <p><strong>Billing Done By:</strong> {{ $userDetails->name }}</p>
 
                     <h4>Billed To</h4>
@@ -143,10 +154,10 @@
                             <p><strong>Email:</strong> {{ $customer->email }}</p>
                         @endif
                         @if($customer->gst)
-                        <p><strong>GST:</strong> {{ $customer->gst }}</p>
+                            <p><strong>GST:</strong> {{ $customer->gst }}</p>
                         @endif
                         @if($customer->pan)
-                        <p><strong>PAN:</strong> {{ $customer->pan }}</p>
+                            <p><strong>PAN:</strong> {{ $customer->pan }}</p>
                         @endif
                     @else
                         <p>No customer information available</p>
@@ -179,13 +190,13 @@
                         <td>{{ $item['product_name'] }}</td>
                         <td>{{ $item['quantity'] }}</td>
                         <td>{{ $item['unit'] }}</td>
-                        <td><span class="currency-symbol">Rs. </span> {{ number_format($item['per_item_cost'], 2) }}</td>
+                        <td><span class="currency-symbol">Rs. </span>{{ number_format($item['per_item_cost'], 2) }}</td>
                         <td>{{ $item['discount'] }}</td>
-                        <td><span class="currency-symbol">Rs. </span> {{ number_format($item['net_price'], 2) }}</td>
-                        <td><span class="currency-symbol">Rs. </span> {{ number_format($item['per_product_total'], 2) }}</td>
+                        <td><span class="currency-symbol">Rs. </span>{{ number_format($item['net_price'], 2) }}</td>
+                        <td><span class="currency-symbol">Rs. </span>{{ number_format($item['per_product_total'], 2) }}</td>
                         <td>{{ $item['gst'] }}</td>
-                        <td><span class="currency-symbol">Rs.</span> {{ number_format($item['gst_amount'], 2) }}</td>
-                        <td><span class="currency-symbol">Rs.  </span> {{ number_format($item['total'], 2) }}</td>
+                        <td><span class="currency-symbol">Rs.</span>{{ number_format($item['gst_amount'], 2) }}</td>
+                        <td><span class="currency-symbol">Rs.</span>{{ number_format($item['total'], 2) }}</td>
                     </tr>
                 @empty
                     <tr>
@@ -197,16 +208,13 @@
 
         <!-- Footer Section -->
         <div class="footer-section">
-            <p><strong>Total Net Value (excl. GST):</strong> <span class="currency-symbol">Rs.</span> {{ number_format($total_item_net_value, 2) }}</p>
-            <p><strong>Total GST Amount:</strong> <span class="currency-symbol">Rs.</span> {{ number_format($total_gst_amount, 2) }}</p>
-            <p><strong>Total Amount:</strong> <span class="currency-symbol">Rs.</span> {{ number_format($total_amount, 2) }}</p>
-            <p>Extra Discount: <span class="currency-symbol">Rs.</span> {{ number_format($absolute_discount, 2) }}</p>
-            <p><strong>Payable Amount:</strong> <span class="currency-symbol">Rs.</span> {{ number_format($payable_amount, 2) }}</p>
-
-            <p>Paid Amount: <span class="currency-symbol">Rs.</span> {{ number_format($paid_amount, 2) }}</p>
-            <p><strong>Due Amount:</strong> <span class="currency-symbol">Rs.</span> {{ number_format($due_amount, 2) }}</p>
-
-
+            <p><strong>Total Net Value (excl. GST):</strong> <span class="currency-symbol">Rs.</span>{{ number_format($total_item_net_value, 2) }}</p>
+            <p><strong>Total GST Amount:</strong> <span class="currency-symbol">Rs.</span>{{ number_format($total_gst_amount, 2) }}</p>
+            <p><strong>Total Amount:</strong> <span class="currency-symbol">Rs.</span>{{ number_format($total_amount, 2) }}</p>
+            <p>Extra Discount: <span class="currency-symbol">Rs.</span>{{ number_format($absolute_discount, 2) }}</p>
+            <p><strong>Payable Amount:</strong> <span class="currency-symbol">Rs.</span>{{ number_format($payable_amount, 2) }}</p>
+            <p>Paid Amount: <span class="currency-symbol">Rs.</span>{{ number_format($paid_amount, 2) }}</p>
+            <p><strong>Due Amount:</strong> <span class="currency-symbol">Rs.</span>{{ number_format($due_amount, 2) }}</p>
         </div>
     </div>
 </body>
