@@ -110,3 +110,9 @@ Route::post('/login', [AuthController::class, 'login']);
 Route::post('/company-stats', [HelperController::class, 'getCompanyStats']);
 //Route::post('/categories', [CategoryController::class, 'addCategory']);
 //Route::get('/categories', [CategoryController::class, 'getCategories']);
+
+Route::get('/version', function () {
+    return response()->json([
+        'version' => config('app.version')
+    ]);
+});
