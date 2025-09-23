@@ -259,6 +259,7 @@ if ($request->filled('bill_name')) {
             ], 500);
         }
 }   
+
 // public function getTransactionsByCid(Request $request)
 // {
 //     // Get the authenticated user
@@ -269,11 +270,7 @@ if ($request->filled('bill_name')) {
 
 //     // Extract uid from the authenticated user
 //     $uid = $user->id;
-
-//     // Restrict access to users with rid between 1 and 5 inclusive
-//     if ($user->rid < 1 || $user->rid > 5) {
-//         return response()->json(['message' => 'Forbidden'], 403);
-//     }
+//     $userRid = $user->rid;
 
 //     // Validate the request data
 //     $request->validate([
@@ -288,9 +285,34 @@ if ($request->filled('bill_name')) {
 //         return response()->json(['message' => 'Forbidden: You do not have access to this company\'s data'], 403);
 //     }
 
+//     // Determine which RIDs the user can view based on their own RID
+//     $allowedRids = [];
+//     switch ($userRid) {
+//         case 1: // Admin - can see everyone
+//             $allowedRids = [1, 2, 3, 4, 5];
+//             break;
+//         case 2: // Superuser - can see Superuser, Moderator, Authenticated, Anonymous
+//             $allowedRids = [2, 3, 4, 5];
+//             break;
+//         case 3: // Moderator - can see Moderator, Authenticated, Anonymous
+//             $allowedRids = [3, 4, 5];
+//             break;
+//         case 4: // Authenticated - can only see Authenticated
+//         case 5: // Anonymous - can only see Anonymous
+//             $allowedRids = [$userRid];
+//             break;
+//         default:
+//             // For safety, deny access if rid is not recognized
+//             return response()->json(['message' => 'Forbidden: Invalid role'], 403);
+//     }
+
 //     try {
 //         // Log successful validation
-//         Log::info('Validation passed successfully for getTransactionsByCid', ['cid' => $cid]);
+//         Log::info('Validation passed successfully for getTransactionsByCid', [
+//             'cid' => $cid, 
+//             'user_rid' => $userRid,
+//             'allowed_rids' => $allowedRids
+//         ]);
 
 //         // Build the query with the purchase_bills table
 //         $query = DB::table('purchase_bills as pb')
@@ -301,12 +323,15 @@ if ($request->filled('bill_name')) {
 //                 'pb.pcid as vendor_id',             // Vendor ID from purchase_bills
 //                 'pb.payment_mode',                  // Payment mode integer
 //                 'pb.updated_at as date',            // Date of the transaction
-//                 'u.name as purchased_by'            // Name of the user who made the purchase
+//                 'u.name as purchased_by',           // Name of the user who made the purchase
+//                 'u.rid as purchaser_rid'            // Include RID for debugging
 //             )
 //             ->leftJoin('purchase_clients as pc', 'pb.pcid', '=', 'pc.id')  // Join with vendors
 //             ->leftJoin('users as u', 'pb.uid', '=', 'u.id')                // Join with users
-//             ->where('u.cid', $cid)                                   // Filter by company ID
+//             ->where('u.cid', $cid)                                        // Filter by company ID
+//             ->whereIn('u.rid', $allowedRids)                              // NEW: Filter by allowed RIDs
 //             ->orderBy('pb.updated_at', 'desc');      
+
 //         // Execute the query
 //         $transactions = $query->get();
 
@@ -321,7 +346,7 @@ if ($request->filled('bill_name')) {
 
 //         // Handle empty results
 //         if ($transactions->isEmpty()) {
-//             Log::info('No transactions found for cid', ['cid' => $cid]);
+//             Log::info('No transactions found for cid', ['cid' => $cid, 'allowed_rids' => $allowedRids]);
 //             return response()->json([
 //                 'status' => 'error',
 //                 'message' => 'No transactions found for this customer ID'
@@ -329,129 +354,121 @@ if ($request->filled('bill_name')) {
 //         }
 
 //         // Return successful response
-//         Log::info('Transactions retrieved successfully', ['cid' => $cid, 'count' => $transactions->count()]);
+//         Log::info('Transactions retrieved successfully', [
+//             'cid' => $cid, 
+//             'count' => $transactions->count(),
+//             'allowed_rids' => $allowedRids
+//         ]);
+        
 //         return response()->json([
 //             'status' => 'success',
 //             'data' => $transactions
 //         ], 200);
 //     } catch (\Exception $e) {
-//         Log::error('Failed to fetch transactions', ['cid' => $cid, 'error' => $e->getMessage()]);
-//         return response()->json(['message' => 'Failed to fetch transactions', 'error' => $e->getMessage()], 500);
+//         Log::error('Failed to fetch transactions', [
+//             'cid' => $cid, 
+//             'user_rid' => $userRid,
+//             'error' => $e->getMessage()
+//         ]);
+//         return response()->json([
+//             'message' => 'Failed to fetch transactions', 
+//             'error' => $e->getMessage()
+//         ], 500);
 //     }
 // }
 
 public function getTransactionsByCid(Request $request)
 {
-    // Get the authenticated user
     $user = Auth::user();
     if (!$user) {
         return response()->json(['message' => 'Unauthorized'], 401);
     }
 
-    // Extract uid from the authenticated user
-    $uid = $user->id;
-    $userRid = $user->rid;
-
-    // Validate the request data
     $request->validate([
         'cid' => 'required|integer'
     ]);
 
-    // Extract cid from the request
     $cid = $request->input('cid');
+    $userRid = $user->rid;
 
-    // Check if the user belongs to the requested company
     if ($user->cid != $cid) {
         return response()->json(['message' => 'Forbidden: You do not have access to this company\'s data'], 403);
     }
 
-    // Determine which RIDs the user can view based on their own RID
+    // Determine allowed roles for higher privileges (1-3)
     $allowedRids = [];
     switch ($userRid) {
-        case 1: // Admin - can see everyone
+        case 1: // Admin
             $allowedRids = [1, 2, 3, 4, 5];
             break;
-        case 2: // Superuser - can see Superuser, Moderator, Authenticated, Anonymous
+        case 2: // Superuser
             $allowedRids = [2, 3, 4, 5];
             break;
-        case 3: // Moderator - can see Moderator, Authenticated, Anonymous
+        case 3: // Moderator
             $allowedRids = [3, 4, 5];
             break;
-        case 4: // Authenticated - can only see Authenticated
-        case 5: // Anonymous - can only see Anonymous
-            $allowedRids = [$userRid];
+        case 4: // Authenticated
+        case 5: // Anonymous
+            // Special case: We'll handle these differently below
             break;
         default:
-            // For safety, deny access if rid is not recognized
             return response()->json(['message' => 'Forbidden: Invalid role'], 403);
     }
 
     try {
-        // Log successful validation
-        Log::info('Validation passed successfully for getTransactionsByCid', [
-            'cid' => $cid, 
-            'user_rid' => $userRid,
-            'allowed_rids' => $allowedRids
-        ]);
-
-        // Build the query with the purchase_bills table
+        // Build base query
         $query = DB::table('purchase_bills as pb')
             ->select(
-                'pb.id as transaction_id',          // Bill ID as transaction ID
+                'pb.id as transaction_id',
                 'pb.bill_name as bill_name',
-                'pc.name as vendor_name',           // Vendor name from purchase_clients
-                'pb.pcid as vendor_id',             // Vendor ID from purchase_bills
-                'pb.payment_mode',                  // Payment mode integer
-                'pb.updated_at as date',            // Date of the transaction
-                'u.name as purchased_by',           // Name of the user who made the purchase
-                'u.rid as purchaser_rid'            // Include RID for debugging
+                'pc.name as vendor_name',
+                'pb.pcid as vendor_id',
+                'pb.payment_mode',
+                'pb.updated_at as date',
+                'u.name as purchased_by',
+                'u.rid as purchaser_rid'
             )
-            ->leftJoin('purchase_clients as pc', 'pb.pcid', '=', 'pc.id')  // Join with vendors
-            ->leftJoin('users as u', 'pb.uid', '=', 'u.id')                // Join with users
-            ->where('u.cid', $cid)                                        // Filter by company ID
-            ->whereIn('u.rid', $allowedRids)                              // NEW: Filter by allowed RIDs
-            ->orderBy('pb.updated_at', 'desc');      
+            ->leftJoin('purchase_clients as pc', 'pb.pcid', '=', 'pc.id')
+            ->leftJoin('users as u', 'pb.uid', '=', 'u.id')
+            ->where('u.cid', $cid)
+            ->orderBy('pb.updated_at', 'desc');
 
-        // Execute the query
+        // Apply role-based filtering for admins/superusers/moderators
+        if ($userRid <= 3) {
+            $query->whereIn('u.rid', $allowedRids);
+        } 
+        // For Authenticated (4) and Anonymous (5) users: restrict to ONLY their own transactions
+        else {
+            $query->where('pb.uid', $user->id);
+        }
+
         $transactions = $query->get();
 
-        // Fetch payment modes from the database
+        // Convert payment mode integer to string
         $paymentModes = DB::table('payment_modes')->pluck('name', 'id')->toArray();
-
-        // Map payment_mode from integer to string
         $transactions = $transactions->map(function ($transaction) use ($paymentModes) {
             $transaction->payment_mode = $paymentModes[$transaction->payment_mode] ?? 'Unknown';
             return $transaction;
         });
 
-        // Handle empty results
         if ($transactions->isEmpty()) {
-            Log::info('No transactions found for cid', ['cid' => $cid, 'allowed_rids' => $allowedRids]);
             return response()->json([
                 'status' => 'error',
-                'message' => 'No transactions found for this customer ID'
+                'message' => 'No transactions found'
             ], 404);
         }
 
-        // Return successful response
-        Log::info('Transactions retrieved successfully', [
-            'cid' => $cid, 
-            'count' => $transactions->count(),
-            'allowed_rids' => $allowedRids
-        ]);
-        
         return response()->json([
             'status' => 'success',
             'data' => $transactions
         ], 200);
     } catch (\Exception $e) {
-        Log::error('Failed to fetch transactions', [
-            'cid' => $cid, 
-            'user_rid' => $userRid,
+        Log::error('Transaction fetch failed', [
+            'cid' => $cid,
             'error' => $e->getMessage()
         ]);
         return response()->json([
-            'message' => 'Failed to fetch transactions', 
+            'message' => 'Failed to fetch transactions',
             'error' => $e->getMessage()
         ], 500);
     }
