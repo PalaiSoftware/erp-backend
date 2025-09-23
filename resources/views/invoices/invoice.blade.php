@@ -45,7 +45,7 @@
             height: auto;
             margin-bottom: 8px;
         }
-        .company-info p, .billing-info p {
+        .company-info p {
             margin: 4px 0;
             font-size: 13px;
             color: #555;
@@ -111,6 +111,23 @@
             font-family: 'Segoe UI Emoji', 'Arial Unicode MS', sans-serif;
             margin-right: 2px;
         }
+
+        /* Billing Details Table */
+        .billing-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        .billing-table th,
+        .billing-table td {
+            padding: 6px;
+            border: 1px solid #ddd;
+        }
+        .billing-table th {
+            background: #f4f4f4;
+            text-align: left;
+            color: #333;
+        }
     </style>
 </head>
 <body>
@@ -134,34 +151,28 @@
                 <!-- Billing Info -->
                 <td class="billing-info" style="text-align: right;">
                     <h4>Billing Details</h4>
-                    <p><strong>Invoice Number:</strong> {{ $invoice->number }}</p>
-                    <p><strong>Bill Date:</strong> {{ $transaction->updated_at }}</p>
-                    <p><strong>Payment Mode:</strong> {{ $payment_mode }}</p>
-                    <p><strong>Billing Done By:</strong> {{ $userDetails->name }}</p>
-
-                    <h4>Billed To</h4>
-                    @isset($customer)
-                        @if(!is_null($customer->name))
-                            <p><strong>Customer Name:</strong> {{ $customer->name }}</p>
-                        @endif
-                        @if(!is_null($customer->phone))
-                            <p><strong>Phone:</strong> {{ $customer->phone }}</p>
-                        @endif
-                        @if(!is_null($customer->address))
-                            <p><strong>Address:</strong> {{ $customer->address }}</p>
-                        @endif
-                        @if(!is_null($customer->email))
-                            <p><strong>Email:</strong> {{ $customer->email }}</p>
-                        @endif
-                        @if($customer->gst)
-                            <p><strong>GST:</strong> {{ $customer->gst }}</p>
-                        @endif
-                        @if($customer->pan)
-                            <p><strong>PAN:</strong> {{ $customer->pan }}</p>
-                        @endif
-                    @else
-                        <p>No customer information available</p>
-                    @endisset
+                    <table class="billing-table">
+                        <tr>
+                            <th>Invoice Number</th>
+                            <td>{{ $invoice->number }}</td>
+                        </tr>
+                        <tr>
+                            <th>Bill Date</th>
+                            <td>{{ $transaction->updated_at }}</td>
+                        </tr>
+                        <tr>
+                            <th>Payment Mode</th>
+                            <td>{{ $payment_mode }}</td>
+                        </tr>
+                        <tr>
+                            <th>Customer Name</th>
+                            <td>{{ $customer->name }}</td>
+                        </tr>
+                        <tr>
+                            <th>Phone Number</th>
+                            <td>{{ $customer->phone }}</td>
+                        </tr>
+                    </table>
                 </td>
             </tr>
         </table>
@@ -207,15 +218,69 @@
         </table>
 
         <!-- Footer Section -->
-        <div class="footer-section">
-            <p><strong>Total Net Value (excl. GST):</strong> <span class="currency-symbol">Rs.</span>{{ number_format($total_item_net_value, 2) }}</p>
-            <p><strong>Total GST Amount:</strong> <span class="currency-symbol">Rs.</span>{{ number_format($total_gst_amount, 2) }}</p>
-            <p><strong>Total Amount:</strong> <span class="currency-symbol">Rs.</span>{{ number_format($total_amount, 2) }}</p>
-            <p>Extra Discount: <span class="currency-symbol">Rs.</span>{{ number_format($absolute_discount, 2) }}</p>
-            <p><strong>Payable Amount:</strong> <span class="currency-symbol">Rs.</span>{{ number_format($payable_amount, 2) }}</p>
-            <p>Paid Amount: <span class="currency-symbol">Rs.</span>{{ number_format($paid_amount, 2) }}</p>
-            <p><strong>Due Amount:</strong> <span class="currency-symbol">Rs.</span>{{ number_format($due_amount, 2) }}</p>
-        </div>
+        <!-- Footer Section -->
+<<!-- Footer Section -->
+<div class="footer-section" style="width: 100%; margin-top: 10px;">
+    <table style="width: 40%; border-collapse: collapse; font-size: 14px; margin-left: auto;">
+        <tbody>
+            @if($total_gst_amount > 0)
+            <tr>
+                <td style="padding:6px; border:1px solid #ddd;"><strong>Total Net Value (excl. GST):</strong></td>
+                <td style="padding:6px; border:1px solid #ddd; text-align:right;">
+                    <span class="currency-symbol">Rs.</span>{{ number_format($total_item_net_value, 2) }}
+                </td>
+            </tr>
+            @endif
+
+            @if($total_gst_amount > 0)
+            <tr>
+                <td style="padding:6px; border:1px solid #ddd;"><strong>Total GST Amount:</strong></td>
+                <td style="padding:6px; border:1px solid #ddd; text-align:right;">
+                    <span class="currency-symbol">Rs.</span>{{ number_format($total_gst_amount, 2) }}
+                </td>
+            </tr>
+            @endif
+
+            <tr>
+                <td style="padding:6px; border:1px solid #ddd;"><strong>Total Amount:</strong></td>
+                <td style="padding:6px; border:1px solid #ddd; text-align:right;">
+                    <span class="currency-symbol">Rs.</span>{{ number_format($total_amount, 2) }}
+                </td>
+            </tr>
+
+            @if($absolute_discount > 0)
+            <tr>
+                <td style="padding:6px; border:1px solid #ddd;">Extra Discount:</td>
+                <td style="padding:6px; border:1px solid #ddd; text-align:right;">
+                    <span class="currency-symbol">Rs.</span>{{ number_format($absolute_discount, 2) }}
+                </td>
+            </tr>
+            @endif
+
+            <tr>
+                <td style="padding:6px; border:1px solid #ddd;"><strong>Payable Amount:</strong></td>
+                <td style="padding:6px; border:1px solid #ddd; text-align:right;">
+                    <span class="currency-symbol">Rs.</span>{{ number_format($payable_amount, 2) }}
+                </td>
+            </tr>
+
+            <tr>
+                <td style="padding:6px; border:1px solid #ddd;">Paid Amount:</td>
+                <td style="padding:6px; border:1px solid #ddd; text-align:right;">
+                    <span class="currency-symbol">Rs.</span>{{ number_format($paid_amount, 2) }}
+                </td>
+            </tr>
+
+            <tr>
+                <td style="padding:6px; border:1px solid #ddd;"><strong>Due Amount:</strong></td>
+                <td style="padding:6px; border:1px solid #ddd; text-align:right;">
+                    <span class="currency-symbol">Rs.</span>{{ number_format($due_amount, 2) }}
+                </td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
     </div>
 </body>
 </html>

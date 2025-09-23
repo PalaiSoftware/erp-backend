@@ -98,9 +98,9 @@ public function store(Request $request)
         } 
         // Case 2: Both units provided
         else {
-            if ($cFactor === 0 || $cFactor < 1) {
+            if ($cFactor === 0 || $cFactor < 0) {
                 $cFactorErrors["products.{$index}.c_factor"][] = 
-                    'When both primary and secondary units are provided, c_factor must be at least 1.';
+                    'When both primary and secondary units are provided, c_factor must be at least 0.1.';
             }
         }
     }
