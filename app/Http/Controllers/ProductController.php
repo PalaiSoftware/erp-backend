@@ -504,8 +504,8 @@ public function update(Request $request, $id)
         }
         // Case 2: Secondary unit > 0 → c_factor must be ≥1
         elseif ($pUnit>0 && $sUnit >0) {
-            if ($cFactor < 1) {
-                $errors['c_factor'][] = 'When secondary unit is provided, conversion factor must be at least 1.';
+            if ($cFactor < 0) {
+                $errors['c_factor'][] = 'When secondary unit is provided, conversion factor must be at least 0.1 .';
             }
         }
 
