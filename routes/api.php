@@ -15,6 +15,7 @@ use App\Http\Controllers\LmAuthController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\ProductInfoController;
+use App\Http\Controllers\RegistrationController;
 
 
 /*
@@ -100,12 +101,16 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::put('/unit/{unitId}', [HelperController::class, 'updateUnit']);
     Route::post('/categories', [CategoryController::class, 'addCategory']);
     Route::get('/categories', [CategoryController::class, 'getCategories']);
+    
+    Route::get('/pending-registrations', [RegistrationController::class, 'pendingList']); // for admin
+    Route::get('/pending-user/{id}', [RegistrationController::class, 'getUserById']);
+    Route::post('/approve', [RegistrationController::class, 'approve']); 
 });
-
+Route::post('/register', [RegistrationController::class, 'register']);
 //Route::get('/units', [HelperController::class, 'index']);
 //Route::post('/add-unit', [HelperController::class, 'addUnit']);
 Route::get('/widget/total-purchases/{cid}', [WidgetController::class, 'getTotalPurchases']);
-Route::post('/register', [AuthController::class, 'register']);
+//Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/company-stats', [HelperController::class, 'getCompanyStats']);
 //Route::post('/categories', [CategoryController::class, 'addCategory']);
@@ -116,3 +121,4 @@ Route::get('/version', function () {
         'version' => config('app.version')
     ]);
 });
+//Route::post('/pending-register', [RegistrationController::class, 'register']);

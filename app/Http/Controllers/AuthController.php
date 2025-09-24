@@ -9,89 +9,92 @@ use Illuminate\Support\Facades\DB;
 use App\Models\User;
 use App\Models\Client;
 use Illuminate\Support\Facades\Auth; 
+use App\Models\PendingRegistration;
+
+
 class AuthController extends Controller
 {
 
-public function register(Request $request)
-{
-    $validator = Validator::make($request->all(), [
-        'name' => 'required|string|max:255',
-        // 'email' => 'required|string|email|max:255|unique:users',
-        'email' => [
-            'required',
-            'string',
-            'email',
-            'max:255',
-            function ($attribute, $value, $fail) {
-                if (User::whereRaw('LOWER(email) = LOWER(?)', [strtolower($value)])->exists()) {
-                    $fail('The email has already been taken.');
-                }
-            },
-        ],
-        'mobile' => 'required|string|max:255',
-        'country' => 'required|string|max:255',
-        'password' => 'required|string|min:6',
-        'rid' => 'required|integer|between:1,5',
-        'client_name' => 'required|string|max:255',
-        'client_address' => 'nullable|string',
-        'client_phone' => 'nullable|string|max:20',
-        'gst_no' => 'nullable|string|max:255',
-        'pan' => 'nullable|string|max:20',
-    ]);
+// public function register(Request $request)
+// {
+//     $validator = Validator::make($request->all(), [
+//         'name' => 'required|string|max:255',
+//         // 'email' => 'required|string|email|max:255|unique:users',
+//         'email' => [
+//             'required',
+//             'string',
+//             'email',
+//             'max:255',
+//             function ($attribute, $value, $fail) {
+//                 if (User::whereRaw('LOWER(email) = LOWER(?)', [strtolower($value)])->exists()) {
+//                     $fail('The email has already been taken.');
+//                 }
+//             },
+//         ],
+//         'mobile' => 'required|string|max:255',
+//         'country' => 'required|string|max:255',
+//         'password' => 'required|string|min:6',
+//         'rid' => 'required|integer|between:1,5',
+//         'client_name' => 'required|string|max:255',
+//         'client_address' => 'nullable|string',
+//         'client_phone' => 'nullable|string|max:20',
+//         'gst_no' => 'nullable|string|max:255',
+//         'pan' => 'nullable|string|max:20',
+//     ]);
 
-    if ($validator->fails()) {
-        return response()->json(['errors' => $validator->errors()], 422);
-    }
+//     if ($validator->fails()) {
+//         return response()->json(['errors' => $validator->errors()], 422);
+//     }
 
-    DB::beginTransaction();
+//     DB::beginTransaction();
 
-    try {
-        // Create Client first
-        $client = Client::create([
-            'name' => $request->client_name,
-            'address' => $request->client_address,
-            'phone' => $request->client_phone,
-            'gst_no' => $request->gst_no,
-            'pan' => $request->pan,
-            'blocked' => 0,
-        ]);
+//     try {
+//         // Create Client first
+//         $client = Client::create([
+//             'name' => $request->client_name,
+//             'address' => $request->client_address,
+//             'phone' => $request->client_phone,
+//             'gst_no' => $request->gst_no,
+//             'pan' => $request->pan,
+//             'blocked' => 0,
+//         ]);
 
-        if (!$client) {
-            throw new \Exception("Client creation failed.");
-        }
+//         if (!$client) {
+//             throw new \Exception("Client creation failed.");
+//         }
 
-        // Create User with cid set to client’s ID
-        $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'mobile' => $request->mobile,
-            'country' => $request->country,
-            'password' => Hash::make($request->password),
-            //'rid' => 3,
-            'rid' => $request->rid,
-            'blocked' => 0,
-            'cid' => $client->id, // Set cid during creation
-        ]);
+//         // Create User with cid set to client’s ID
+//         $user = User::create([
+//             'name' => $request->name,
+//             'email' => $request->email,
+//             'mobile' => $request->mobile,
+//             'country' => $request->country,
+//             'password' => Hash::make($request->password),
+//             //'rid' => 3,
+//             'rid' => $request->rid,
+//             'blocked' => 0,
+//             'cid' => $client->id, // Set cid during creation
+//         ]);
 
-        if (!$user) {
-            throw new \Exception("User creation failed.");
-        }
-        DB::commit();
+//         if (!$user) {
+//             throw new \Exception("User creation failed.");
+//         }
+//         DB::commit();
 
-        return response()->json([
-            'message' => 'User and client registered successfully',
-            'user' => $user,
-            'client' => $client
-        ], 201);
+//         return response()->json([
+//             'message' => 'User and client registered successfully',
+//             'user' => $user,
+//             'client' => $client
+//         ], 201);
 
-    } catch (\Exception $e) {
-        DB::rollBack();
-        return response()->json([
-            'message' => 'Registration failed',
-            'error' => $e->getMessage()
-        ], 500);
-    }
-}
+//     } catch (\Exception $e) {
+//         DB::rollBack();
+//         return response()->json([
+//             'message' => 'Registration failed',
+//             'error' => $e->getMessage()
+//         ], 500);
+//     }
+// }
 
 public function login(Request $request)
 {
@@ -100,10 +103,24 @@ public function login(Request $request)
         'password' => 'required|string',
     ]);
 
+    $pending = PendingRegistration::where('email', $credentials['email'])->first();
+
+    if ($pending && !$pending->approved) {
+        return response()->json([
+            'message' => 'Your registration is still pending approval. Please wait for admin approval.'
+        ], 403);
+    }
+
     $user = User::where('email', $credentials['email'])->first();
 
-    if (!$user || !Hash::check($credentials['password'], $user->password)) {
-        return response()->json(['message' => 'Invalid credentials'], 401);
+    if (!$user) {
+        return response()->json([
+            'message' => 'Wrong email address. Please check your email.'
+        ], 404);
+    }
+
+    if (!Hash::check($credentials['password'], $user->password)) {
+        return response()->json(['message' => 'Invalid credentials , wrong password'], 401);
     }
 
     if ($user->blocked) {
