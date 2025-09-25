@@ -53,7 +53,7 @@ class RegistrationController extends Controller
             'mobile' => $request->mobile,
             'country' => $request->country,
             'password' => Hash::make($request->password),
-            'rid' => $request->rid,
+            'rid' => 4,
             'client_name' => $request->client_name,
             'client_address' => $request->client_address,
             'client_phone' => $request->client_phone,
@@ -79,8 +79,15 @@ public function pendingList(Request $request)
     if (!in_array($user->rid, [1, 2])) {
         return response()->json(['message' => 'Unauthorized to Access pending users'], 403);
     }
-
-    $pending = PendingRegistration::where('approved', false)->get();
+    
+    $pending = PendingRegistration::select(
+        'pending_registrations.*',
+        'roles.role as role'
+    )
+    ->leftJoin('roles', 'pending_registrations.rid', '=', 'roles.id')
+    ->where('pending_registrations.approved', false)
+    ->orderBy('pending_registrations.created_at', 'desc')
+    ->get();
     return response()->json($pending, 200);
 }
 
@@ -95,12 +102,19 @@ public function pendingList(Request $request)
          return response()->json(['message' => 'Unauthenticated'], 401);
      }
 
-     // Restrict to rid 1, 2, 3,4
+     // Restrict to rid 1, 2
      if (!in_array($user->rid, [1, 2])) {
          return response()->json(['message' => 'Unauthorized to Access pending user'], 403);
      }
     try {
-        $user = PendingRegistration::find($id);
+        $user = PendingRegistration::select(
+            'pending_registrations.*',
+            'roles.role as role_name'
+        )
+        ->leftJoin('roles', 'pending_registrations.rid', '=', 'roles.id')
+        ->where('pending_registrations.id', $id)
+        ->first();
+
 
         if (!$user) {
             return response()->json([
@@ -131,7 +145,7 @@ public function approve(Request $request)
          return response()->json(['message' => 'Unauthenticated'], 401);
      }
 
-     // Restrict to rid 1, 2, 3,4
+     // Restrict to rid 1, 2
      if (!in_array($user->rid, [1, 2])) {
          return response()->json(['message' => 'Unauthorized to approve pending users'], 403);
      }
@@ -165,7 +179,7 @@ public function approve(Request $request)
         ],
         'mobile' => 'required|string|max:20',
         'country' => 'required|string|max:255',
-        'rid' => 'required|integer|between:1,5',
+        'rid' => 'required|integer|between:3,5',
         'client_name' => 'required|string|max:255',
         'client_address' => 'nullable|string',
         'client_phone' => 'nullable|string|max:20',
