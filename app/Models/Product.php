@@ -18,6 +18,7 @@ class Product extends Model
         'c_factor',
         'cid',
         'uid',
+        'description',
     ];
     // Define the relationship with Category
     public function category()
