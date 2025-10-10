@@ -426,7 +426,7 @@ public function getTransactionsByCid(Request $request)
                 'pb.payment_mode',
                 'pb.updated_at as date',
                 'u.name as purchased_by',
-                'u.rid as purchaser_rid'
+                //'u.rid as purchaser_rid'
             )
             ->leftJoin('purchase_clients as pc', 'pb.pcid', '=', 'pc.id')
             ->leftJoin('users as u', 'pb.uid', '=', 'u.id')

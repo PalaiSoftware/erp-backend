@@ -723,7 +723,10 @@ public function getUnitsByProductId(Request $request, $product_id)
                 'products.p_unit',
                 'products.s_unit',
                 'product_info.purchase_price',
-                'product_info.post_gst_sale_cost'
+                'product_info.post_gst_sale_cost',
+                'product_info.profit_percentage',
+                'product_info.gst'
+
             )
             ->first();
 
@@ -777,6 +780,8 @@ public function getUnitsByProductId(Request $request, $product_id)
             'product_info' => [
                 'purchase_price' => $product->purchase_price ?? 0.00,
                 'post_gst_sale_cost' => $product->post_gst_sale_cost ?? 0.00,
+                'profit_percentage'=>$product->profit_percentage ?? 0.00,
+                'gst' =>$product->gst ?? 0.00,
             ]
         ], 200);
 
