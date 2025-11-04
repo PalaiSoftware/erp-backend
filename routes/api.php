@@ -111,7 +111,6 @@ Route::post('/register', [RegistrationController::class, 'register']);
 //Route::get('/units', [HelperController::class, 'index']);
 //Route::post('/add-unit', [HelperController::class, 'addUnit']);
 Route::get('/widget/total-purchases/{cid}', [WidgetController::class, 'getTotalPurchases']);
-//Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/company-stats', [HelperController::class, 'getCompanyStats']);
 //Route::post('/categories', [CategoryController::class, 'addCategory']);

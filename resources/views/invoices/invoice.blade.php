@@ -172,6 +172,43 @@
                             <th>Phone Number</th>
                             <td>{{ $customer->phone }}</td>
                         </tr>
+                         <!-- Conditional Customer GSTIN display - FIXED VERSION -->
+                         @php
+                            $hasValidGst = !empty($customer->gst_no) && 
+                                            $customer->gst_no != 'N/A' && 
+                                            $customer->gst_no != 'null' && 
+                                            $customer->gst_no != '0' && 
+                                            $customer->gst_no != '0.00' && 
+                                            $customer->gst_no != '0.0' && 
+                                            $customer->gst_no != '0.000' && 
+                                            strlen(trim($customer->gst_no)) > 0;
+                        @endphp
+
+                        @if($hasValidGst)
+                        <tr>
+                            <th>Customer GSTIN</th>
+                            <td>{{ $customer->gst_no }}</td>
+                        </tr>
+                        @endif
+                        
+                        <!-- Conditional Customer PAN display - FIXED VERSION -->
+                        @php
+                            $hasValidPan = !empty($customer->pan) && 
+                                            $customer->pan != 'N/A' && 
+                                            $customer->pan != 'null' && 
+                                            $customer->pan != '0' && 
+                                            $customer->pan != '0.00' && 
+                                            $customer->pan != '0.0' && 
+                                            $customer->pan != '0.000' && 
+                                            strlen(trim($customer->pan)) > 0;
+                        @endphp
+
+                        @if($hasValidPan)
+                        <tr>
+                            <th>Customer PAN</th>
+                            <td>{{ $customer->pan }}</td>
+                        </tr>
+                        @endif
                     </table>
                 </td>
             </tr>
@@ -181,37 +218,35 @@
         <table class="items-table">
             <thead>
                 <tr>
-                    <th>S.No.</th>
-                    <th>Item</th>
-                    <th>Quantity</th>
-                    <th>Unit</th>
-                    <th>Price/Unit</th>
+                    <th>Item Details</th>
                     <th>Discount (%)</th>
-                    <th>Net Price</th>
-                    <th>Subtotal (excl. GST)</th>
+                     <!-- <th>Net Price</th> -->
+                     <!-- <th>Subtotal (excl. GST)</th> -->
                     <th>GST (%)</th>
-                    <th>GST Amount</th>
+                     <!-- <th>GST Amount</th> -->
                     <th>Total</th>
                 </tr>
             </thead>
             <tbody>
                 @forelse ($items as $item)
                     <tr>
-                        <td>{{ $loop->index + 1 }}</td>
-                        <td>{{ $item['product_name'] }}</td>
-                        <td>{{ $item['quantity'] }}</td>
-                        <td>{{ $item['unit'] }}</td>
-                        <td><span class="currency-symbol">Rs. </span>{{ number_format($item['per_item_cost'], 2) }}</td>
+                       <td class="item-details">
+                            <span class="sno">{{ $loop->index + 1 }}.</span> 
+                            {{ $item['product_name'] }} 
+                            <span class="quantity">{{ $item['quantity'] }}</span> 
+                            <span class="unit">{{ $item['unit'] }}</span> 
+                            @ <span class="unit-price">{{ number_format($item['per_item_cost'], 2) }}</span>
+                        </td>
                         <td>{{ $item['discount'] }}</td>
-                        <td><span class="currency-symbol">Rs. </span>{{ number_format($item['net_price'], 2) }}</td>
-                        <td><span class="currency-symbol">Rs. </span>{{ number_format($item['per_product_total'], 2) }}</td>
+                        <!-- <td><span class="currency-symbol">Rs. </span>{{ number_format($item['net_price'], 2) }}</td> -->
+                        <!--  <td><span class="currency-symbol">Rs. </span>{{ number_format($item['per_product_total'], 2) }}</td> -->
                         <td>{{ $item['gst'] }}</td>
-                        <td><span class="currency-symbol">Rs.</span>{{ number_format($item['gst_amount'], 2) }}</td>
+                        <!-- <td><span class="currency-symbol">Rs.</span>{{ number_format($item['gst_amount'], 2) }}</td> -->
                         <td><span class="currency-symbol">Rs.</span>{{ number_format($item['total'], 2) }}</td>
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="11">No items found for this sale.</td>
+                        <td colspan="4">No items found for this sale.</td>
                     </tr>
                 @endforelse
             </tbody>
