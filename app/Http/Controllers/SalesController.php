@@ -1461,6 +1461,101 @@ public function getCustomersWithDues($cid)
 
         return response()->json($formattedData);
     }
+    public function getSalesTransactionsByPid(Request $request)
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+    
+        $request->validate([
+            'pid' => 'required|integer',
+        ]);
+    
+        $pid = $request->input('pid');
+        $cid = $user->cid; // ✅ Extracted from authenticated user
+        $userRid = $user->rid;
+    
+        // Determine allowed roles for higher privileges (1-3)
+        $allowedRids = [];
+        switch ($userRid) {
+            case 1: // Admin
+                $allowedRids = [1, 2, 3, 4, 5];
+                break;
+            case 2: // Superuser
+                $allowedRids = [2, 3, 4, 5];
+                break;
+            case 3: // Moderator
+                $allowedRids = [3, 4, 5];
+                break;
+            case 4: // Authenticated
+            case 5: // Anonymous
+                // Will handle below
+                break;
+            default:
+                return response()->json(['message' => 'Forbidden: Invalid role'], 403);
+        }
+    
+        try {
+            // Build base query with SALES tables 
+            $query = DB::table('sales_bills as sb')
+                ->select(
+                    'sb.id as transaction_id',
+                    'sb.bill_name as bill_name',
+                    'sc.name as customer_name',  
+                    'sb.scid as customer_id',  
+                    'sb.payment_mode',
+                    'sb.updated_at as date',
+                    'u.name as sales_by'  
+                )
+                ->leftJoin('sales_clients as sc', 'sb.scid', '=', 'sc.id')
+                ->leftJoin('users as u', 'sb.uid', '=', 'u.id')
+                ->join('sales_items as si', 'sb.id', '=', 'si.bid')
+                ->where('si.pid', $pid)
+                ->where('u.cid', $cid)
+                ->orderBy('sb.updated_at', 'desc');
+    
+            // Apply role-based filtering (same logic)
+            if ($userRid <= 3) {
+                $query->whereIn('u.rid', $allowedRids);
+            } else {
+                $query->where('sb.uid', $user->id);
+            }
+    
+            $transactions = $query->get();
+    
+            // Convert payment mode (same as purchase)
+            $paymentModes = DB::table('payment_modes')->pluck('name', 'id')->toArray();
+            $transactions = $transactions->map(function ($transaction) use ($paymentModes) {
+                $transaction->payment_mode = $paymentModes[$transaction->payment_mode] ?? 'Unknown';
+                return $transaction;
+            });
+    
+            if ($transactions->isEmpty()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'No transactions found for this product'
+                ], 404);
+            }
+    
+            return response()->json([
+                'status' => 'success',
+                'data' => $transactions
+            ], 200);
+    
+        } catch (\Exception $e) {
+            Log::error('Transaction fetch by PID failed', [
+                'pid' => $pid,
+                'cid' => $cid,
+                'error' => $e->getMessage()
+            ]);
+            return response()->json([
+                'message' => 'Failed to fetch transactions',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
 private function getInvoiceData($transactionId)
 {
     $transaction = TransactionSales::findOrFail($transactionId);

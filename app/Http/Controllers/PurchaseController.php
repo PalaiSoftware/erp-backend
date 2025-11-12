@@ -1333,7 +1333,7 @@ public function destroy(Request $request, $transactionId)
     }
 }
 
-public function getTransactionsByPid(Request $request)
+public function getPurchaseTransactionsByPid(Request $request)
 {
     $user = Auth::user();
     if (!$user) {

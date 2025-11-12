@@ -98,10 +98,8 @@ class ProductInfoController extends Controller
     //     }
     // }
 
-
     // public function allProductInfo($cid)
     // {
-    
     //     // Get the authenticated user
     //     $user = Auth::user();
 
@@ -109,94 +107,186 @@ class ProductInfoController extends Controller
     //     if (!$user) {
     //         return response()->json(['message' => 'Unauthenticated'], 401);
     //     }
-    //      // Check if the user belongs to the requested company
-    //      if ($user->cid != $cid) {
+
+    //     // Check if the user belongs to the requested company
+    //     if ($user->cid != $cid) {
     //         return response()->json(['message' => 'Forbidden: You do not have access to this company\'s data'], 403);
     //     }
 
     //     // Define columns based on rid
     //     $columns = in_array($user->rid, [1, 2, 3])
-    //         ? ['id', 'name', 'hsn_code','description', 'purchase_price', 'profit_percentage', 'pre_gst_sale_cost', 'gst', 'post_gst_sale_cost', 'uid', 'updated_at']
-    //         : ['name', 'hsn_code','description', 'pre_gst_sale_cost', 'gst', 'post_gst_sale_cost','uid', 'updated_at'];
+    //         ? [
+    //             'product_info.pid',
+    //             'products.name as product_name',
+    //             'product_info.hsn_code',
+    //             'product_info.description',
+    //             'product_info.unit_id',
+    //             'units.name as unit_name',
+    //             'product_info.purchase_price',
+    //             'product_info.profit_percentage',
+    //             'product_info.pre_gst_sale_cost',
+    //             'product_info.gst',
+    //             'product_info.post_gst_sale_cost',
+    //             'product_info.uid',
+    //             'product_info.updated_at'
+    //         ]
+    //         : [
+    //             'products.name as product_name',
+    //             'product_info.hsn_code',
+    //             'product_info.description',
+    //             'product_info.unit_id',
+    //             'units.name as unit_name',
+    //             'product_info.pre_gst_sale_cost',
+    //             'product_info.gst',
+    //             'product_info.post_gst_sale_cost',
+    //             'product_info.uid',
+    //             'product_info.updated_at'
+    //         ];
 
-    //     // Fetch products for the user's cid
-    //     $products = ProductInfo::where('cid', $user->cid)
-    //         ->select($columns)
-    //         ->orderBy('id','desc') 
-    //         ->get();
+    //     // Fetch products for the user's cid with product name and unit name
+    //     try {
+    //         $products = ProductInfo::where('product_info.cid', $user->cid)
+    //             ->join('products', 'product_info.pid', '=', 'products.id')
+    //             ->join('units', 'product_info.unit_id', '=', 'units.id')
+    //             ->select($columns)
+    //             ->orderBy('product_info.pid', 'desc')
+    //             ->get();
 
-    //     return response()->json($products, 200);
+    //         Log::info('Fetched product info for company', [
+    //             'cid' => $cid,
+    //             'user_id' => $user->id,
+    //             'rid' => $user->rid,
+    //             'product_count' => $products->count(),
+    //         ]);
+
+    //         return response()->json($products, 200);
+    //     } catch (\Exception $e) {
+    //         Log::error('Failed to fetch product info', [
+    //             'cid' => $cid,
+    //             'user_id' => $user->id,
+    //             'error' => $e->getMessage(),
+    //             'trace' => $e->getTraceAsString(),
+    //         ]);
+    //         return response()->json([
+    //             'message' => 'Failed to fetch product info',
+    //             'error' => $e->getMessage(),
+    //         ], 500);
+    //     }
     // }
 
     public function allProductInfo($cid)
     {
-        // Get the authenticated user
-        $user = Auth::user();
-
-        // Check if user is authenticated
-        if (!$user) {
-            return response()->json(['message' => 'Unauthenticated'], 401);
-        }
-
-        // Check if the user belongs to the requested company
-        if ($user->cid != $cid) {
-            return response()->json(['message' => 'Forbidden: You do not have access to this company\'s data'], 403);
-        }
-
-        // Define columns based on rid
-        $columns = in_array($user->rid, [1, 2, 3])
-            ? [
-                'product_info.pid',
-                'products.name as product_name',
-                'product_info.hsn_code',
-                'product_info.description',
-                'product_info.unit_id',
-                'units.name as unit_name',
-                'product_info.purchase_price',
-                'product_info.profit_percentage',
-                'product_info.pre_gst_sale_cost',
-                'product_info.gst',
-                'product_info.post_gst_sale_cost',
-                'product_info.uid',
-                'product_info.updated_at'
-            ]
-            : [
-                'products.name as product_name',
-                'product_info.hsn_code',
-                'product_info.description',
-                'product_info.unit_id',
-                'units.name as unit_name',
-                'product_info.pre_gst_sale_cost',
-                'product_info.gst',
-                'product_info.post_gst_sale_cost',
-                'product_info.uid',
-                'product_info.updated_at'
-            ];
-
-        // Fetch products for the user's cid with product name and unit name
         try {
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json(['message' => 'Unauthenticated'], 401);
+            }
+    
+            if ($user->cid != $cid) {
+                return response()->json(['message' => 'Forbidden: You do not have access to this company\'s data'], 403);
+            }
+    
+            // CORRECTED COLUMNS: Include purchase_price for privileged roles
+            $columns = in_array($user->rid, [1, 2, 3])
+                ? [
+                    'product_info.pid',
+                    'products.name as product_name',
+                    'product_info.hsn_code',
+                    'product_info.description',
+                    'product_info.unit_id',
+                    'units.name as unit_name',
+                    'product_info.purchase_price', // CRITICAL: Base price from database
+                    'product_info.profit_percentage',
+                    'product_info.pre_gst_sale_cost',
+                    'product_info.gst',
+                    'product_info.post_gst_sale_cost',
+                    'product_info.uid',
+                    'product_info.updated_at'
+                ]
+                : [
+                    'products.name as product_name',
+                    'product_info.hsn_code',
+                    'product_info.description',
+                    'product_info.unit_id',
+                    'units.name as unit_name',
+                    'product_info.pre_gst_sale_cost',
+                    'product_info.gst',
+                    'product_info.post_gst_sale_cost',
+                    'product_info.uid',
+                    'product_info.updated_at'
+                ];
+    
             $products = ProductInfo::where('product_info.cid', $user->cid)
                 ->join('products', 'product_info.pid', '=', 'products.id')
                 ->join('units', 'product_info.unit_id', '=', 'units.id')
                 ->select($columns)
                 ->orderBy('product_info.pid', 'desc')
                 ->get();
-
-            Log::info('Fetched product info for company', [
+    
+            if (in_array($user->rid, [1, 2, 3])) {
+                $productIds = $products->pluck('pid')->toArray();
+                
+                // FIXED QUERY: Use users table join to get company ID
+                $latestPurchaseData = DB::table('purchase_items as pi')
+                    ->join('purchase_bills as pb', 'pi.bid', '=', 'pb.id')
+                    ->join('users as u', 'pb.uid', '=', 'u.id') // Join users to get company
+                    ->where('u.cid', $user->cid) // Filter by company ID from users
+                    ->whereIn('pi.pid', $productIds)
+                    ->orderBy('pb.created_at', 'desc')
+                    ->get(['pi.pid', 'pi.dis', 'pi.gst'])
+                    ->keyBy('pid');
+    
+                foreach ($products as $product) {
+                    // Handle null/empty purchase_price safely
+                    $basePrice = $product->purchase_price ?? 0;
+                    if ($basePrice === null || $basePrice === '') {
+                        $basePrice = 0;
+                    }
+                    $basePrice = (float)$basePrice;
+                    
+                    $latest = $latestPurchaseData[$product->pid] ?? null;
+                    $dis = $latest ? (float)$latest->dis : 0;
+                    $gst = $latest ? (float)$latest->gst : 0;
+    
+                    // Calculate effective price: (base - discount) + GST
+                    $discountedPrice = $basePrice * (1 - ($dis / 100));
+                    $effectivePrice = $discountedPrice * (1 + ($gst / 100));
+    
+                    $product->purchase_price = round($effectivePrice, 2);
+                    $product->base_purchase_price = round($basePrice, 2);
+                    $product->latest_discount = round($dis, 2);
+                    $product->latest_gst = round($gst, 2);
+                }
+            }
+    
+            Log::info('Fetched product info with effective pricing', [
                 'cid' => $cid,
                 'user_id' => $user->id,
                 'rid' => $user->rid,
                 'product_count' => $products->count(),
             ]);
-
+    
             return response()->json($products, 200);
+            
         } catch (\Exception $e) {
-            Log::error('Failed to fetch product info', [
-                'cid' => $cid,
-                'user_id' => $user->id,
+            $logContext = [
+                'cid' => $cid ?? 'unknown',
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
-            ]);
+            ];
+    
+            try {
+                $currentUser = Auth::user();
+                if ($currentUser) {
+                    $logContext['user_id'] = $currentUser->id;
+                    $logContext['rid'] = $currentUser->rid ?? 'unknown';
+                }
+            } catch (\Exception $ex) {
+                // Ignore auth errors during logging
+            }
+    
+            Log::error('Failed to fetch product info', $logContext);
+            
             return response()->json([
                 'message' => 'Failed to fetch product info',
                 'error' => $e->getMessage(),

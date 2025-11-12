@@ -105,7 +105,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/pending-registrations', [RegistrationController::class, 'pendingList']); // for admin
     Route::get('/pending-user/{id}', [RegistrationController::class, 'getUserById']);
     Route::post('/approve', [RegistrationController::class, 'approve']); 
-    Route::get('/transactions-by-pid', [PurchaseController::class, 'getTransactionsByPid']);
+    Route::get('/purchase-transactions-by-pid', [PurchaseController::class, 'getPurchaseTransactionsByPid']);
+    Route::get('/sales-transactions-by-pid', [SalesController::class, 'getSalesTransactionsByPid']);
+
 });
 Route::post('/register', [RegistrationController::class, 'register']);
 //Route::get('/units', [HelperController::class, 'index']);
