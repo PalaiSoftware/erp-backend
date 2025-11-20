@@ -1213,6 +1213,7 @@ if (!$company) {
 
                 $items[] = [
                     'product_name' => $product ? $product->name : 'Unknown Product',
+                    'hsn' => $product->hscode ?? 0000,
                     'quantity' => $salesItem->quantity,
                     'unit' => $salesItem->unit ? $salesItem->unit->name : 'N/A',
                     'per_item_cost' => $salesItem->s_price,
@@ -1222,6 +1223,7 @@ if (!$company) {
                     'gst' => $salesItem->gst ?? 0,
                     'gst_amount' => round($gstAmount, 2),
                     'total' => round($itemTotal, 2),
+                    'amount' => round($perProductTotal, 2),
                 ];
 
                 // Accumulate totals

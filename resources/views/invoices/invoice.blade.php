@@ -219,11 +219,12 @@
             <thead>
                 <tr>
                     <th>Item Details</th>
+                    <th>HSN</th>
                     <th>Discount (%)</th>
-                     <!-- <th>Net Price</th> -->
+                    <th>Amount</th>
                      <!-- <th>Subtotal (excl. GST)</th> -->
-                    <th>GST (%)</th>
-                     <!-- <th>GST Amount</th> -->
+                    <th>SGST (%)</th>
+                    <th>CGST (%)</th>
                     <th>Total</th>
                 </tr>
             </thead>
@@ -237,16 +238,19 @@
                             <span class="unit">{{ $item['unit'] }}</span> 
                             @ <span class="unit-price">{{ number_format($item['per_item_cost'], 2) }}</span>
                         </td>
+                        <td>{{ $item['hsn'] }}</td>
                         <td>{{ $item['discount'] }}</td>
+                        <td>{{ $item['amount'] }}</td>
                         <!-- <td><span class="currency-symbol">Rs. </span>{{ number_format($item['net_price'], 2) }}</td> -->
                         <!--  <td><span class="currency-symbol">Rs. </span>{{ number_format($item['per_product_total'], 2) }}</td> -->
-                        <td>{{ $item['gst'] }}</td>
+                        <td>{{ $item['gst']/2 }}</td>
+                        <td>{{ $item['gst']/2 }}</td>
                         <!-- <td><span class="currency-symbol">Rs.</span>{{ number_format($item['gst_amount'], 2) }}</td> -->
                         <td><span class="currency-symbol">Rs.</span>{{ number_format($item['total'], 2) }}</td>
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="4">No items found for this sale.</td>
+                        <td colspan="7">No items found for this sale.</td>
                     </tr>
                 @endforelse
             </tbody>
