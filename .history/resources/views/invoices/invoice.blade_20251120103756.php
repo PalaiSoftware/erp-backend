@@ -57,8 +57,8 @@
         .company-info, .billing-info {
             width: 50%;
         }
-        .company-info h4, .billing-info h4 {
-            margin: 0 0 8px 0;
+        .billing-info h4 {
+            margin: 8px 0;
             font-size: 15px;
             color: #333;
         }

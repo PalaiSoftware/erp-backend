@@ -24,30 +24,21 @@
             text-align: center;
             font-size: 24px;
             color: #333;
-            margin: 0;
+            margin-bottom: 15px;
         }
 
         /* Header Section */
-        .top-header {
-            display: flex;
-            align-items: center;
-            margin-bottom: 15px;
-        }
         .logo-container {
-            flex: 0 0 auto;
+            text-align: left;
+            margin-bottom: 15px;
         }
         .logo-container img {
             max-width: 120px;
             height: auto;
         }
-        .invoice-title-wrapper {
-            flex: 1;
-            text-align: center;
-        }
         .header-table {
             width: 100%;
-            border-collapse: separate;
-            border-spacing: 20px 0;
+            border-collapse: collapse;
             margin-bottom: 20px;
         }
         .header-table td {
@@ -57,8 +48,8 @@
         .company-info, .billing-info {
             width: 50%;
         }
-        .company-info h4, .billing-info h4 {
-            margin: 0 0 8px 0;
+        .billing-info h4 {
+            margin: 8px 0;
             font-size: 15px;
             color: #333;
         }
@@ -139,15 +130,13 @@
 </head>
 <body>
     <div class="invoice-container">
-        <!-- Top Header: Logo and Invoice Title -->
-        <div class="top-header">
-            <div class="logo-container">
-                <img src="{{ public_path('images/logo.png') }}" alt="Company Logo" class="logo">
-            </div>
-            <div class="invoice-title-wrapper">
-                <h1 class="invoice-title">Invoice</h1>
-            </div>
+        <!-- Logo -->
+        <div class="logo-container">
+            <img src="{{ public_path('images/logo.png') }}" alt="Company Logo" class="logo">
         </div>
+
+        <!-- Title -->
+        <h1 class="invoice-title">Invoice</h1>
 
         <!-- Header Section -->
         <table class="header-table">
