@@ -16,7 +16,6 @@ use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\ProductInfoController;
 use App\Http\Controllers\RegistrationController;
-use App\Http\Controllers\ReportController;
 
 
 /*
@@ -51,8 +50,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/customers/check', [CustomerController::class, 'checkCustomer']);
     Route::post('/customer/add-to-company', [CustomerController::class, 'addCustomerToCompany']);
     Route::get('/customers', [CustomerController::class, 'index']);
-    
-    //Report generation route
+
     Route::post('/report/profit-loss', [ReportController::class, 'getProfitLossReport']);
 
     // New route for geting users

@@ -16,7 +16,6 @@ use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\ProductInfoController;
 use App\Http\Controllers\RegistrationController;
-use App\Http\Controllers\ReportController;
 
 
 /*
