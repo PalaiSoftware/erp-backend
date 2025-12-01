@@ -673,20 +673,11 @@ public function update(Request $request, $transactionId)
             'message' => 'Paid amount cannot be negative'
         ], 422);
     }
-    // if ($totalPaid > $totalPurchase) {
-    //     return response()->json([
-    //         'message' => 'Paid amount cannot exceed total sale amount'
-    //     ], 422);
-    // }
-    $roundedPaid = round($totalPaid, 2);
-    $roundedPurchase = round($totalPurchase, 2);
-
-     if ($roundedPaid - $roundedPurchase > 0.001) {
-    return response()->json([
-        'message' => 'Paid amount cannot exceed total sale amount'
-    ], 422);
-}
-
+    if ($totalPaid > $totalPurchase) {
+        return response()->json([
+            'message' => 'Paid amount cannot exceed total sale amount'
+        ], 422);
+    }
 
     $dueAmount = $totalPurchase - $totalPaid;
 
