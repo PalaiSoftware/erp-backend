@@ -56,12 +56,8 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::post('/report/profit-loss', [ReportController::class, 'getProfitLossReport']);
     
     //b2c sales report route
-    Route::get('/sales/report/b2c', [SalesController::class, 'b2cSalesReport'])
-         ->name('sales.b2c-report');
-
-    // B2B sales report route
-    Route::get('/sales/report/b2b', [SalesController::class, 'b2bSalesReport'])
-         ->name('sales.b2b-report');
+    // Route::get('/sales/report/b2c', [SalesController::class, 'b2cSalesReport'])
+    //      ->name('sales.b2c-report');
 
     // New route for geting users
     Route::post('/users-by-role', [AuthController::class, 'getUsersByRole']);

@@ -1754,264 +1754,106 @@ public function b2cSalesReport(Request $request)
         'end_date'   => 'required|date|after_or_equal:start_date',
     ]);
 
-    $startDate = $request->start_date . ' 00:00:00';
-    $endDate   = $request->end_date . ' 23:59:59';
+    $startDate = Carbon::parse($request->start_date)->startOfDay();
+    $endDate   = Carbon::parse($request->end_date)->endOfDay();
+    $cid       = auth()->user()->cid;
 
-    // Get all B2C bills (customers without GSTIN) created by current user
-    $b2cBills = DB::table('sales_bills as sb')
+    // THIS IS THE ONLY CORRECT WAY — group by product + GST rate (because same product can have 12% or 18% in different bills)
+    $report = DB::table('sales_items as si')
+        ->join('sales_bills as sb', 'si.bid', '=', 'sb.id')
+        ->join('products as p', 'si.pid', '=', 'p.id')
         ->join('sales_clients as sc', 'sb.scid', '=', 'sc.id')
-        ->where('sb.uid', auth()->id())
+        ->leftJoin('users as u', 'sb.uid', '=', 'u.id')
+        ->where('u.cid', $cid)
         ->where(function ($q) {
-            $q->whereNull('sc.gst_no')
-              ->orWhere('sc.gst_no', '=', '')
-              ->orWhereRaw("TRIM(COALESCE(sc.gst_no, '')) = ''");
+            $q->whereNull('sc.gst_no')->orWhere('sc.gst_no', '');
         })
         ->whereBetween('sb.updated_at', [$startDate, $endDate])
-        ->pluck('sb.id');
-
-    if ($b2cBills->isEmpty()) {
-        return response()->json(['message' => 'No B2C sales found in this period'], 404);
-    }
-
-    // Aggregate all items from B2C bills → One row per product
-    $data = DB::table('sales_items as si')
-        ->join('products as p', 'si.pid', '=', 'p.id')
-        ->whereIn('si.bid', $b2cBills)
         ->select(
+            'p.id as product_id',
             'p.name as item_name',
             'p.hscode',
             'si.gst as gst_rate',
-            DB::raw('ROUND(SUM(si.quantity * si.s_price * (100 - COALESCE(si.dis, 0)) / 100), 2) as taxable_value'),
-            DB::raw('ROUND(SUM(si.quantity * si.s_price * (100 - COALESCE(si.dis, 0)) / 100 * (si.gst / 100)), 2) as gst_amount')
+            DB::raw('ROUND(SUM(si.quantity * si.s_price * (1 - COALESCE(si.dis, 0)/100)), 2) as taxable_amount'),
+            DB::raw('ROUND(SUM(si.quantity * si.s_price * (1 - COALESCE(si.dis, 0)/100) * (si.gst / 100)), 2) as gst_amount')
         )
-        ->groupBy('p.id', 'p.name', 'p.hscode', 'si.gst')
+        ->groupBy('p.id', 'p.name', 'p.hscode', 'si.gst')  // ← This is REQUIRED
         ->orderBy('p.name')
+        ->orderBy('si.gst')
         ->get();
 
-    if ($data->isEmpty()) {
-        return response()->json(['message' => 'No items found in B2C sales'], 404);
+    if ($report->isEmpty()) {
+        return response()->json(['message' => 'No B2C sales found in this period'], 404);
     }
 
-    $report = $data->map(function ($row) {
+    $finalReport = $report->map(function ($row) {
         $rate = (float)$row->gst_rate;
+
         return [
-            'item_name' => $row->item_name,
-            'hsn'       => $row->hscode ?: 'N/A',
-            'cgst'      => $rate > 0 ? round($rate / 2, 1) : 0,
-            'sgst'      => $rate > 0 ? round($rate / 2, 1) : 0,
-            'igst'      => 0,
-            'taxable'   => (float)$row->taxable_value,
-            'gst'       => (float)$row->gst_amount,
-            'total'     => round((float)$row->taxable_value + (float)$row->gst_amount, 2),
+            'item_name'      => $row->item_name,
+            'hscode'         => $row->hscode ?: 'N/A',
+            'cgst_rate'      => $rate > 0 ? round($rate / 2, 1) : 0,
+            'sgst_rate'      => $rate > 0 ? round($rate / 2, 1) : 0,
+            'igst_rate'      => 0,
+            'taxable_amount' => (float)$row->taxable_amount,
+            'total_gst'      => (float)$row->gst_amount,
+            'total_amount'   => (float)$row->taxable_amount + (float)$row->gst_amount,
         ];
     });
 
-    // Stream Excel directly (NO PhpSpreadsheet error)
-    return response()->streamDownload(function () use ($report, $request) {
+    // PERFECT EXCEL DOWNLOAD
+    return response()->streamDownload(function () use ($finalReport, $startDate, $endDate) {
         $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
 
-        // Title & Period
-        $sheet->setCellValue('A1', 'B2C Sales Report (Unregistered Customers)');
+        $sheet->setCellValue('A1', 'B2C (Small) Sales Report - GSTR-1 Ready');
         $sheet->mergeCells('A1:H1');
         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16);
 
-        $sheet->setCellValue('A2', 'Period: ' . $request->start_date . ' to ' . $request->end_date);
+        $sheet->setCellValue('A2', 'Period: ' . $startDate->format('d-m-Y') . ' to ' . $endDate->format('d-m-Y'));
         $sheet->mergeCells('A2:H2');
 
-        // Headers
-        $headers = ['Product Name', 'HSN Code', 'CGST %', 'SGST %', 'IGST %', 'Taxable Value', 'GST Amount', 'Total Amount'];
+        $headers = ['Item Name', 'HSN Code', 'CGST %', 'SGST %', 'IGST %', 'Taxable Value', 'Total GST', 'Total Amount'];
         $sheet->fromArray($headers, null, 'A4');
+        $sheet->getStyle('A4:H4')->getFont()->setBold(true)
+            ->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+            ->getStartColor()->setARGB('FFD9EAD3');
 
-        // Header Style (Safe way - NO getFill() on Font)
-        $headerStyle = $sheet->getStyle('A4:H4');
-        $headerStyle->getFont()->setBold(true);
-        $headerStyle->getFill()
-            ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
-            ->getStartColor()->setARGB('FFE3F2FD');
-
-        // Data rows
         $row = 5;
-        foreach ($report as $item) {
+        foreach ($finalReport as $item) {
             $sheet->setCellValue("A$row", $item['item_name']);
-            $sheet->setCellValue("B$row", $item['hsn']);
-            $sheet->setCellValue("C$row", $item['cgst']);
-            $sheet->setCellValue("D$row", $item['sgst']);
-            $sheet->setCellValue("E$row", $item['igst']);
-            $sheet->setCellValue("F$row", $item['taxable']);
-            $sheet->setCellValue("G$row", $item['gst']);
-            $sheet->setCellValue("H$row", $item['total']);
+            $sheet->setCellValue("B$row", $item['hscode']);
+            $sheet->setCellValue("C$row", $item['cgst_rate']);
+            $sheet->setCellValue("D$row", $item['sgst_rate']);
+            $sheet->setCellValue("E$row", $item['igst_rate']);
+            $sheet->setCellValue("F$row", $item['taxable_amount']);
+            $sheet->setCellValue("G$row", $item['total_gst']);
+            $sheet->setCellValue("H$row", $item['total_amount']);
             $row++;
         }
 
         // Grand Total
-        $lastRow = $row;
-        $sheet->setCellValue("E$lastRow", 'GRAND TOTAL');
-        $sheet->setCellValue("F$lastRow", $report->sum('taxable'));
-        $sheet->setCellValue("G$lastRow", $report->sum('gst'));
-        $sheet->setCellValue("H$lastRow", $report->sum('total'));
-
-        $totalStyle = $sheet->getStyle("E$lastRow:H$lastRow");
-        $totalStyle->getFont()->setBold(true);
-        $totalStyle->getFill()
+        $sheet->setCellValue("E$row", 'GRAND TOTAL');
+        $sheet->setCellValue("F$row", $finalReport->sum('taxable_amount'));
+        $sheet->setCellValue("G$row", $finalReport->sum('total_gst'));
+        $sheet->setCellValue("H$row", $finalReport->sum('total_amount'));
+        $sheet->getStyle("E$row:H$row")->getFont()->setBold(true)->getFill()
             ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
-            ->getStartColor()->setARGB('FFFFFF00'); // Yellow
+            ->getStartColor()->setARGB('FFF0B7B7');
 
-        // Auto-size + borders
         foreach (range('A', 'H') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
 
-        $sheet->getStyle("A4:H$lastRow")->applyFromArray([
+        $sheet->getStyle("A4:H$row")->applyFromArray([
             'borders' => [
-                'allBorders' => [
-                    'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
-                    'color' => ['argb' => 'FF000000'],
-                ],
-            ],
+                'allBorders' => ['borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN]
+            ]
         ]);
 
         $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
         $writer->save('php://output');
-    }, 'B2C_Report_' . $request->start_date . '_to_' . $request->end_date . '.xlsx', [
-        'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    ]);
+    }, 'B2C_Sales_Report_' . $startDate->format('d_m_Y') . '_to_' . $endDate->format('d_m_Y') . '.xlsx');
 }
 
-
-
-//B2B Sales Report
-
-public function b2bSalesReport(Request $request)
-{
-    $request->validate([
-        'start_date' => 'required|date',
-        'end_date'   => 'required|date|after_or_equal:start_date',
-    ]);
-
-    $user = Auth::user();
-    $start = $request->start_date . ' 00:00:00';
-    $end   = $request->end_date . ' 23:59:59';
-
-    // GET COMPANY GST FROM clients TABLE (your actual company table)
-    $company = DB::table('clients')->where('id', $user->cid)->first();
-
-    if (!$company || !$company->gst_no) {
-        return response()->json(['message' => 'Company GST not set. Please update company profile.'], 400);
-    }
-
-    $companyStateCode = substr(trim($company->gst_no), 0, 2);
-
-    // Get all B2B bills (only registered customers)
-    $bills = DB::table('sales_bills as sb')
-        ->join('sales_clients as sc', 'sb.scid', '=', 'sc.id')
-        ->where('sb.uid', $user->id)
-        ->where('sc.cid', $user->cid)
-        ->whereNotNull('sc.gst_no')
-        ->where('sc.gst_no', '!=', '')
-        ->whereBetween('sb.updated_at', [$start, $end])
-        ->select(
-            'sb.id',
-            'sb.bill_name as invoice_no',
-            'sb.updated_at as bill_date',
-            'sc.name as customer_name',
-            'sc.gst_no as customer_gst'
-        )
-        ->orderBy('sb.updated_at')
-        ->get();
-
-    if ($bills->isEmpty()) {
-        return response()->json(['message' => 'No B2B sales found in this period'], 404);
-    }
-
-    // Get items (merge same product in same invoice)
-    $items = DB::table('sales_items as si')
-        ->join('products as p', 'si.pid', '=', 'p.id')
-        ->whereIn('si.bid', $bills->pluck('id'))
-        ->select(
-            'si.bid',
-            'p.name as item_name',
-            'p.hscode',
-            'si.gst as gst_rate',
-            DB::raw('ROUND(SUM(si.quantity * si.s_price * (100 - COALESCE(si.dis, 0)) / 100), 2) as taxable_amount'),
-            DB::raw('ROUND(SUM(si.quantity * si.s_price * (100 - COALESCE(si.dis, 0)) / 100 * (si.gst / 100)), 2) as gst_amount')
-        )
-        ->groupBy('si.bid', 'p.id', 'p.name', 'p.hscode', 'si.gst')
-        ->get()
-        ->groupBy('bid');
-
-    return response()->streamDownload(function () use ($bills, $items, $companyStateCode, $request) {
-        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
-        $sheet = $spreadsheet->getActiveSheet();
-
-        // Title
-        $sheet->setCellValue('A1', 'B2B Sales Report (Registered Dealers) - GSTR-1');
-        $sheet->mergeCells('A1:N1');
-        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16);
-        $sheet->setCellValue('A2', "Period: {$request->start_date} to {$request->end_date}");
-        $sheet->mergeCells('A2:N2');
-
-        // Headers
-        $headers = ['Sl.', 'Inv No', 'Date', 'Customer', 'GSTIN', '', 'Item', 'HSN', 'CGST%', 'SGST%', 'IGST%', 'Taxable', 'GST', 'Total'];
-        $sheet->fromArray($headers, null, 'A4');
-        $sheet->getStyle('A4:N4')->getFont()->setBold(true);
-        $sheet->getStyle('A4:N4')->getFill()
-            ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
-            ->getStartColor()->setARGB('FFE3F2FD');
-
-        $row = 5;
-        $sl = 1;
-
-        foreach ($bills as $bill) {
-            $custState = substr(trim($bill->customer_gst), 0, 2);
-            $sameState = ($custState === $companyStateCode);
-
-            $billItems = $items->get($bill->id, collect());
-            $first = true;
-
-            foreach ($billItems as $item) {
-                $cgst = $sameState ? round($item->gst_rate / 2, 1) : 0;
-                $sgst = $sameState ? round($item->gst_rate / 2, 1) : 0;
-                $igst = $sameState ? 0 : $item->gst_rate;
-
-                $sheet->setCellValue("A$row", $first ? $sl : '');
-                $sheet->setCellValue("B$row", $first ? $bill->invoice_no : '');
-                $sheet->setCellValue("C$row", $first ? date('d-m-Y', strtotime($bill->bill_date)) : '');
-                $sheet->setCellValue("D$row", $first ? $bill->customer_name : '');
-                $sheet->setCellValue("E$row", $first ? $bill->customer_gst : '');
-
-                $sheet->setCellValue("G$row", $item->item_name);
-                $sheet->setCellValue("H$row", $item->hscode ?? 'N/A');
-                $sheet->setCellValue("I$row", $cgst);
-                $sheet->setCellValue("J$row", $sgst);
-                $sheet->setCellValue("K$row", $igst);
-                $sheet->setCellValue("L$row", $item->taxable_amount);
-                $sheet->setCellValue("M$row", $item->gst_amount);
-                $sheet->setCellValue("N$row", round($item->taxable_amount + $item->gst_amount, 2));
-
-                if ($first) { $sl++; $first = false; }
-                $row++;
-            }
-            $row++; // space between invoices
-        }
-
-        // Grand Total
-        $last = $row;
-        $sheet->setCellValue("K$last", 'GRAND TOTAL');
-        $sheet->setCellValue("L$last", '=SUM(L5:L'.($last-1).')');
-        $sheet->setCellValue("M$last", '=SUM(M5:M'.($last-1).')');
-        $sheet->setCellValue("N$last", '=SUM(N5:N'.($last-1).')');
-        $sheet->getStyle("K$last:N$last")->getFont()->setBold(true);
-        $sheet->getStyle("K$last:N$last")->getFill()
-            ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
-            ->getStartColor()->setARGB('FFFFFF00');
-
-        foreach (range('A', 'N') as $col) {
-            $sheet->getColumnDimension($col)->setAutoSize(true);
-        }
-
-        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
-        $writer->save('php://output');
-    }, 'B2B_GSTR1_' . $request->start_date . '_to_' . $request->end_date . '.xlsx');
-}
 }
