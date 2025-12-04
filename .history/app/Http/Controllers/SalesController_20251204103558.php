@@ -2163,14 +2163,14 @@ public function b2bSalesReport(Request $request)
     $start = $request->start_date . ' 00:00:00';
     $end   = $request->end_date . ' 23:59:59';
 
-    // Get Company GSTIN
+    // Company GST & State Code
     $company = DB::table('clients')->where('id', $user->cid)->first();
     if (!$company || empty(trim($company->gst_no ?? ''))) {
         return response()->json(['message' => 'Company GSTIN not configured.'], 400);
     }
     $companyStateCode = substr(trim($company->gst_no), 0, 2);
 
-    // Get B2B Bills (Registered Customers Only)
+    // Get B2B Bills (Registered Customers)
     $bills = DB::table('sales_bills as sb')
         ->join('sales_clients as sc', 'sb.scid', '=', 'sc.id')
         ->where('sb.uid', $user->id)
@@ -2178,13 +2178,7 @@ public function b2bSalesReport(Request $request)
         ->where('sc.gst_no', '!=', '')
         ->whereRaw("TRIM(sc.gst_no) != ''")
         ->whereBetween('sb.updated_at', [$start, $end])
-        ->select(
-            'sb.id',
-            'sb.bill_name as invoice_no',
-            'sb.updated_at as bill_date',
-            'sc.name as customer_name',
-            'sc.gst_no as customer_gst'
-        )
+        ->select('sb.id', 'sb.bill_name as invoice_no', 'sb.updated_at as bill_date', 'sc.name as customer_name', 'sc.gst_no as customer_gst')
         ->orderBy('sb.updated_at')
         ->get();
 
@@ -2192,13 +2186,13 @@ public function b2bSalesReport(Request $request)
         return response()->json(['message' => 'No B2B invoices found in this period.'], 404);
     }
 
-    // Get ONLY items with valid HSN code
+    // Get ONLY items that have valid HSN code (this excludes items without HSN in same bill)
     $items = DB::table('sales_items as si')
         ->join('products as p', 'si.pid', '=', 'p.id')
         ->whereIn('si.bid', $bills->pluck('id'))
         ->whereNotNull('p.hscode')
         ->where('p.hscode', '!=', '')
-        ->whereRaw("TRIM(p.hscode) != ''")
+        ->whereRaw("TRIM(p.hscode) != ''")  // Safe from spaces
         ->select(
             'si.bid',
             'p.name as item_name',
@@ -2209,8 +2203,9 @@ public function b2bSalesReport(Request $request)
         )
         ->groupBy('si.bid', 'p.id', 'p.name', 'p.hscode', 'si.gst')
         ->get()
-        ->groupBy('bid');
+        ->groupBy('bid'); // Group by invoice
 
+    // If no items left after HSN filter
     if ($items->flatten(1)->isEmpty()) {
         return response()->json(['message' => 'No items with valid HSN code found in B2B sales.'], 404);
     }
@@ -2219,25 +2214,18 @@ public function b2bSalesReport(Request $request)
         $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
 
-        // Title
         $sheet->setCellValue('A1', 'B2B Sales Report - Only HSN Products (GSTR-1 Ready)');
         $sheet->mergeCells('A1:N1');
         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16);
 
-        // Period
         $sheet->setCellValue('A2', "Period: {$request->start_date} to {$request->end_date}");
         $sheet->mergeCells('A2:N2');
 
-        // Headers
-        $headers = ['Sl', 'Invoice No', 'Date', 'Customer Name', 'GSTIN', '', 'Product', 'HSN', 'CGST %', 'SGST %', 'IGST %', 'Taxable Value', 'GST Amount', 'Total Amount'];
+        $headers = ['Sl', 'Invoice No', 'Date', 'Customer Name', 'GSTIN', '', 'Product', 'HSN', 'CGST %', 'SGST %', 'IGST %', 'Taxable Value', 'GST Amount', 'Total'];
         $sheet->fromArray($headers, null, 'A4');
-
-        // Header Style (CORRECT WAY - No getFill() on Font)
-        $headerStyle = $sheet->getStyle('A4:N4');
-        $headerStyle->getFont()->setBold(true);
-        $headerStyle->getFill()
+        $sheet->getStyle('A4:N4')->getFont()->setBold(true)->getFill()
             ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
-            ->getStartColor()->setARGB('FFE3F2FD'); // Light blue
+            ->getStartColor()->setARGB('FFE3F2FD');
 
         $row = 5;
         $sl = 1;
@@ -2247,7 +2235,11 @@ public function b2bSalesReport(Request $request)
             $isSameState = ($customerState === $companyStateCode);
 
             $billItems = $items->get($bill->id, collect());
-            if ($billItems->isEmpty()) continue; // Skip invoice if no HSN items
+
+            // Skip invoice completely if none of its items have HSN (optional)
+            if ($billItems->isEmpty()) {
+                continue;
+            }
 
             $firstItem = true;
 
@@ -2256,14 +2248,16 @@ public function b2bSalesReport(Request $request)
                 $sgst = $isSameState ? round($item->gst_rate / 2, 1) : 0;
                 $igst = $isSameState ? 0 : $item->gst_rate;
 
+                // Only first row of invoice gets invoice details
                 $sheet->setCellValue("A$row", $firstItem ? $sl : '');
                 $sheet->setCellValue("B$row", $firstItem ? $bill->invoice_no : '');
                 $sheet->setCellValue("C$row", $firstItem ? date('d-m-Y', strtotime($bill->bill_date)) : '');
                 $sheet->setCellValue("D$row", $firstItem ? $bill->customer_name : '');
                 $sheet->setCellValue("E$row", $firstItem ? $bill->customer_gst : '');
 
+                // Item details (every row)
                 $sheet->setCellValue("G$row", $item->item_name);
-                $sheet->setCellValue("H$row", $item->hscode);
+                $sheet->setCellValue("H$row", $item->hscode); // Always valid
                 $sheet->setCellValue("I$row", $cgst);
                 $sheet->setCellValue("J$row", $sgst);
                 $sheet->setCellValue("K$row", $igst);
@@ -2277,34 +2271,31 @@ public function b2bSalesReport(Request $request)
                 }
                 $row++;
             }
+
             $row++; // Empty row between invoices
         }
 
-        // Grand Total Row
+        // Grand Total
         $lastRow = $row;
-        $sheet->setCellValue("K{$lastRow}", 'GRAND TOTAL');
-        $sheet->setCellValue("L{$lastRow}", '=SUM(L5:L'.($lastRow-1).')');
-        $sheet->setCellValue("M{$lastRow}", '=SUM(M5:M'.($lastRow-1).')');
-        $sheet->setCellValue("N{$lastRow}", '=SUM(N5:N'.($lastRow-1).')');
+        $sheet->setCellValue("K$lastRow", 'GRAND TOTAL');
+        $sheet->setCellValue("L$lastRow", '=SUM(L5:L'.($lastRow-1).')');
+        $sheet->setCellValue("M$lastRow", '=SUM(M5:M'.($lastRow-1).')');
+        $sheet->setCellValue("N$lastRow", '=SUM(N5:N'.($lastRow-1).')');
 
-        // CORRECT Styling for Grand Total (Yellow + Bold)
-        $totalStyle = $sheet->getStyle("K{$lastRow}:N{$lastRow}");
-        $totalStyle->getFont()->setBold(true);
-        $totalStyle->getFill()
-            ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
-            ->getStartColor()->setARGB('FFFFFF00'); // Yellow
+        $sheet->getStyle("K$lastRow:N$lastRow")
+            ->getFont()->setBold(true)
+            ->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+            ->getStartColor()->setARGB('FFFFFF00');
 
-        // Auto-size columns
+        // Auto size + borders
         foreach (range('A', 'N') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
 
-        // Borders for entire table
-        $sheet->getStyle("A4:N{$lastRow}")->applyFromArray([
+        $sheet->getStyle("A4:N$lastRow")->applyFromArray([
             'borders' => [
                 'allBorders' => [
                     'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
-                    'color' => ['argb' => 'FF000000'],
                 ],
             ],
         ]);
