@@ -227,15 +227,12 @@ public function store(Request $request)
 
     // Return error response if stock check fails
     if (!empty($errors)) {
-        // return response()->json([
-        //     // 'message' => 'Stock check failed',
-        //     // 'errors' => $errors
-        //         'message' => implode(', ', $errorMessages)
+        return response()->json([
+            // 'message' => 'Stock check failed',
+            // 'errors' => $errors
+                'message' => implode(', ', $errorMessages)
 
-        // ], 422);
-        return response(implode(', ', $errorMessages), 422)
-       ->header('Content-Type', 'text/plain');
-
+        ], 422);
     }
 
     // Proceed with the transaction if all stock checks pass

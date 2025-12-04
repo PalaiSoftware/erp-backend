@@ -861,10 +861,13 @@ public function update(Request $request, $transactionId)
 
         // Return error response if stock check fails
         if (!empty($errors)) {
-            return response()->json([
-                'message' => 'Stock check failed',
-                'errors' => $errors
-            ], 422);
+            // return response()->json([
+            //     'message' => 'Stock check failed',
+            //     'errors' => $errors
+            // ], 422);
+            return response(implode(', ', $errorMessages), 422)
+       ->header('Content-Type', 'text/plain');
+
         }
     }
 

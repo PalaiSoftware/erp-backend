@@ -220,22 +220,15 @@ public function store(Request $request)
                     : ($stock->s_unit_name ?? 'Unit')
                 )
             ];
-                $errorMessages[] = "{$stock->name} stock not available";
-
         }
     }
 
     // Return error response if stock check fails
     if (!empty($errors)) {
-        // return response()->json([
-        //     // 'message' => 'Stock check failed',
-        //     // 'errors' => $errors
-        //         'message' => implode(', ', $errorMessages)
-
-        // ], 422);
-        return response(implode(', ', $errorMessages), 422)
-       ->header('Content-Type', 'text/plain');
-
+        return response()->json([
+            'message' => 'Stock check failed',
+            'errors' => $errors
+        ], 422);
     }
 
     // Proceed with the transaction if all stock checks pass

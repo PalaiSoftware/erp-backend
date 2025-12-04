@@ -856,15 +856,20 @@ public function update(Request $request, $transactionId)
                         : ($stock->s_unit_name ?? 'Unit')
                     )
                 ];
+                    $plainMessages[] = "{$stock->name} stock not available";
+
             }
         }
 
         // Return error response if stock check fails
         if (!empty($errors)) {
-            return response()->json([
-                'message' => 'Stock check failed',
-                'errors' => $errors
-            ], 422);
+            // return response()->json([
+            //     'message' => 'Stock check failed',
+            //     'errors' => $errors
+            // ], 422);
+            return response(implode(', ', $plainMessages), 422)
+       ->header('Content-Type', 'text/plain');
+
         }
     }
 
