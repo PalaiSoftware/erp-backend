@@ -61,8 +61,6 @@ public function store(Request $request)
             'products.*.s_price' => 'required|numeric|min:0',
             'products.*.unit_id' => 'required|integer|exists:units,id',
             'products.*.gst' => 'nullable|numeric|min:0',
-            'products.*.serial_numbers' => 'nullable|array',
-'products.*.serial_numbers.*' => 'nullable|string|max:100',
         ]);
     } catch (\Illuminate\Validation\ValidationException $e) {
         Log::error('Validation failed', ['errors' => $e->errors()]);
@@ -281,9 +279,6 @@ public function store(Request $request)
                 'unit_id' => $product['unit_id'],
                 'dis' => $product['discount'] ?? 0,
                 'gst' => $product['gst'] ?? 0,
-                'serial_numbers' => !empty($product['serial_numbers'])
-        ? implode(', ', array_map('trim', $product['serial_numbers']))
-        : null,
             ]);
         }
 
@@ -534,7 +529,6 @@ public function getTransaction($transactionId)
             'si.s_price as selling_price',
             'si.p_price as purchase_price',
             'si.dis as discount',
-            'si.serial_numbers',
             DB::raw('ROUND(si.quantity * si.s_price * (1 - COALESCE(si.dis, 0)/100), 2) AS pre_gst_total'),
             'si.quantity',
             'si.gst as gst',
@@ -931,9 +925,6 @@ public function update(Request $request, $transactionId)
                             'unit_id' => $product['unit_id'],
                             'dis' => $product['dis'] ?? 0,
                             'gst' => $product['gst'] ?? 0,
-                            'serial_numbers' => !empty($product['serial_numbers'])
-            ? implode(', ', array_map('trim', $product['serial_numbers']))
-            : null,
                         ]);
                 } else {
                     // Insert new item
@@ -1227,15 +1218,10 @@ if (!$company) {
             $product = Product::find($sale->pid);
             $salesItem = $sale;
 
-
             // 
             if ($salesItem) {
                 // Calculate net price after discount (excluding GST)
                 $netPrice = $salesItem->s_price * (1 - ($salesItem->dis ?? 0) / 100);
-
-            $serials = $sale->serial_numbers 
-    ? preg_replace('/\s*,\s*/', "\n", trim($sale->serial_numbers))
-    : '-';
                 // Calculate per product total (without GST)
                 $perProductTotal = $salesItem->quantity * $netPrice;
                 // Calculate GST amount
@@ -1256,7 +1242,6 @@ if (!$company) {
                     'gst_amount' => round($gstAmount, 2),
                     'total' => round($itemTotal, 2),
                     'amount' => round($perProductTotal, 2),
-                    'serial_numbers' => $serials, // ← Show here
                 ];
 
                 // Accumulate totals
@@ -1933,8 +1918,7 @@ public function b2cSalesReport(Request $request)
         ->whereNotNull('p.hscode')                    // HSN must exist
         ->where('p.hscode', '!=', '')                 // Not empty string
         ->whereRaw("TRIM(p.hscode) != ''")             // Not just spaces
-        //->whereRaw("TRIM(p.hscode) ~ '^[0-9]{1,9}$'")   // Only valid HSN (1-9 digits)
-        ->whereRaw("REGEXP_REPLACE(p.hscode, '\\s+', '', 'g') ~ '^[0-9]{1,20}$'")
+        ->whereRaw("TRIM(p.hscode) ~ '^[0-9]{1,9}$'")   // Only valid HSN (1-9 digits)
         ->select(
             'p.name as item_name',
             'p.hscode',

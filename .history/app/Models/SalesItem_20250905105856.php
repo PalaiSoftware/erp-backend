@@ -24,7 +24,6 @@ class SalesItem extends Model
         'unit_id',
         'dis',
         'gst', // Added gst to fillable array
-        'serial_numbers', // ← Add this
     ];
 
     // Relationship with Unit model

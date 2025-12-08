@@ -1227,15 +1227,10 @@ if (!$company) {
             $product = Product::find($sale->pid);
             $salesItem = $sale;
 
-
             // 
             if ($salesItem) {
                 // Calculate net price after discount (excluding GST)
                 $netPrice = $salesItem->s_price * (1 - ($salesItem->dis ?? 0) / 100);
-
-            $serials = $sale->serial_numbers 
-    ? preg_replace('/\s*,\s*/', "\n", trim($sale->serial_numbers))
-    : '-';
                 // Calculate per product total (without GST)
                 $perProductTotal = $salesItem->quantity * $netPrice;
                 // Calculate GST amount
@@ -1256,7 +1251,6 @@ if (!$company) {
                     'gst_amount' => round($gstAmount, 2),
                     'total' => round($itemTotal, 2),
                     'amount' => round($perProductTotal, 2),
-                    'serial_numbers' => $serials, // ← Show here
                 ];
 
                 // Accumulate totals

@@ -1233,8 +1233,8 @@ if (!$company) {
                 // Calculate net price after discount (excluding GST)
                 $netPrice = $salesItem->s_price * (1 - ($salesItem->dis ?? 0) / 100);
 
-            $serials = $sale->serial_numbers 
-    ? preg_replace('/\s*,\s*/', "\n", trim($sale->serial_numbers))
+                $serials = $sale->serial_numbers 
+    ? str_replace(',', ', ', $sale->serial_numbers) 
     : '-';
                 // Calculate per product total (without GST)
                 $perProductTotal = $salesItem->quantity * $netPrice;

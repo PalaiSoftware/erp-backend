@@ -300,7 +300,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="9">No items found for this sale.</td>
+                        <td colspan="8">No items found for this sale.</td>
                     </tr>
                 @endforelse
             </tbody>
