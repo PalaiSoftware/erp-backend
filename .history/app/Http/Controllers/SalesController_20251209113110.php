@@ -939,6 +939,7 @@ public function update(Request $request, $transactionId)
             ? implode(', ', array_map('trim', $product['serial_numbers']))
             : null,
             'order_index' => $index,
+            'updated_at'    => now(),
                         ]);
                 } else {
                     // Insert new item

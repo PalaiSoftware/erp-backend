@@ -257,7 +257,7 @@ public function store(Request $request)
         $billId = $salesBill->id;
         Log::info('Created sales bill', ['bill_id' => $billId]);
 
-        foreach ($request->products as $index => $product) {
+        foreach ($request->products as $product) {
             $productId = $product['product_id'];
 
             // Fetch the latest purchase price for the product and company
@@ -545,8 +545,6 @@ public function getTransaction($transactionId)
             'u.name as unit_name'
         )
         ->where('si.bid', $transactionId)
-        //->orderBy('si.order_index')
-        ->orderByRaw('COALESCE(si.order_index, 999999) ASC')
         ->get();
 
     if ($salesDetails->isEmpty()) {
@@ -601,7 +599,6 @@ public function getTransaction($transactionId)
         ]
     ], 200);
 }
-
 
 public function update(Request $request, $transactionId)
 {
@@ -917,7 +914,7 @@ public function update(Request $request, $transactionId)
             }
 
             // Insert or update products
-            foreach ($products as $index => $product) {
+            foreach ($products as $product) {
                 $item = DB::table('sales_items')
                     ->where('bid', $transactionId)
                     ->where('pid', $product['product_id'])
@@ -951,10 +948,6 @@ public function update(Request $request, $transactionId)
                         'unit_id' => $product['unit_id'],
                         'dis' => $product['dis'] ?? 0,
                         'gst' => $product['gst'] ?? 0,
-                        'serial_numbers' => !empty($product['serial_numbers'])
-            ? implode(', ', array_map('trim', $product['serial_numbers']))
-            : null,
-        'order_index' => $index,        // THIS WAS MISSING!
                     ]);
                 }
             }
@@ -1194,7 +1187,7 @@ public function generateInvoice($transactionId)
         $transaction = SalesBill::findOrFail($transactionId);
 
         // Fetch sales items with unit
-        $sales = SalesItem::where('bid', $transactionId)->with('unit')->orderBy('order_index')->get();
+        $sales = SalesItem::where('bid', $transactionId)->with('unit')->get();
         if ($sales->isEmpty()) {
             Log::warning("No sales records found for transaction_id: {$transactionId}");
             return response()->json(['message' => 'No sales records found for this transaction'], 404);

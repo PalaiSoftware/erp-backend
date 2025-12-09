@@ -545,8 +545,7 @@ public function getTransaction($transactionId)
             'u.name as unit_name'
         )
         ->where('si.bid', $transactionId)
-        //->orderBy('si.order_index')
-        ->orderByRaw('COALESCE(si.order_index, 999999) ASC')
+        ->orderBy('si.order_index')
         ->get();
 
     if ($salesDetails->isEmpty()) {
@@ -601,7 +600,6 @@ public function getTransaction($transactionId)
         ]
     ], 200);
 }
-
 
 public function update(Request $request, $transactionId)
 {
@@ -917,7 +915,7 @@ public function update(Request $request, $transactionId)
             }
 
             // Insert or update products
-            foreach ($products as $index => $product) {
+            foreach ($products as $index =>$product) {
                 $item = DB::table('sales_items')
                     ->where('bid', $transactionId)
                     ->where('pid', $product['product_id'])
@@ -951,10 +949,6 @@ public function update(Request $request, $transactionId)
                         'unit_id' => $product['unit_id'],
                         'dis' => $product['dis'] ?? 0,
                         'gst' => $product['gst'] ?? 0,
-                        'serial_numbers' => !empty($product['serial_numbers'])
-            ? implode(', ', array_map('trim', $product['serial_numbers']))
-            : null,
-        'order_index' => $index,        // THIS WAS MISSING!
                     ]);
                 }
             }

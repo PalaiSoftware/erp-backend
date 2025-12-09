@@ -547,6 +547,7 @@ public function getTransaction($transactionId)
         ->where('si.bid', $transactionId)
         //->orderBy('si.order_index')
         ->orderByRaw('COALESCE(si.order_index, 999999) ASC')
+    ->orderBy('si.id', 'ASC')  // stable fallback
         ->get();
 
     if ($salesDetails->isEmpty()) {
@@ -601,7 +602,6 @@ public function getTransaction($transactionId)
         ]
     ], 200);
 }
-
 
 public function update(Request $request, $transactionId)
 {
@@ -939,6 +939,7 @@ public function update(Request $request, $transactionId)
             ? implode(', ', array_map('trim', $product['serial_numbers']))
             : null,
             'order_index' => $index,
+            'updated_at'    => now(),
                         ]);
                 } else {
                     // Insert new item

@@ -494,6 +494,113 @@ public function getAllInvoicesByCompany($cid)
     }
 }
 
+// public function getTransaction($transactionId)
+// {
+//     // Authentication check
+//     $user = Auth::user();
+//     if (!$user) {
+//         return response()->json(['message' => 'Unauthorized'], 401);
+//     }
+
+//     // Role-based access control
+//     if ($user->rid < 1 || $user->rid > 5) {
+//         return response()->json(['message' => 'Forbidden'], 403);
+//     }
+
+//     // Fetch transaction details
+//     $transaction = DB::table('sales_bills')
+//         ->where('id', $transactionId)
+//         ->select('id', 'bill_name', 'scid', 'uid', 'payment_mode', 'absolute_discount', 'paid_amount', 'updated_at')
+//         ->first();
+
+//     if (!$transaction) {
+//         return response()->json([
+//             'status' => 'error',
+//             'message' => 'Transaction not found'
+//         ], 404);
+//     }
+
+//     // Default values for null fields
+//     $absoluteDiscount = $transaction->absolute_discount ?? 0;
+//     $paidAmount = $transaction->paid_amount ?? 0;
+
+//     // Fetch sales items with calculated fields
+//     $salesDetails = DB::table('sales_items as si')
+//         ->join('products as prod', 'si.pid', '=', 'prod.id')
+//         ->join('sales_bills as sb', 'si.bid', '=', 'sb.id')
+//         ->join('units as u', 'si.unit_id', '=', 'u.id')
+//         ->select(
+//             'si.pid as product_id',
+//             'prod.name as product_name',
+//             'si.s_price as selling_price',
+//             'si.p_price as purchase_price',
+//             'si.dis as discount',
+//             'si.serial_numbers',
+//             DB::raw('ROUND(si.quantity * si.s_price * (1 - COALESCE(si.dis, 0)/100), 2) AS pre_gst_total'),
+//             'si.quantity',
+//             'si.gst as gst',
+//             DB::raw('ROUND((si.quantity * si.s_price * (1 - COALESCE(si.dis, 0)/100)) * (COALESCE(si.gst, 0)/100), 2) AS gst_amount'),
+//             DB::raw('ROUND(si.quantity * si.s_price * (1 - COALESCE(si.dis, 0)/100) * (1 + COALESCE(si.gst, 0)/100), 2) AS per_product_total'),
+//             'si.unit_id',
+//             'u.name as unit_name'
+//         )
+//         ->where('si.bid', $transactionId)
+//         //->orderBy('si.order_index')
+//         ->orderByRaw('COALESCE(si.order_index, 999999) ASC')
+//         ->get();
+
+//     if ($salesDetails->isEmpty()) {
+//         return response()->json([
+//             'status' => 'error',
+//             'message' => 'No sales details found for this transaction ID'
+//         ], 404);
+//     }
+
+//     // Calculate financial totals
+//     $totalItemNetValue = $salesDetails->sum('pre_gst_total');
+//     $totalGstAmount = $salesDetails->sum('gst_amount');
+//     $totalAmount = $totalItemNetValue + $totalGstAmount;
+//     $payableAmount = $totalAmount - $absoluteDiscount;
+//     $dueAmount = max(0, $payableAmount - $paidAmount);
+
+//     // Fetch payment modes
+//     $paymentModes = DB::table('payment_modes')->pluck('name', 'id')->toArray();
+//     $paymentModeName = $paymentModes[$transaction->payment_mode] ?? 'Unknown';
+
+//     // Fetch customer details
+//     $customer = DB::table('sales_clients')
+//         ->where('id', $transaction->scid)
+//         ->select('name as customer_name')
+//         ->first();
+
+//     // Fetch user details
+//     $userDetail = DB::table('users')
+//         ->where('id', $transaction->uid)
+//         ->select('name')
+//         ->first();
+
+//     // Return response
+//     return response()->json([
+//         'status' => 'success',
+//         'data' => [
+//             'products' => $salesDetails,
+//             'transaction_id' => $transaction->id,
+//             'bill_name' => $transaction->bill_name,
+//             'sales_by' => $userDetail ? $userDetail->name : 'Unknown',
+//             'customer_name' => $customer ? $customer->customer_name : 'Unknown',
+//             'customer_id' => $transaction->scid,
+//             'payment_mode' => $paymentModeName,
+//             'date' => $transaction->updated_at,
+//             'total_item_net_value' => round($totalItemNetValue, 2),
+//             'total_gst_amount' => round($totalGstAmount, 2),
+//             'total_amount' => round($totalAmount, 2),
+//             'absolute_discount' => round($absoluteDiscount, 2),
+//             'payable_amount' => round($payableAmount, 2),
+//             'paid_amount' => round($paidAmount, 2),
+//             'due_amount' => round($dueAmount, 2),
+//         ]
+//     ], 200);
+// }
 public function getTransaction($transactionId)
 {
     // Authentication check
@@ -939,6 +1046,7 @@ public function update(Request $request, $transactionId)
             ? implode(', ', array_map('trim', $product['serial_numbers']))
             : null,
             'order_index' => $index,
+            'updated_at'    => now(),
                         ]);
                 } else {
                     // Insert new item
