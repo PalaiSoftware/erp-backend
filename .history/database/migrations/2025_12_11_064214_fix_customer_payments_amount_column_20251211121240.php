@@ -7,15 +7,15 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up()
     {
-        Schema::table('products', function (Blueprint $table) {
-            $table->string('description', 500)->nullable()->after('name');
+        Schema::table('customer_payments', function (Blueprint $table) {
+            $table->renameColumn('numeric', 'amount');
         });
     }
 
     public function down()
     {
-        Schema::table('products', function (Blueprint $table) {
-            $table->dropColumn('description');
+        Schema::table('customer_payments', function (Blueprint $table) {
+            $table->renameColumn('amount', 'numeric');
         });
     }
 };

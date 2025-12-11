@@ -1519,42 +1519,25 @@ public function getCustomerDues(Request $request, $customer_id)
     $customer = DB::table('sales_clients')->where('id', $customer_id)->first();
     if (!$customer) return response()->json(['error' => 'Customer not found'], 404);
 
-    // ====== NEW PAYMENT (FIFO - applies to oldest unpaid bill) ======
-    $amount = round((float)str_replace(',', '', $request->query('amount', '0')), 2);
-    $date   = $request->query('date', now()->format('Y-m-d'));
-    $mode   = $request->query('mode', 'Cash');
-    $note   = $request->query('note', '');
+    // Accept new payment (even if no purchase today)
+    $amount = round((float)$request->query('amount', 0), 2);
+    $paymentDate = $request->query('date', now()->format('Y-m-d'));
+    $mode = $request->query('mode', 'Cash');
+    $note = $request->query('note', 'Payment received');
 
     if ($amount > 0) {
-        $oldestBill = DB::table('sales_bills as sb')
-            ->leftJoin('sales_items as si', 'sb.id', '=', 'si.bid')
-            ->leftJoin('customer_bill_payments as cp', 'sb.id', '=', 'cp.bill_id')
-            ->where('sb.scid', $customer_id)
-            ->select('sb.id')
-            ->groupBy('sb.id', 'sb.absolute_discount', 'sb.updated_at')
-            ->havingRaw('
-                COALESCE(SUM(si.quantity * si.s_price * (1 - COALESCE(si.dis, 0)/100) * (1 + COALESCE(si.gst, 0)/100)), 0)
-                - COALESCE(sb.absolute_discount, 0)
-                - COALESCE(SUM(cp.paid_amount), 0) > 0
-            ')
-            ->orderBy('sb.updated_at', 'asc')
-            ->first();
-
-        if ($oldestBill) {
-            DB::table('customer_bill_payments')->insert([
-                'customer_id'  => $customer_id,
-                'bill_id'       => $oldestBill->id,
-                'paid_amount'   => $amount,
-                'paid_on'       => $date,
-                'payment_mode'  => $mode,
-                'note'          => $note,
-                'recorded_by'   => $user->id,
-                'created_at'    => now(),
+        DB::table('customer_payments')->insert([
+            'customer_id'   => $customer_id,
+            'amount'        => $amount,
+            'payment_date'  => $paymentDate,
+            'payment_mode'  => $mode,
+            'note'          => $note,
+            'recorded_by'   => $user->id,
+            'created_at'    => now(),
             ]);
-        }
     }
 
-    // ====== FETCH ALL BILLS (oldest first for FIFO) ======
+    // Get all bills (oldest first for FIFO)
     $bills = DB::table('sales_bills as sb')
         ->leftJoin('sales_items as si', 'sb.id', '=', 'si.bid')
         ->select(
@@ -1562,65 +1545,61 @@ public function getCustomerDues(Request $request, $customer_id)
             'sb.bill_name',
             'sb.updated_at as bill_date',
             'sb.absolute_discount',
-            DB::raw('COALESCE(SUM(si.quantity * si.s_price * (1-COALESCE(si.dis,0)/100)*(1+COALESCE(si.gst,0)/100)), 0) as gross_amount')
+            DB::raw('COALESCE(SUM(si.quantity * si.s_price * (1-COALESCE(si.dis,0)/100)*(1+COALESCE(si.gst,0)/100)), 0) as gross')
         )
         ->where('sb.scid', $customer_id)
         ->groupBy('sb.id', 'sb.bill_name', 'sb.updated_at', 'sb.absolute_discount')
-        ->orderBy('sb.updated_at', 'asc') // OLDEST FIRST
+        ->orderBy('sb.updated_at', 'asc') // Oldest first
         ->get();
 
-    // ====== TOTAL MONEY PAID BY CUSTOMER (from payment table) ======
-    $totalPaidByCustomer = DB::table('customer_bill_payments')
-        ->where('customer_id', $customer_id)
-        ->sum('paid_amount');
+    // Total money available
+    $totalAvailable = $bills->sum('paid_amount') + 
+                      DB::table('customer_payments')
+                          ->where('customer_id', $customer_id)
+                          ->sum('amount');
 
-    // ====== APPLY FIFO: Distribute total payment from oldest bill first ======
-    $remainingPayment = $totalPaidByCustomer;
     $ledger = [];
-    $totalBilledAmount = 0;
+    $totalBilled = 0;
+    $totalPaid = 0;
 
     foreach ($bills as $bill) {
-        $billTotal = round($bill->gross_amount - ($bill->absolute_discount ?? 0), 2);
-        $totalBilledAmount += $billTotal;
+        $billAmount = round($bill->gross - ($bill->absolute_discount ?? 0), 2);
+        $totalBilled += $billAmount;
 
-        $paidThisBill = min($remainingPayment, $billTotal);
-        $remainingPayment -= $paidThisBill;
-        $due = $billTotal - $paidThisBill;
+        $paid = min($totalAvailable, $billAmount);
+        $totalAvailable -= $paid;
+        $due = $billAmount - $paid;
+        $totalPaid += $paid;
 
         $ledger[] = [
             'date'       => Carbon::parse($bill->bill_date)->format('d-m-Y'),
             'bill_name'  => $bill->bill_name ?? 'Bill #'.$bill->bill_id,
-            'purchase'   => number_format($billTotal, 2),
-            'paid'       => number_format($paidThisBill, 2),
-            'due'        => number_format(max(0, $due), 2),
-            'status'     => $due <= 0.01 ? 'Paid' : 'Due'
+            'purchase'   => number_format($billAmount, 2),
+            'paid'       => number_format($paid, 2),
+            'due'        => number_format($due, 2),
+            'status'     => $due <= 0 ? 'Paid' : 'Due'
         ];
     }
 
-    // Show newest first
-    $ledger = array_reverse($ledger);
+    $ledger = array_reverse($ledger); // Show newest first
+    $finalDue = $totalBilled - $totalPaid;
 
-    // ====== PAYMENT HISTORY ======
-    $history = DB::table('customer_bill_payments as cp')
-        ->join('sales_bills as sb', 'cp.bill_id', '=', 'sb.id')
-        ->where('cp.customer_id', $customer_id)
-        ->select('cp.paid_amount', 'cp.paid_on', 'cp.payment_mode', 'cp.note', 'sb.bill_name')
-        ->orderBy('cp.paid_on', 'desc')
+    $history = DB::table('customer_payments')
+        ->where('customer_id', $customer_id)
+        ->orderBy('payment_date', 'desc')
         ->get();
 
-    // ====== FINAL RESPONSE ======
     return response()->json([
-        'customer_name'   => $customer->name,
-        'total_billed'    => number_format($totalBilledAmount, 2),
-        'total_paid'      => number_format($totalPaidByCustomer, 2),
-        'current_due'     => number_format(max(0, $totalBilledAmount - $totalPaidByCustomer), 2),
-        'ledger'          => $ledger,
+        'customer_name' => $customer->name,
+        'total_billed'  => number_format($totalBilled, 2),
+        'total_paid'    => number_format($totalPaid, 2),
+        'current_due'   => number_format(max(0, $finalDue), 2),
+        'ledger'        => $ledger,
         'payment_history' => $history->map(fn($p) => [
-            'date' => Carbon::parse($p->paid_on)->format('d-m-Y'),
-            'bill' => $p->bill_name,
-            'paid' => '₹'.number_format($p->paid_amount, 2),
+            'date' => Carbon::parse($p->payment_date)->format('d-m-Y'),
+            'paid' => '₹'.number_format($p->amount, 2),
             'mode' => $p->payment_mode,
-            'note' => $p->note ?: '-'
+            'note' => $p->note ?: 'No note'
         ])
     ]);
 }
