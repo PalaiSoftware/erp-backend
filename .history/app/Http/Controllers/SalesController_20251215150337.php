@@ -1702,7 +1702,7 @@ public function getCustomerDues(Request $request, $customer_id)
                     ) as gross
                 ")
                 ->groupBy('sb.id')
-                ->orderBy('sb.created_at') // FIFO
+                ->orderBy('sb.updated_at') // FIFO
                 ->get();
 
             foreach ($bills as $bill) {
@@ -1765,7 +1765,7 @@ public function getCustomerDues(Request $request, $customer_id)
             ) as gross
         ")
         ->groupBy('sb.id')
-        ->orderBy('sb.created_at')
+        ->orderBy('sb.updated_at')
         ->get();
 
     $ledger = [];
@@ -1796,7 +1796,7 @@ public function getCustomerDues(Request $request, $customer_id)
         ->join('sales_bills as sb', 'cp.bill_id', '=', 'sb.id')
         ->where('cp.customer_id', $customer_id)
         ->select('cp.paid_amount', 'cp.created_at', 'cp.payment_mode', 'cp.note', 'sb.bill_name')
-        ->orderByDesc('cp.created_at')
+        ->orderByDesc('cp.paid_on')
         ->get();
 
     return response()->json([

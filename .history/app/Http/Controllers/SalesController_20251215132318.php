@@ -1702,7 +1702,7 @@ public function getCustomerDues(Request $request, $customer_id)
                     ) as gross
                 ")
                 ->groupBy('sb.id')
-                ->orderBy('sb.created_at') // FIFO
+                ->orderBy('sb.updated_at') // FIFO
                 ->get();
 
             foreach ($bills as $bill) {
@@ -1765,7 +1765,7 @@ public function getCustomerDues(Request $request, $customer_id)
             ) as gross
         ")
         ->groupBy('sb.id')
-        ->orderBy('sb.created_at')
+        ->orderBy('sb.updated_at')
         ->get();
 
     $ledger = [];
@@ -1795,8 +1795,8 @@ public function getCustomerDues(Request $request, $customer_id)
     $history = DB::table('customer_bill_payments as cp')
         ->join('sales_bills as sb', 'cp.bill_id', '=', 'sb.id')
         ->where('cp.customer_id', $customer_id)
-        ->select('cp.paid_amount', 'cp.created_at', 'cp.payment_mode', 'cp.note', 'sb.bill_name')
-        ->orderByDesc('cp.created_at')
+        ->select('cp.paid_amount', 'cp.paid_on', 'cp.payment_mode', 'cp.note', 'sb.bill_name')
+        ->orderByDesc('cp.paid_on')
         ->get();
 
     return response()->json([
@@ -1807,7 +1807,7 @@ public function getCustomerDues(Request $request, $customer_id)
         'current_due'   => number_format(max(0, $totalBilled - $totalPaid), 2),
         'ledger'        => $ledger,
         'payment_history' => $history->map(fn ($p) => [
-            'date' => Carbon::parse($p->created_at)->format('d-m-Y h:i A'),
+            'date' => Carbon::parse($p->paid_on)->format('d-m-Y h:i A'),
             'bill' => $p->bill_name,
             'paid' => '₹' . number_format($p->paid_amount, 2),
             'mode' => $p->payment_mode,

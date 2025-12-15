@@ -386,111 +386,30 @@ public function store(Request $request)
 //             return response()->json([
 //                 'status' => 'error',
 //                 'message' => 'No transactions found for this customer ID'
-//             ], 404);
-//         }
+            // ], 404);
+        }
 
-//         // Return successful response
-//         Log::info('Transactions retrieved successfully', [
-//             'cid' => $cid, 
-//             'count' => $transactions->count(),
-//             'allowed_rids' => $allowedRids
-//         ]);
+        // Return successful response
+        Log::info('Transactions retrieved successfully', [
+            'cid' => $cid, 
+            'count' => $transactions->count(),
+            'allowed_rids' => $allowedRids
+        ]);
         
-//         return response()->json([
-//             'status' => 'success',
-//             'data' => $transactions
-//         ], 200);
-//     } catch (\Exception $e) {
-//         Log::error('Failed to fetch transactions', [
-//             'cid' => $cid, 
-//             'user_rid' => $user->rid,
-//             'error' => $e->getMessage()
-//         ]);
-//         return response()->json([
-//             'message' => 'Failed to fetch transactions', 
-//             'error' => $e->getMessage()
-//         ], 500);
-//     }
-// }
-
-public function getAllInvoicesByCompany($cid)
-{
-    $user = Auth::user();
-    if (!$user) {
-        return response()->json(['message' => 'Unauthorized'], 401);
-    }
-    if ($user->cid != $cid) {
-        return response()->json(['message' => 'Forbidden: You do not have access to this company\'s data'], 403);
-    }
-
-    try {
-        $query = DB::table('sales_bills as sb')
-            ->select(
-                'sb.id as transaction_id',
-                'sb.bill_name as bill_name',
-                'sc.name as customer_name',
-                'sb.scid as customer_id',
-                'sb.payment_mode',
-                'sb.updated_at as date',
-                'u.name as sales_by',
-                'u.rid as seller_rid'
-            )
-            ->leftJoin('sales_clients as sc', 'sb.scid', '=', 'sc.id')
-            ->leftJoin('users as u', 'sb.uid', '=', 'u.id')
-            ->where('u.cid', $cid)
-            ->orderBy('sb.updated_at', 'desc');
-
-        // Fix: Restrict by user ID for rid 4/5, role-based for others
-        if ($user->rid == 4 || $user->rid == 5) {
-            // Only show sales made by the current user
-            $query->where('sb.uid', $user->id);
-            Log::info('Restricting to own sales for rid 4/5', [
-                'cid' => $cid,
-                'user_rid' => $user->rid,
-                'user_id' => $user->id
-            ]);
-        } else {
-            // Role-based access for rid 1,2,3
-            $allowedRids = [];
-            switch ($user->rid) {
-                case 1: // Admin
-                    $allowedRids = [1, 2, 3, 4, 5];
-                    break;
-                case 2: // Superuser
-                    $allowedRids = [2, 3, 4, 5];
-                    break;
-                case 3: // Moderator
-                    $allowedRids = [3, 4, 5];
-                    break;
-            }
-            $query->whereIn('u.rid', $allowedRids);
-            Log::info('Role-based access for sales', [
-                'cid' => $cid,
-                'user_rid' => $user->rid,
-                'allowed_rids' => $allowedRids
-            ]);
-        }
-
-        $transactions = $query->get();
-
-        $paymentModes = DB::table('payment_modes')->pluck('name', 'id')->toArray();
-        $transactions = $transactions->map(function ($transaction) use ($paymentModes) {
-            $transaction->payment_mode = $paymentModes[$transaction->payment_mode] ?? 'Unknown';
-            return $transaction;
-        });
-
-        if ($transactions->isEmpty()) {
-            Log::info('No transactions found', ['cid' => $cid]);
-            return response()->json(['status' => 'error', 'message' => 'No transactions found'], 404);
-        }
-
-        return response()->json(['status' => 'success', 'data' => $transactions], 200);
+        return response()->json([
+            'status' => 'success',
+            'data' => $transactions
+        ], 200);
     } catch (\Exception $e) {
         Log::error('Failed to fetch transactions', [
-            'cid' => $cid,
+            'cid' => $cid, 
+            'user_rid' => $user->rid,
             'error' => $e->getMessage()
         ]);
-        return response()->json(['message' => 'Failed to fetch transactions', 'error' => $e->getMessage()], 500);
+        return response()->json([
+            'message' => 'Failed to fetch transactions', 
+            'error' => $e->getMessage()
+        ], 500);
     }
 }
 
@@ -1384,55 +1303,69 @@ public function destroy(Request $request, $transactionId)
         ], 500);
     }
 }
+function updateCustomerLedgerSummary($customerId, $cid)
+{
+    $billGross = DB::table('sales_items')
+        ->select('bid', DB::raw('ROUND(SUM(s_price * quantity * (1 - dis / 100) * (1 + gst / 100)), 2) as gross_rounded'))
+        ->groupBy('bid');
+
+    $billPayments = DB::table('customer_bill_payments')
+        ->select('bill_id', DB::raw('SUM(paid_amount) as paid'))
+        ->groupBy('bill_id');
+
+    $totals = DB::table('sales_bills as sb')
+        ->leftJoinSub($billGross, 'bg', fn($j) => $j->on('sb.id', '=', 'bg.bid'))
+        ->leftJoinSub($billPayments, 'bp', fn($j) => $j->on('sb.id', '=', 'bp.bill_id'))
+        ->where('sb.scid', $customerId)
+        ->select(
+            DB::raw('SUM(COALESCE(bg.gross_rounded, 0) - sb.absolute_discount) as purchase'),
+            DB::raw('SUM(COALESCE(bp.paid, 0)) as paid')
+        )
+        ->first();
+
+    $purchase = round($totals->purchase ?? 0, 2);
+    $paid = round($totals->paid ?? 0, 2);
+    $due = max(0, $purchase - $paid);
+
+    DB::table('customer_ledger_summaries')->updateOrInsert(
+        ['customer_id' => $customerId, 'cid' => $cid],
+        [
+            'total_purchase' => $purchase,
+            'total_paid' => $paid,
+            'total_due' => $due,
+            'updated_at' => now(),
+        ]
+    );
+}
+
 public function getCustomersWithDues($cid)
-    {
-        $user = Auth::user();
-        if (!$user) {
-            return response()->json(['message' => 'Unauthenticated'], 401);
-        }
+{
+    $user = Auth::user();
+    if (!$user) return response()->json(['message' => 'Unauthenticated'], 401);
+    if (!in_array($user->rid, [1,2,3,4])) return response()->json(['message' => 'Unauthorized'], 403);
 
-        if (!in_array($user->rid, [1, 2, 3,4])) {
-            return response()->json(['message' => 'Unauthorized to access customer dues'], 403);
-        }
+    $cid = (int) $cid;
+    if ($user->cid != $cid) return response()->json(['message' => 'Forbidden'], 403);
+    if (!DB::table('users')->where('cid', $cid)->exists()) return response()->json(['message' => 'Invalid cid'], 422);
 
-        $cid = (int) $cid;
-        if ($user->cid != $cid) {
-            return response()->json(['message' => 'Forbidden: You do not have access to this company\'s data'], 403);
-        }
+    // ✅ NOW: Simple, fast query against pre-calculated summaries
+    $customers = DB::table('customer_ledger_summaries as cls')
+        ->join('sales_clients as sc', 'cls.customer_id', '=', 'sc.id')
+        ->where('cls.cid', $cid)
+        ->where('cls.total_due', '>', 0.01)
+        ->select(
+            'sc.id as customer_id',
+            'sc.name as customer_name',
+            'sc.phone',
+            DB::raw("TO_CHAR(cls.total_purchase, 'FM999999999.00') as total_purchase"),
+            DB::raw("TO_CHAR(cls.total_paid, 'FM999999999.00') as total_paid"),
+            DB::raw("TO_CHAR(cls.total_due, 'FM999999999.00') as total_due")
+        )
+        ->orderBy('cls.total_due', 'desc')
+        ->get();
 
-        if (!DB::table('users')->where('cid', $cid)->exists()) {
-            return response()->json(['message' => 'Invalid cid'], 422);
-        }
-
-        Log::info("Fetching customers with dues for cid: {$cid}");
-
-        $billTotals = DB::table('sales_items')
-            ->select('bid', DB::raw('SUM(s_price * quantity * (1 - dis / 100) * (1 + gst / 100)) as item_total'))
-            ->groupBy('bid');
-
-        Log::info("Bill totals subquery prepared");
-
-        $customersWithDues = DB::table('sales_clients as sc')
-            ->join('sales_bills as sb', 'sc.id', '=', 'sb.scid')
-            ->joinSub($billTotals, 'bt', function ($join) {
-                $join->on('sb.id', '=', 'bt.bid');
-            })
-            ->select(
-                'sc.id as customer_id',
-                'sc.name as customer_name',
-                DB::raw("TO_CHAR(SUM(bt.item_total - sb.absolute_discount), 'FM999999999.00') as total_purchase"),
-                DB::raw("TO_CHAR(SUM(sb.paid_amount), 'FM999999999.00') as total_paid"),
-                DB::raw("TO_CHAR(SUM(bt.item_total - sb.absolute_discount - sb.paid_amount), 'FM999999999.00') as total_due")
-            )
-            ->where('sc.cid', $cid)
-            ->groupBy('sc.id', 'sc.name')
-            ->havingRaw('SUM(bt.item_total - sb.absolute_discount - sb.paid_amount) > 0')
-            ->get();
-
-        Log::info("Customers with dues retrieved", ['count' => $customersWithDues->count()]);
-
-        return response()->json($customersWithDues);
-    }
+    return response()->json($customers);
+}
 
     // public function getCustomerDues($customer_id)
     // {
@@ -1454,201 +1387,59 @@ public function getCustomersWithDues($cid)
     //     Log::info("Fetching dues for customer_id: {$customer_id}");
 
     //     $billTotals = DB::table('sales_items')
-    //         ->select('bid', DB::raw('SUM(s_price * quantity * (1 - dis / 100) * (1 + gst / 100)) as item_total'))
-    //         ->groupBy('bid');
+        ->select('bid', DB::raw('SUM(s_price * quantity * (1 - dis / 100) * (1 + gst / 100)) as item_total'))
+        ->groupBy('bid');
 
-    //     $customerData = DB::table('sales_clients as sc')
-    //         ->join('sales_bills as sb', 'sc.id', '=', 'sb.scid')
-    //         ->joinSub($billTotals, 'bt', function ($join) {
-    //             $join->on('sb.id', '=', 'bt.bid');
-    //         })
-    //         ->select(
-    //             'sc.id as customer_id',
-    //             'sc.name as customer_name',
-    //             DB::raw("TO_CHAR(SUM(bt.item_total - sb.absolute_discount), 'FM999999999.00') as total_purchase"),
-    //             DB::raw("TO_CHAR(SUM(sb.paid_amount), 'FM999999999.00') as total_paid"),
-    //             DB::raw("TO_CHAR(SUM(bt.item_total - sb.absolute_discount - sb.paid_amount), 'FM999999999.00') as total_due"),
-    //             DB::raw("JSON_AGG(
-    //                 JSON_BUILD_OBJECT(
-    //                     'date', TO_CHAR(sb.updated_at, 'YYYY-MM-DD'),
-    //                     'purchase', TO_CHAR(ROUND(bt.item_total - sb.absolute_discount, 2), 'FM999999999.00'),
-    //                     'paid', TO_CHAR(ROUND(sb.paid_amount, 2), 'FM999999999.00'),
-    //                     'due', TO_CHAR(ROUND(bt.item_total - sb.absolute_discount - sb.paid_amount, 2), 'FM999999999.00')
-    //                 )
-    //                     ORDER BY sb.updated_at DESC
-    //             ) as transactions")
-    //         )
-    //         ->where('sc.id', $customer_id)
-    //         ->groupBy('sc.id', 'sc.name')
-    //         ->havingRaw('SUM(bt.item_total - sb.absolute_discount - sb.paid_amount) > 0')
-    //         ->first();
+    $customerData = DB::table('sales_clients as sc')
+        ->join('sales_bills as sb', 'sc.id', '=', 'sb.scid')
+        ->joinSub($billTotals, 'bt', function ($join) {
+            $join->on('sb.id', '=', 'bt.bid');
+        })
+        ->select(
+            'sc.id as customer_id',
+            'sc.name as customer_name',
+            DB::raw("TO_CHAR(SUM(bt.item_total - sb.absolute_discount), 'FM999999999.00') as total_purchase"),
+            DB::raw("TO_CHAR(SUM(sb.paid_amount), 'FM999999999.00') as total_paid"),
+            DB::raw("TO_CHAR(SUM(bt.item_total - sb.absolute_discount - sb.paid_amount), 'FM999999999.00') as total_due"),
+            DB::raw("JSON_AGG(
+                JSON_BUILD_OBJECT(
+                    'date', TO_CHAR(sb.updated_at, 'YYYY-MM-DD'),
+                    'purchase', TO_CHAR(ROUND(bt.item_total - sb.absolute_discount, 2), 'FM999999999.00'),
+                    'paid', TO_CHAR(ROUND(sb.paid_amount, 2), 'FM999999999.00'),
+                    'due', TO_CHAR(ROUND(bt.item_total - sb.absolute_discount - sb.paid_amount, 2), 'FM999999999.00')
+                )
+                    ORDER BY sb.updated_at DESC
+            ) as transactions")
+        )
+        ->where('sc.id', $customer_id)
+        ->groupBy('sc.id', 'sc.name')
+        ->havingRaw('SUM(bt.item_total - sb.absolute_discount - sb.paid_amount) > 0')
+        ->first();
 
-    //     if (!$customerData) {
-    //         return response()->json(['message' => 'No dues found for this customer'], 404);
-    //     }
+    if (!$customerData) {
+        return response()->json(['message' => 'No dues found for this customer'], 404);
+    }
 
-    //     $transactions = json_decode($customerData->transactions, true);
+    $transactions = json_decode($customerData->transactions, true);
 
-    //     $formattedData = [
-    //         'customer_id' => $customerData->customer_id,
-    //         'customer_name' => $customerData->customer_name,
-    //         'total_purchase' => $customerData->total_purchase,
-    //         'total_paid' => $customerData->total_paid,
-    //         'total_due' => $customerData->total_due,
-    //         'transactions' => $transactions,
-    //     ];
+    $formattedData = [
+        'customer_id' => $customerData->customer_id,
+        'customer_name' => $customerData->customer_name,
+        'total_purchase' => $customerData->total_purchase,
+        'total_paid' => $customerData->total_paid,
+        'total_due' => $customerData->total_due,
+        'transactions' => $transactions,
+    ];
 
-    //     Log::info("Customer dues retrieved", [
-    //         'customer_id' => $customer_id,
-    //         'transaction_count' => count($transactions)
-    //     ]);
+    Log::info("Customer dues retrieved", [
+        'customer_id' => $customer_id,
+        'transaction_count' => count($transactions)
+    ]);
 
-    //     return response()->json($formattedData);
-    // }
+    return response()->json($formattedData);
+}
 
    // app/Http/Controllers/SalesController.php
-
-// public function getCustomerDues(Request $request, $customer_id)
-// {
-//     $user = Auth::user();
-//     if (!$user || !in_array($user->rid, [1,2,3,4])) {
-//         return response()->json(['error' => 'Unauthorized'], 401);
-//     }
-
-//     $customer_id = (int)$customer_id;
-//     $customer = DB::table('sales_clients')->where('id', $customer_id)->first();
-//     if (!$customer) return response()->json(['error' => 'Customer not found'], 404);
-
-//     // READ amount safely — removes commas, spaces, ₹, etc.
-//     $raw = $request->input('amount', $request->query('amount', '0'));
-//     $amount = round((float)preg_replace('/[^\d.]/', '', (string)$raw), 2);
-
-//     $date = $request->input('date', $request->query('date', now()->format('Y-m-d')));
-//     $mode = $request->input('mode', $request->query('mode', 'Cash'));
-//     $note = $request->input('note', $request->query('note', ''));
-
-//     // RECORD PAYMENT — EVEN IF IT MAKES DUE NEGATIVE
-//     if ($amount > 0) {
-//         // Find ANY bill with remaining due OR the oldest bill (to allow over-payment)
-//         $targetBill = DB::table('sales_bills as sb')
-//             ->leftJoin('sales_items as si', 'sb.id', '=', 'si.bid')
-//             ->leftJoin('customer_bill_payments as cp', 'sb.id', '=', 'cp.bill_id')
-//             ->where('sb.scid', $customer_id)
-//             ->select('sb.id')
-//             ->groupBy('sb.id')
-//             ->havingRaw('
-//                 ROUND(
-//                     COALESCE(SUM(si.quantity * si.s_price * (1-COALESCE(si.dis,0)/100)*(1+COALESCE(si.gst,0)/100)), 0)
-//                     - COALESCE(sb.absolute_discount, 0)
-//                     - COALESCE(sb.paid_amount, 0)
-//                     - COALESCE(SUM(cp.paid_amount), 0)
-//                 , 2) > 0.01
-//                 OR sb.id = (
-//                     SELECT MIN(id) FROM sales_bills WHERE scid = ?
-//                 )
-//             ', [$customer_id])
-//             ->orderBy('sb.updated_at', 'asc')
-//             ->first();
-
-//         // If no unpaid bill found, just attach to the only/latest bill
-//         if (!$targetBill) {
-//             $targetBill = DB::table('sales_bills')
-//                 ->where('scid', $customer_id)
-//                 ->orderBy('id')
-//                 ->first();
-//         }
-
-//         if ($targetBill) {
-//             DB::table('customer_bill_payments')->insert([
-//                 'customer_id'   => $customer_id,
-//                 'bill_id'       => $targetBill->id,
-//                 'paid_amount'   => $amount,
-//                 'paid_on'       => $date,
-//                 'payment_mode'  => $mode,
-//                 'note'          => $note,
-//                 'recorded_by'   => $user->id,
-//                 'created_at'    => now(),
-//                 'updated_at'    => now(),
-//             ]);
-//         }
-//     }
-
-//     // REST OF THE CODE — 100% CORRECT LEDGER
-//     $bills = DB::table('sales_bills as sb')
-//         ->leftJoin('sales_items as si', 'sb.id', '=', 'si.bid')
-//         ->where('sb.scid', $customer_id)
-//         ->selectRaw("
-//             sb.id,
-//             sb.bill_name,
-//             sb.updated_at as bill_date,
-//             COALESCE(sb.absolute_discount, 0) as absolute_discount,
-//             COALESCE(sb.paid_amount, 0) as initial_paid,
-//             COALESCE(SUM(si.quantity * si.s_price * (1-COALESCE(si.dis,0)/100)*(1+COALESCE(si.gst,0)/100)), 0) as gross
-//         ")
-//         ->groupBy('sb.id')
-//         ->orderBy('sb.updated_at')
-//         ->get();
-
-//     $laterPaidTotal = DB::table('customer_bill_payments')
-//         ->where('customer_id', $customer_id)
-//         ->sum('paid_amount') ?? 0;
-
-//     $totalBilled = 0;
-//     $totalPaid   = $bills->sum('initial_paid') + $laterPaidTotal;
-//     $remaining   = $laterPaidTotal;
-//     $ledger      = [];
-
-//     foreach ($bills as $b) {
-//         $billTotal = round($b->gross - $b->absolute_discount, 2);
-//         $totalBilled += $billTotal;
-
-//         $paid = $b->initial_paid;
-//         if ($remaining > 0) {
-//             $dueBefore = $billTotal - $paid;
-//             if ($dueBefore > 0) {
-//                 $apply = min($remaining, $dueBefore);
-//                 $paid += $apply;
-//                 $remaining -= $apply;
-//             }
-//         }
-
-//         $due = round($billTotal - $paid, 2);
-
-//         $ledger[] = [
-//             'date'      => Carbon::parse($b->bill_date)->format('d-m-Y'),
-//             'bill_name' => $b->bill_name ?? "Bill #{$b->id}",
-//             'purchase'  => number_format($billTotal, 2),
-//             'paid'      => number_format($paid, 2),
-//             'due'       => number_format(max(0, $due), 2),
-//             'status'    => $due <= 0.01 ? 'Paid' : 'Due'
-//         ];
-//     }
-
-//     $ledger = array_reverse($ledger);
-
-//     $history = DB::table('customer_bill_payments as cp')
-//         ->join('sales_bills as sb', 'cp.bill_id', '=', 'sb.id')
-//         ->where('cp.customer_id', $customer_id)
-//         ->select('cp.paid_amount', 'cp.paid_on', 'cp.payment_mode', 'cp.note', 'sb.bill_name')
-//         ->orderByDesc('cp.paid_on')
-//         ->get();
-
-//     return response()->json([
-//         'customer_name'   => $customer->name,
-//         'phone'           => $customer->phone ?? '',
-//         'total_billed'    => number_format($totalBilled, 2),
-//         'total_paid'      => number_format($totalPaid, 2),
-//         'current_due'     => number_format(max(0, $totalBilled - $totalPaid), 2),
-//         'ledger'          => $ledger,
-//         'payment_history' => $history->map(fn($p) => [
-//             'date' => Carbon::parse($p->paid_on)->format('d-m-Y'),
-//             'bill' => $p->bill_name,
-//             'paid' => '₹' . number_format($p->paid_amount, 2),
-//             'mode' => $p->payment_mode,
-//             'note' => $p->note ?: '-'
-//         ])
-//     ]);
-// }
 
 public function getCustomerDues(Request $request, $customer_id)
 {
@@ -1657,96 +1448,65 @@ public function getCustomerDues(Request $request, $customer_id)
         return response()->json(['error' => 'Unauthorized'], 401);
     }
 
-    $customer_id = (int) $customer_id;
-
+    $customer_id = (int)$customer_id;
     $customer = DB::table('sales_clients')->where('id', $customer_id)->first();
-    if (!$customer) {
-        return response()->json(['error' => 'Customer not found'], 404);
-    }
+    if (!$customer) return response()->json(['error' => 'Customer not found'], 404);
 
-    // 🔹 Read payment input safely
-    $raw    = $request->input('amount', $request->query('amount', '0'));
-    $amount = round((float) preg_replace('/[^\d.]/', '', (string) $raw), 2);
+    // READ amount safely — removes commas, spaces, ₹, etc.
+    $raw = $request->input('amount', $request->query('amount', '0'));
+    $amount = round((float)preg_replace('/[^\d.]/', '', (string)$raw), 2);
 
     $date = $request->input('date', $request->query('date', now()->format('Y-m-d')));
     $mode = $request->input('mode', $request->query('mode', 'Cash'));
     $note = $request->input('note', $request->query('note', ''));
 
-    /*
-    |--------------------------------------------------------------------------
-    | FIFO PAYMENT APPLY (THIS FIXES VIEW SALE)
-    |--------------------------------------------------------------------------
-    */
+    // RECORD PAYMENT — EVEN IF IT MAKES DUE NEGATIVE
     if ($amount > 0) {
+        // Find ANY bill with remaining due OR the oldest bill (to allow over-payment)
+        $targetBill = DB::table('sales_bills as sb')
+            ->leftJoin('sales_items as si', 'sb.id', '=', 'si.bid')
+            ->leftJoin('customer_bill_payments as cp', 'sb.id', '=', 'cp.bill_id')
+            ->where('sb.scid', $customer_id)
+            ->select('sb.id')
+            ->groupBy('sb.id')
+            ->havingRaw('
+                ROUND(
+                    COALESCE(SUM(si.quantity * si.s_price * (1-COALESCE(si.dis,0)/100)*(1+COALESCE(si.gst,0)/100)), 0)
+                    - COALESCE(sb.absolute_discount, 0)
+                    - COALESCE(sb.paid_amount, 0)
+                    - COALESCE(SUM(cp.paid_amount), 0)
+                , 2) > 0.01
+                OR sb.id = (
+                    SELECT MIN(id) FROM sales_bills WHERE scid = ?
+                )
+            ', [$customer_id])
+            ->orderBy('sb.updated_at', 'asc')
+            ->first();
 
-        DB::transaction(function () use (
-            $customer_id, $amount, $date, $mode, $note, $user
-        ) {
+        // If no unpaid bill found, just attach to the only/latest bill
+        if (!$targetBill) {
+            $targetBill = DB::table('sales_bills')
+                ->where('scid', $customer_id)
+                ->orderBy('id')
+                ->first();
+        }
 
-            $remaining = $amount;
-
-            // FIFO bills
-            $bills = DB::table('sales_bills as sb')
-                ->leftJoin('sales_items as si', 'sb.id', '=', 'si.bid')
-                ->where('sb.scid', $customer_id)
-                ->selectRaw("
-                    sb.id,
-                    COALESCE(sb.paid_amount,0) as paid_amount,
-                    COALESCE(sb.absolute_discount,0) as discount,
-                    COALESCE(
-                        SUM(
-                            si.quantity * si.s_price
-                            * (1-COALESCE(si.dis,0)/100)
-                            * (1+COALESCE(si.gst,0)/100)
-                        ),0
-                    ) as gross
-                ")
-                ->groupBy('sb.id')
-                ->orderBy('sb.created_at') // FIFO
-                ->get();
-
-            foreach ($bills as $bill) {
-
-                if ($remaining <= 0) break;
-
-                $billTotal = round($bill->gross - $bill->discount, 2);
-                $billDue   = round($billTotal - $bill->paid_amount, 2);
-
-                if ($billDue <= 0) continue;
-
-                $paying = min($remaining, $billDue);
-
-                // ✅ UPDATE ORIGINAL BILL (THIS FIXES VIEW SALE)
-                DB::table('sales_bills')
-                    ->where('id', $bill->id)
-                    ->update([
-                        'paid_amount' => DB::raw("paid_amount + $paying"),
-                        'updated_at'  => now()
-                    ]);
-
-                // 🔹 Payment history (optional but recommended)
-                DB::table('customer_bill_payments')->insert([
-                    'customer_id'  => $customer_id,
-                    'bill_id'      => $bill->id,
-                    'paid_amount'  => $paying,
-                    'paid_on'      => $date,
-                    'payment_mode' => $mode,
-                    'note'         => $note,
-                    'recorded_by'  => $user->id,
-                    'created_at'   => now(),
-                    'updated_at'   => now(),
-                ]);
-
-                $remaining -= $paying;
-            }
-        });
+        if ($targetBill) {
+            DB::table('customer_bill_payments')->insert([
+                'customer_id'   => $customer_id,
+                'bill_id'       => $targetBill->id,
+                'paid_amount'   => $amount,
+                'paid_on'       => $date,
+                'payment_mode'  => $mode,
+                'note'          => $note,
+                'recorded_by'   => $user->id,
+                'created_at'    => now(),
+                'updated_at'    => now(),
+            ]);
+        }
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | LEDGER (READ-ONLY, NOW SIMPLE & CORRECT)
-    |--------------------------------------------------------------------------
-    */
+    // REST OF THE CODE — 100% CORRECT LEDGER
     $bills = DB::table('sales_bills as sb')
         ->leftJoin('sales_items as si', 'sb.id', '=', 'si.bid')
         ->where('sb.scid', $customer_id)
@@ -1754,37 +1514,44 @@ public function getCustomerDues(Request $request, $customer_id)
             sb.id,
             sb.bill_name,
             sb.updated_at as bill_date,
-            COALESCE(sb.absolute_discount,0) as discount,
-            COALESCE(sb.paid_amount,0) as paid,
-            COALESCE(
-                SUM(
-                    si.quantity * si.s_price
-                    * (1-COALESCE(si.dis,0)/100)
-                    * (1+COALESCE(si.gst,0)/100)
-                ),0
-            ) as gross
+            COALESCE(sb.absolute_discount, 0) as absolute_discount,
+            COALESCE(sb.paid_amount, 0) as initial_paid,
+            COALESCE(SUM(si.quantity * si.s_price * (1 - COALESCE(si.dis,0)/100) * (1 + COALESCE(si.gst,0)/100)), 0) as gross
         ")
         ->groupBy('sb.id')
-        ->orderBy('sb.created_at')
+        ->orderBy('sb.updated_at')
         ->get();
 
-    $ledger = [];
+    $laterPaidTotal = DB::table('customer_bill_payments')
+        ->where('customer_id', $customer_id)
+        ->sum('paid_amount') ?? 0;
+
     $totalBilled = 0;
-    $totalPaid   = 0;
+    $totalPaid   = $bills->sum('initial_paid') + $laterPaidTotal;
+    $remaining   = $laterPaidTotal;
+    $ledger      = [];
 
     foreach ($bills as $b) {
-
-        $billTotal = round($b->gross - $b->discount, 2);
-        $due       = round($billTotal - $b->paid, 2);
-
+        $billTotal = round($b->gross - $b->absolute_discount, 2);
         $totalBilled += $billTotal;
-        $totalPaid   += $b->paid;
+
+        $paid = $b->initial_paid;
+        if ($remaining > 0) {
+            $dueBefore = $billTotal - $paid;
+            if ($dueBefore > 0) {
+                $apply = min($remaining, $dueBefore);
+                $paid += $apply;
+                $remaining -= $apply;
+            }
+        }
+
+        $due = round($billTotal - $paid, 2);
 
         $ledger[] = [
             'date'      => Carbon::parse($b->bill_date)->format('d-m-Y'),
             'bill_name' => $b->bill_name ?? "Bill #{$b->id}",
             'purchase'  => number_format($billTotal, 2),
-            'paid'      => number_format($b->paid, 2),
+            'paid'      => number_format($paid, 2),
             'due'       => number_format(max(0, $due), 2),
             'status'    => $due <= 0.01 ? 'Paid' : 'Due'
         ];
@@ -1795,19 +1562,19 @@ public function getCustomerDues(Request $request, $customer_id)
     $history = DB::table('customer_bill_payments as cp')
         ->join('sales_bills as sb', 'cp.bill_id', '=', 'sb.id')
         ->where('cp.customer_id', $customer_id)
-        ->select('cp.paid_amount', 'cp.created_at', 'cp.payment_mode', 'cp.note', 'sb.bill_name')
-        ->orderByDesc('cp.created_at')
+        ->select('cp.paid_amount', 'cp.paid_on', 'cp.payment_mode', 'cp.note', 'sb.bill_name')
+        ->orderByDesc('cp.paid_on')
         ->get();
 
     return response()->json([
-        'customer_name' => $customer->name,
-        'phone'         => $customer->phone ?? '',
-        'total_billed'  => number_format($totalBilled, 2),
-        'total_paid'    => number_format($totalPaid, 2),
-        'current_due'   => number_format(max(0, $totalBilled - $totalPaid), 2),
-        'ledger'        => $ledger,
-        'payment_history' => $history->map(fn ($p) => [
-            'date' => Carbon::parse($p->created_at)->format('d-m-Y h:i A'),
+        'customer_name'   => $customer->name,
+        'phone'           => $customer->phone ?? '',
+        'total_billed'    => number_format($totalBilled, 2),
+        'total_paid'      => number_format($totalPaid, 2),
+        'current_due'     => number_format(max(0, $totalBilled - $totalPaid), 2),
+        'ledger'          => $ledger,
+        'payment_history' => $history->map(fn($p) => [
+            'date' => Carbon::parse($p->paid_on)->format('d-m-Y'),
             'bill' => $p->bill_name,
             'paid' => '₹' . number_format($p->paid_amount, 2),
             'mode' => $p->payment_mode,
@@ -1815,7 +1582,6 @@ public function getCustomerDues(Request $request, $customer_id)
         ])
     ]);
 }
-
     public function getSalesTransactionsByPid(Request $request)
     {
         $user = Auth::user();
@@ -1943,7 +1709,7 @@ private function getInvoiceData($transactionId)
             // $itemTotal = $salesItem->quantity * ($salesItem->per_item_cost - $salesItem->discount);
             // $itemTotal = $salesItem->quantity * ($salesItem->per_item_cost * (1 - $salesItem->discount / 100));
             // $itemTotal = ($salesItem->quantity * $salesItem->per_item_cost * (1 - $salesItem->discount / 100)) - $salesItem->flat_discount;
-            // $itemTotal = $salesItem->quantity * (($salesItem->per_item_cost * (1 - $salesItem->discount / 100)) - $salesItem->flat_discount);
+            // $itemTotal = $salesItem->quantity * ((($salesItem->per_item_cost- $salesItem->flat_discount) * (1 - $salesItem->discount / 100)) );   
             $itemTotal = $salesItem->quantity * (($salesItem->per_item_cost * (1 - $salesItem->discount / 100)) - $salesItem->flat_discount);
 
             $items[] = [
@@ -2060,7 +1826,7 @@ public function getCustomerStats(Request $request)
 //         $gstRate = (float)$row->gst_rate;
 //         return (object)[
 //             'item_name'      => $row->item_name,
-//             'hscode'         => $row->hscode ?: 'N/A',
+//             'hsn'         => $row->hscode ?: 'N/A',
 //             'cgst_rate'      => $gstRate > 0 ? number_format($gstRate / 2, 1) : '0.0',
 //             'sgst_rate'      => $gstRate > 0 ? number_format($gstRate / 2, 1) : '0.0',
 //             'igst_rate'      => '0.0',
@@ -2218,282 +1984,6 @@ public function getCustomerStats(Request $request)
 //     }, 'B2C_Report_' . $request->start_date . '_to_' . $request->end_date . '.xlsx', [
 //         'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 //     ]);
-// }
-
-public function b2cSalesReport(Request $request)
-{
-    $request->validate([
-        'start_date' => 'required|date',
-        'end_date'   => 'required|date|after_or_equal:start_date',
-    ]);
-
-    $startDate = $request->start_date . ' 00:00:00';
-    $endDate   = $request->end_date . ' 23:59:59';
-
-    // Get all B2C bills (customers without GSTIN) created by current user
-    $b2cBills = DB::table('sales_bills as sb')
-        ->join('sales_clients as sc', 'sb.scid', '=', 'sc.id')
-        ->where('sb.uid', auth()->id())
-        ->where(function ($q) {
-            $q->whereNull('sc.gst_no')
-              ->orWhere('sc.gst_no', '=', '')
-              ->orWhereRaw("TRIM(COALESCE(sc.gst_no, '')) = ''");
-        })
-        ->whereBetween('sb.updated_at', [$startDate, $endDate])
-        ->pluck('sb.id');
-
-    if ($b2cBills->isEmpty()) {
-        return response()->json(['message' => 'No B2C sales found in this period'], 404);
-    }
-
-    // Aggregate items ONLY from products that have a valid HSN code
-    $data = DB::table('sales_items as si')
-        ->join('products as p', 'si.pid', '=', 'p.id')
-        ->whereIn('si.bid', $b2cBills)
-        ->whereNotNull('p.hscode')                    // HSN must exist
-        ->where('p.hscode', '!=', '')                 // Not empty string
-        ->whereRaw("TRIM(p.hscode) != ''")             // Not just spaces
-        //->whereRaw("TRIM(p.hscode) ~ '^[0-9]{1,9}$'")   // Only valid HSN (1-9 digits)
-        ->whereRaw("REGEXP_REPLACE(p.hscode, '\\s+', '', 'g') ~ '^[0-9]{1,20}$'")
-        ->select(
-            'p.name as item_name',
-            'p.hscode',
-            'si.gst as gst_rate',
-            DB::raw('ROUND(SUM(si.quantity * si.s_price * (100 - COALESCE(si.dis, 0)) / 100), 2) as taxable_value'),
-            DB::raw('ROUND(SUM(si.quantity * si.s_price * (100 - COALESCE(si.dis, 0)) / 100 * (si.gst / 100)), 2) as gst_amount')
-        )
-        ->groupBy('p.id', 'p.name', 'p.hscode', 'si.gst')
-        ->orderBy('p.name')
-        ->get();
-
-    if ($data->isEmpty()) {
-        return response()->json(['message' => 'No B2C sales found with products having HSN code in this period'], 404);
-    }
-
-    $report = $data->map(function ($row) {
-        $rate = (float)$row->gst_rate;
-        return [
-            'item_name' => $row->item_name,
-            'hsn'       => $row->hscode,  // Guaranteed to be valid now
-            'cgst'      => $rate > 0 ? round($rate / 2, 1) : 0,
-            'sgst'      => $rate > 0 ? round($rate / 2, 1) : 0,
-            'igst'      => 0,
-            'taxable'   => (float)$row->taxable_value,
-            'gst'       => (float)$row->gst_amount,
-            'total'     => round((float)$row->taxable_value + (float)$row->gst_amount, 2),
-        ];
-    });
-
-    // Stream Excel Download
-    return response()->streamDownload(function () use ($report, $request) {
-        $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
-        $sheet = $spreadsheet->getActiveSheet();
-
-        // Title
-        $sheet->setCellValue('A1', 'B2C Sales Report (Unregistered Customers - HSN Wise)');
-        $sheet->mergeCells('A1:H1');
-        $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16);
-
-        // Period
-        $sheet->setCellValue('A2', 'Period: ' . $request->start_date . ' to ' . $request->end_date);
-        $sheet->mergeCells('A2:H2');
-
-        // Headers
-        $headers = ['Product Name', 'HSN Code', 'CGST %', 'SGST %', 'IGST %', 'Taxable Value', 'GST Amount', 'Total Amount'];
-        $sheet->fromArray($headers, null, 'A4');
-
-        // Header Style
-        $headerStyle = $sheet->getStyle('A4:H4');
-        $headerStyle->getFont()->setBold(true);
-        $headerStyle->getFill()
-            ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
-            ->getStartColor()->setARGB('FFE3F2FD');
-
-        // Data Rows
-        $row = 5;
-        foreach ($report as $item) {
-            $sheet->setCellValue("A$row", $item['item_name']);
-            $sheet->setCellValue("B$row", $item['hsn']);
-            $sheet->setCellValue("C$row", $item['cgst']);
-            $sheet->setCellValue("D$row", $item['sgst']);
-            $sheet->setCellValue("E$row", $item['igst']);
-            $sheet->setCellValue("F$row", $item['taxable']);
-            $sheet->setCellValue("G$row", $item['gst']);
-            $sheet->setCellValue("H$row", $item['total']);
-            $row++;
-        }
-
-        // Grand Total Row
-        $lastRow = $row;
-        $sheet->setCellValue("E$lastRow", 'GRAND TOTAL');
-        $sheet->getStyle("E$lastRow")->getFont()->setBold(true);
-        $sheet->setCellValue("F$lastRow", $report->sum('taxable'));
-        $sheet->setCellValue("G$lastRow", $report->sum('gst'));
-        $sheet->setCellValue("H$lastRow", $report->sum('total'));
-
-        // Total Row Style
-        $totalStyle = $sheet->getStyle("E$lastRow:H$lastRow");
-        $totalStyle->getFont()->setBold(true);
-        $totalStyle->getFill()
-            ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
-            ->getStartColor()->setARGB('FFFFFF00');
-
-        // Auto-size columns
-        foreach (range('A', 'H') as $col) {
-            $sheet->getColumnDimension($col)->setAutoSize(true);
-        }
-
-        // Apply borders to entire data
-        $sheet->getStyle("A4:H$lastRow")->applyFromArray([
-            'borders' => [
-                'allBorders' => [
-                    'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
-                    'color' => ['argb' => 'FF000000'],
-                ],
-            ],
-        ]);
-
-        $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
-        $writer->save('php://output');
-    }, 'B2C_HSN_Report_' . $request->start_date . '_to_' . $request->end_date . '.xlsx', [
-        'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    ]);
-}
-
-
-//B2B Sales Report
-
-// public function b2bSalesReport(Request $request)
-// {
-//     $request->validate([
-//         'start_date' => 'required|date',
-//         'end_date'   => 'required|date|after_or_equal:start_date',
-//     ]);
-
-//     $user = Auth::user();
-//     $start = $request->start_date . ' 00:00:00';
-//     $end   = $request->end_date . ' 23:59:59';
-
-//     // GET COMPANY GST FROM clients TABLE (your actual company table)
-//     $company = DB::table('clients')->where('id', $user->cid)->first();
-
-//     if (!$company || !$company->gst_no) {
-//         return response()->json(['message' => 'Company GST not set. Please update company profile.'], 400);
-//     }
-
-//     $companyStateCode = substr(trim($company->gst_no), 0, 2);
-
-//     // Get all B2B bills (only registered customers)
-//     $bills = DB::table('sales_bills as sb')
-//         ->join('sales_clients as sc', 'sb.scid', '=', 'sc.id')
-//         ->where('sb.uid', $user->id)
-//         ->where('sc.cid', $user->cid)
-//         ->whereNotNull('sc.gst_no')
-//         ->where('sc.gst_no', '!=', '')
-//         ->whereBetween('sb.updated_at', [$start, $end])
-//         ->select(
-//             'sb.id',
-//             'sb.bill_name as invoice_no',
-//             'sb.updated_at as bill_date',
-//             'sc.name as customer_name',
-//             'sc.gst_no as customer_gst'
-//         )
-//         ->orderBy('sb.updated_at')
-//         ->get();
-
-//     if ($bills->isEmpty()) {
-//         return response()->json(['message' => 'No B2B sales found in this period'], 404);
-//     }
-
-//     // Get items (merge same product in same invoice)
-//     $items = DB::table('sales_items as si')
-//         ->join('products as p', 'si.pid', '=', 'p.id')
-//         ->whereIn('si.bid', $bills->pluck('id'))
-//         ->select(
-//             'si.bid',
-//             'p.name as item_name',
-//             'p.hscode',
-//             'si.gst as gst_rate',
-//             DB::raw('ROUND(SUM(si.quantity * si.s_price * (100 - COALESCE(si.dis, 0)) / 100), 2) as taxable_amount'),
-//             DB::raw('ROUND(SUM(si.quantity * si.s_price * (100 - COALESCE(si.dis, 0)) / 100 * (si.gst / 100)), 2) as gst_amount')
-//         )
-//         ->groupBy('si.bid', 'p.id', 'p.name', 'p.hscode', 'si.gst')
-//         ->get()
-//         ->groupBy('bid');
-
-//     return response()->streamDownload(function () use ($bills, $items, $companyStateCode, $request) {
-//         $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
-//         $sheet = $spreadsheet->getActiveSheet();
-
-//         // Title
-//         $sheet->setCellValue('A1', 'B2B Sales Report (Registered Dealers) - GSTR-1');
-//         $sheet->mergeCells('A1:N1');
-//         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16);
-//         $sheet->setCellValue('A2', "Period: {$request->start_date} to {$request->end_date}");
-//         $sheet->mergeCells('A2:N2');
-
-//         // Headers
-//         $headers = ['Sl.', 'Inv No', 'Date', 'Customer', 'GSTIN', '', 'Item', 'HSN', 'CGST%', 'SGST%', 'IGST%', 'Taxable', 'GST', 'Total'];
-//         $sheet->fromArray($headers, null, 'A4');
-//         $sheet->getStyle('A4:N4')->getFont()->setBold(true);
-//         $sheet->getStyle('A4:N4')->getFill()
-//             ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
-//             ->getStartColor()->setARGB('FFE3F2FD');
-
-//         $row = 5;
-//         $sl = 1;
-
-//         foreach ($bills as $bill) {
-//             $custState = substr(trim($bill->customer_gst), 0, 2);
-//             $sameState = ($custState === $companyStateCode);
-
-//             $billItems = $items->get($bill->id, collect());
-//             $first = true;
-
-//             foreach ($billItems as $item) {
-//                 $cgst = $sameState ? round($item->gst_rate / 2, 1) : 0;
-//                 $sgst = $sameState ? round($item->gst_rate / 2, 1) : 0;
-//                 $igst = $sameState ? 0 : $item->gst_rate;
-
-//                 $sheet->setCellValue("A$row", $first ? $sl : '');
-//                 $sheet->setCellValue("B$row", $first ? $bill->invoice_no : '');
-//                 $sheet->setCellValue("C$row", $first ? date('d-m-Y', strtotime($bill->bill_date)) : '');
-//                 $sheet->setCellValue("D$row", $first ? $bill->customer_name : '');
-//                 $sheet->setCellValue("E$row", $first ? $bill->customer_gst : '');
-
-//                 $sheet->setCellValue("G$row", $item->item_name);
-//                 $sheet->setCellValue("H$row", $item->hscode ?? 'N/A');
-//                 $sheet->setCellValue("I$row", $cgst);
-//                 $sheet->setCellValue("J$row", $sgst);
-//                 $sheet->setCellValue("K$row", $igst);
-//                 $sheet->setCellValue("L$row", $item->taxable_amount);
-//                 $sheet->setCellValue("M$row", $item->gst_amount);
-//                 $sheet->setCellValue("N$row", round($item->taxable_amount + $item->gst_amount, 2));
-
-//                 if ($first) { $sl++; $first = false; }
-//                 $row++;
-//             }
-//             $row++; // space between invoices
-//         }
-
-//         // Grand Total
-//         $last = $row;
-//         $sheet->setCellValue("K$last", 'GRAND TOTAL');
-//         $sheet->setCellValue("L$last", '=SUM(L5:L'.($last-1).')');
-//         $sheet->setCellValue("M$last", '=SUM(M5:M'.($last-1).')');
-//         $sheet->setCellValue("N$last", '=SUM(N5:N'.($last-1).')');
-//         $sheet->getStyle("K$last:N$last")->getFont()->setBold(true);
-//         $sheet->getStyle("K$last:N$last")->getFill()
-//             ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
-//             ->getStartColor()->setARGB('FFFFFF00');
-
-//         foreach (range('A', 'N') as $col) {
-//             $sheet->getColumnDimension($col)->setAutoSize(true);
-//         }
-
-//         $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
-//         $writer->save('php://output');
-//     }, 'B2B_GSTR1_' . $request->start_date . '_to_' . $request->end_date . '.xlsx');
 // }
 
 public function b2bSalesReport(Request $request)
@@ -2661,4 +2151,52 @@ public function b2bSalesReport(Request $request)
     ]);
 }
 
+// Create/update the trigger function
+CREATE OR REPLACE FUNCTION update_customer_ledger_summary()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Calculate totals for the affected customer
+    WITH bill_totals AS (
+        SELECT 
+            sb.scid,
+            COALESCE(SUM(
+                COALESCE(SUM(si.quantity * si.s_price * (1 - COALESCE(si.dis,0)/100) * (1 + COALESCE(si.gst,0)/100)), 0)
+                - COALESCE(sb.absolute_discount, 0)
+            ), 0) as total_purchase,
+            COALESCE(SUM(sb.paid_amount), 0) as initial_paid,
+            COALESCE(SUM(cp.paid_amount), 0) as later_paid
+        FROM sales_bills sb
+        LEFT JOIN sales_items si ON sb.id = si.bid
+        LEFT JOIN customer_bill_payments cp ON sb.id = cp.bill_id
+        WHERE sb.scid = COALESCE(NEW.scid, OLD.scid)
+        GROUP BY sb.scid
+    )
+    UPDATE customer_ledger_summaries cls
+    SET 
+        total_purchase = COALESCE(bt.total_purchase, 0),
+        total_paid = COALESCE(bt.initial_paid + bt.later_paid, 0),
+        total_due = COALESCE(bt.total_purchase - (bt.initial_paid + bt.later_paid), 0),
+        updated_at = NOW()
+    FROM bill_totals bt
+    WHERE cls.customer_id = bt.scid;
+    
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create triggers
+DROP TRIGGER IF EXISTS trg_update_ledger_on_sales_bill ON sales_bills;
+CREATE TRIGGER trg_update_ledger_on_sales_bill
+AFTER INSERT OR UPDATE OR DELETE ON sales_bills
+FOR EACH ROW EXECUTE FUNCTION update_customer_ledger_summary();
+
+DROP TRIGGER IF EXISTS trg_update_ledger_on_sales_item ON sales_items;
+CREATE TRIGGER trg_update_ledger_on_sales_item
+AFTER INSERT OR UPDATE OR DELETE ON sales_items
+FOR EACH ROW EXECUTE FUNCTION update_customer_ledger_summary();
+
+DROP TRIGGER IF EXISTS trg_update_ledger_on_payment ON customer_bill_payments;
+CREATE TRIGGER trg_update_ledger_on_payment
+AFTER INSERT OR UPDATE OR DELETE ON customer_bill_payments
+FOR EACH ROW EXECUTE FUNCTION update_customer_ledger_summary();
 }
