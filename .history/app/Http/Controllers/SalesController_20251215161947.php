@@ -2524,8 +2524,7 @@ public function b2bSalesReport(Request $request)
         ->whereBetween('sb.updated_at', [$start, $end])
         ->select(
             'sb.id',
-           // 'sb.invoice_no as invoice_no',
-           DB::raw("'INV-' || sb.id as invoice_no"),
+            'sb.invoice_no as invoice_no',
             'sb.updated_at as bill_date',
             'sc.name as customer_name',
             'sc.gst_no as customer_gst'

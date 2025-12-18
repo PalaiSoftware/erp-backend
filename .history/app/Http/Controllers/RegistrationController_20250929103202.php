@@ -238,42 +238,5 @@ public function approve(Request $request)
     }
 }
 
-public function reject(Request $request)
-{
-    $user = Auth::user();
-
-    if (!$user) {
-        return response()->json(['message' => 'Unauthenticated'], 401);
-    }
-
-    if (!in_array($user->rid, [1, 2])) {
-        return response()->json(['message' => 'Unauthorized to reject pending users'], 403);
-    }
-
-    $validator = Validator::make($request->all(), [
-        'id' => 'required|integer|exists:pending_registrations,id',
-    ]);
-
-    if ($validator->fails()) {
-        return response()->json(['errors' => $validator->errors()], 422);
-    }
-
-    try {
-        $pending = PendingRegistration::findOrFail($request->id);
-        $pending->delete(); // ❌ reject → remove
-
-        return response()->json([
-            'message' => 'Pending registration rejected successfully'
-        ], 200);
-
-    } catch (\Exception $e) {
-        return response()->json([
-            'message' => 'Reject failed',
-            'error' => $e->getMessage()
-        ], 500);
-    }
-}
-
-
 
 }
