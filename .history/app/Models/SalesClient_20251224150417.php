@@ -17,7 +17,6 @@ class SalesClient extends Model
         'pan',
         'uid',
         'cid',
-        'customer_type_id',
     ];
 
     // Add relationships or methods here if needed

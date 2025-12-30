@@ -17,8 +17,6 @@ use App\Http\Controllers\PaymentController;
 use App\Http\Controllers\ProductInfoController;
 use App\Http\Controllers\RegistrationController;
 use App\Http\Controllers\ReportController;
-use App\Http\Controllers\CustomerTypeController;
-
 
 
 /*
@@ -93,10 +91,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/customers/{customerId}', [CustomerController::class, 'getCustomer']);
     Route::get('/vendor/{vendorId}', [VendorController::class, 'getVendorById']);
     Route::get('/products/{product_id}', [ProductController::class, 'getProductById']);
-
-
-    Route::post('/products/{id}/price-by-type', [ProductController::class, 'setPriceByCustomerType']);
-
     Route::delete('/destroy-sales/{transactionId}', [SalesController::class, 'destroy']);
     Route::delete('/destroy-purchase/{transactionId}', [PurchaseController::class, 'destroy']);
     Route::get('/payment-modes', [PaymentController::class, 'index']);

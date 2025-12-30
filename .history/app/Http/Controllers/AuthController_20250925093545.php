@@ -656,6 +656,112 @@ public function getUserDetailsById(Request $request, $userId)
     ], 200);
 }
 
+// public function updateUserDetails(Request $request, $userId)
+// {
+//     // Get the authenticated user
+//     $currentUser = Auth::user();
+//     if (!$currentUser) {
+//         return response()->json(['message' => 'Unauthorized'], 401);
+//     }
+
+//     // Validate user ID is a positive integer
+//     if (!is_numeric($userId) || $userId <= 0) {
+//         return response()->json([
+//             'message' => 'Validation failed',
+//             'errors' => ['user_id' => ['The user_id must be a positive integer.']]
+//         ], 422);
+//     }
+
+//     // Fetch the target user details
+//     $targetUser = DB::table('users')->where('id', $userId)->first();
+    
+//     if (!$targetUser) {
+//         return response()->json([
+//             'status' => 'error',
+//             'message' => 'User not found'
+//         ], 404);
+//     }
+//     // Check if the user is blocked
+//     // In our database schema:
+//     //   blocked = 0 means user is UNBLOCKED (active) - CAN BE UPDATED
+//     //   blocked = 1 means user is BLOCKED - CANNOT BE UPDATED
+//     if ($targetUser->blocked == 1) {
+//         \Log::warning('Attempt to update blocked user', [
+//             'user_id' => $userId,
+//             'current_user' => $currentUser->id
+//         ]);
+//         return response()->json([
+//             'status' => 'error',
+//             'message' => 'Cannot update details for a blocked user'
+//         ], 403);
+//     }
+   
+//     // Check if users belong to the same company
+//     if ($currentUser->cid != $targetUser->cid) {
+//         return response()->json([
+//             'message' => 'Forbidden: You do not have access to update this user\'s data'
+//         ], 403);
+//     }
+
+//     // Check access permissions based on current user's rid
+//     if ($currentUser->id != $userId) { // If not updating own details
+//         // Only users with rid 1, 2, or 3 can update other users in the same company
+//         if (!in_array($currentUser->rid, [1, 2, 3])) {
+//             return response()->json([
+//                 'message' => 'Forbidden: You do not have permission to update other users\' details'
+//             ], 403);
+//         }
+//     }
+
+//     try {
+//         // Validate the request data
+//         $validated = $request->validate([
+//             'name' => 'sometimes|string|max:255',
+//             'email' => 'sometimes|email|unique:users,email,' . $userId,
+//             'mobile' => 'sometimes|string|max:20',
+//             'country' => 'sometimes|string|max:50',
+//         ]);
+
+//         // Update the user details
+//         DB::table('users')
+//             ->where('id', $userId)
+//             ->update(array_merge($validated, ['updated_at' => now()]));
+
+//         // Fetch the updated user details with company name and role
+//         $updatedUser = DB::table('users')
+//             ->leftJoin('clients', 'users.cid', '=', 'clients.id')
+//             ->leftJoin('roles', 'users.rid', '=', 'roles.id')
+//             ->where('users.id', $userId)
+//             ->select(
+//                 'users.*',
+//                 'clients.name as company_name',
+//                 'roles.role as role_name'
+//             )
+//             ->first();
+
+//         // Determine user status based on blocked field
+//         $userStatus = $updatedUser->blocked == 0 ? 'active' : 'blocked';
+
+//         return response()->json([
+//             'status' => 'success',
+//             'message' => 'User details updated successfully',
+//         ], 200);
+//     } catch (\Illuminate\Validation\ValidationException $e) {
+//         return response()->json([
+//             'message' => 'Validation failed',
+//             'errors' => $e->errors(),
+//         ], 422);
+//     } catch (\Exception $e) {
+//         \Log::error('Failed to update user details', [
+//             'user_id' => $userId, 
+//             'error' => $e->getMessage()
+//         ]);
+//         return response()->json([
+//             'message' => 'Failed to update user details',
+//             'error' => $e->getMessage()
+//         ], 500);
+//     }
+// }
 
 
 public function updateUserDetails(Request $request, $userId)

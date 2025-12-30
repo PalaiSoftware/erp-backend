@@ -356,6 +356,42 @@ public function updateProductById($pid, Request $request)
     ], 200);
 }
 
+// public function destroy($pid)
+//     {
+//         // // Force JSON response
+//         // request()->headers->set('Accept', 'application/json');
+    
+//         // Get the authenticated user
+//         $user = Auth::user();
+    
+//         // Check if user is authenticated
+//         if (!$user) {
+//             return response()->json(['message' => 'Unauthenticated'], 401);
+//         }
+    
+//         // Restrict to rid 1, 2, 3
+//         if (!in_array($user->rid, [1, 2, 3])) {
+//             return response()->json(['message' => 'Unauthorized to delete product'], 403);
+//         }
+    
+//         // Find the product by ID and ensure it belongs to the user's company
+//         $product = ProductInfo::where('id', $pid)->where('cid', $user->cid)->first();
+    
+//         // Check if the product exists and belongs to the user's company
+//         if (!$product) {
+//             return response()->json(['message' => 'Product not found or not authorized'], 404);
+//         }
+    
+//         // Attempt to delete the product
+//         try {
+//             $product->delete();
+//             return response()->json(['message' => 'Product deleted successfully'], 200);
+//         } catch (\Exception $e) {
+//             Log::error('Failed to delete product: ' . $e->getMessage());
+//             return response()->json(['message' => 'Failed to delete product', 'error' => $e->getMessage()], 500);
+//         }
+//     }
+
 public function destroy($pid)
     {
         // Force JSON response

@@ -305,6 +305,114 @@ public function store(Request $request)
     }
 }
 
+// public function getAllInvoicesByCompany($cid)
+// {
+//     // Get the authenticated user
+//     $user = Auth::user();
+//     if (!$user) {
+//         return response()->json(['message' => 'Unauthorized'], 401);
+//     }
+//     $uid = $user->id;
+
+//     // Check if the user belongs to the requested company
+//     if ($user->cid != $cid) {
+//         return response()->json(['message' => 'Forbidden: You do not have access to this company\'s data'], 403);
+//     }
+    
+//     // Determine which RIDs the user can view based on their own RID
+//     $allowedRids = [];
+//     switch ($user->rid) {
+//         case 1: // Admin - can see everyone
+//             $allowedRids = [1, 2, 3, 4, 5];
+//             break;
+//         case 2: // Superuser - can see Superuser, Moderator, Authenticated, Anonymous
+//             $allowedRids = [2, 3, 4, 5];
+//             break;
+//         case 3: // Moderator - can see Moderator, Authenticated, Anonymous
+//             $allowedRids = [3, 4, 5];
+//             break;
+//         case 4: // Authenticated - can only see Authenticated
+//         case 5: // Anonymous - can only see Anonymous
+//             $allowedRids = [$user->rid];
+//             break;
+//         default:
+//             // For safety, deny access if rid is not recognized
+//             return response()->json(['message' => 'Forbidden: Invalid role'], 403);
+//     }
+    
+//     Log::info('Company access verified for getAllInvoicesByCompany', [
+//         'cid' => $cid, 
+//         'user_rid' => $user->rid,
+//         'allowed_rids' => $allowedRids
+//     ]);
+
+//     try {
+//         // Build the query with the sales_bills table
+//         $query = DB::table('sales_bills as sb')
+//             ->select(
+//                 'sb.id as transaction_id',          // Bill ID as transaction ID
+//                 'sb.bill_name as bill_name',
+//                 'sc.name as customer_name',         // Customer name from sales_clients
+//                 'sb.scid as customer_id',           // Customer ID from sales_bills
+//                 'sb.payment_mode',                  // Payment mode integer
+//                 'sb.updated_at as date',            // Date of the transaction
+//                 'u.name as sales_by',               // Name of the user who made the sale
+//                 'u.rid as seller_rid'               // For debugging visibility
+//             )
+//             ->leftJoin('sales_clients as sc', 'sb.scid', '=', 'sc.id')  // Join with customers
+//             ->leftJoin('users as u', 'sb.uid', '=', 'u.id')             // Join with users
+//             ->where('u.cid', $cid)                                      // Filter by company ID
+//             ->whereIn('u.rid', $allowedRids)                            // Role-based filter
+//             ->orderBy('sb.updated_at', 'desc');
+            
+//         // Execute the query
+//         $transactions = $query->get();
+
+//         // Fetch payment modes from the database
+//         $paymentModes = DB::table('payment_modes')->pluck('name', 'id')->toArray();
+
+//         // Map payment_mode from integer to string
+//         $transactions = $transactions->map(function ($transaction) use ($paymentModes) {
+//             $transaction->payment_mode = $paymentModes[$transaction->payment_mode] ?? 'Unknown';
+//             return $transaction;
+//         });
+
+//         // Handle empty results
+//         if ($transactions->isEmpty()) {
+//             Log::info('No transactions found for cid', [
+//                 'cid' => $cid, 
+//                 'allowed_rids' => $allowedRids
+//             ]);
+//             return response()->json([
+//                 'status' => 'error',
+//                 'message' => 'No transactions found for this customer ID'
+//             ], 404);
+//         }
+
+//         // Return successful response
+//         Log::info('Transactions retrieved successfully', [
+//             'cid' => $cid, 
+//             'count' => $transactions->count(),
+//             'allowed_rids' => $allowedRids
+//         ]);
+        
+//         return response()->json([
+//             'status' => 'success',
+//             'data' => $transactions
+//         ], 200);
+//     } catch (\Exception $e) {
+//         Log::error('Failed to fetch transactions', [
+//             'cid' => $cid, 
+//             'user_rid' => $user->rid,
+//             'error' => $e->getMessage()
+//         ]);
+//         return response()->json([
+//             'message' => 'Failed to fetch transactions', 
+//             'error' => $e->getMessage()
+//         ], 500);
+//     }
+// }
+
 public function getAllInvoicesByCompany($cid)
 {
     $user = Auth::user();
@@ -330,7 +438,7 @@ public function getAllInvoicesByCompany($cid)
             ->leftJoin('sales_clients as sc', 'sb.scid', '=', 'sc.id')
             ->leftJoin('users as u', 'sb.uid', '=', 'u.id')
             ->where('u.cid', $cid)
-            ->orderBy('sb.created_at', 'desc');
+            ->orderBy('sb.updated_at', 'desc');
 
         // Fix: Restrict by user ID for rid 4/5, role-based for others
         if ($user->rid == 4 || $user->rid == 5) {
@@ -830,7 +938,7 @@ public function update(Request $request, $transactionId)
                             'serial_numbers' => !empty($product['serial_numbers'])
             ? implode(', ', array_map('trim', $product['serial_numbers']))
             : null,
-         'order_index' => $index,
+            'order_index' => $index,
                         ]);
                 } else {
                     // Insert new item
@@ -959,6 +1067,112 @@ public function getTotalSaleAmount($cid)
         return response()->json(['error' => 'Failed to retrieve sales data'], 500);
     }
 }
+
+//     public function generateInvoice($transactionId)
+//             {
+//                 Log::info("Generating invoice for transaction_id: {$transactionId}");
+
+//                 // Get the authenticated user
+//                 $user = Auth::user();
+//                 if (!$user) {
+//                     return response()->json(['message' => 'Unauthorized'], 401);
+//                 }
+
+//             // Restrict access to users with rid between 5 and 10 inclusive
+//             if ($user->rid < 5 || $user->rid > 10) {
+//                 return response()->json(['message' => 'Forbidden'], 403);
+//             }
+//             $paymentModes = [
+//                 1 => 'Debit Card',
+//                 2 => 'Credit Card',
+//                 3 => 'Cash',
+//                 4 => 'UPI',
+//                 5 => 'Bank Transfer',
+//                 6 => 'phonepe',
+//             ];
+//                 try {
+//                     $transaction = TransactionSales::findOrFail($transactionId);
+//                     $sales = Sale::where('transaction_id', $transactionId)->with('salesItem.unit')->get();
+//                     if ($sales->isEmpty()) {
+//                         Log::warning("No sales records found for transaction_id: {$transactionId}");
+//                         return response()->json(['message' => 'No sales records found for this transaction'], 404);
+//                     }
+
+//                     $customer = Customer::find($transaction->customer_id);
+//                     $company = Company::find($transaction->cid);
+//                     $userDetails = User::find($transaction->uid);
+
+//                     $invoice = [
+//                         'number' => 'INV-' . $transactionId,
+//                         'date' => Carbon::parse($transaction->created_at)->format('Y-m-d'),
+//                     ];
+
+//                     $items = [];
+//                     $totalAmount = 0;
+//                     foreach ($sales as $sale) {
+//                         $product = Product::find($sale->product_id);
+//                         $salesItem = $sale->salesItem;
+
+//                     if ($salesItem) {
+//                             // $itemTotal = $salesItem->quantity * ($salesItem->per_item_cost - $salesItem->discount);
+//                         // $itemTotal = $salesItem->quantity * ($salesItem->per_item_cost * (1 - $salesItem->discount / 100));
+//                         // $itemTotal = ($salesItem->quantity * $salesItem->per_item_cost * (1 - $salesItem->discount / 100)) - $salesItem->flat_discount;
+//                         // $itemTotal = $salesItem->quantity * ((($salesItem->per_item_cost- $salesItem->flat_discount) * (1 - $salesItem->discount / 100)) );   
+//                         $itemTotal = $salesItem->quantity * (($salesItem->per_item_cost * (1 - $salesItem->discount / 100)) - $salesItem->flat_discount);
+//                         $items[] = [
+//                                 'product_name' => $product ? $product->name : 'Unknown Product',
+//                                 'quantity' => $salesItem->quantity,
+//                                 'unit' => $salesItem->unit ? $salesItem->unit->name : 'N/A', // Add unit name
+//                                 'per_item_cost' => $salesItem->per_item_cost,
+//                                 'discount' => $salesItem->discount,
+//                                 'flat_discount' => $salesItem->flat_discount,
+//                                 'total' => $itemTotal,
+//                             ];
+//                             $totalAmount += $itemTotal;
+//                         }
+//                     }
+//                     Log::info('Invoice items prepared', ['items' => $items, 'total_amount' => $totalAmount]);
+                    
+//                      // ✅ Apply global absolute discount
+//         $absoluteDiscount = $transaction->absolute_discount ?? 0;
+//         $totalAmount -= $absoluteDiscount;
+
+//         // ✅ Calculate due amount
+//         $dueAmount = max(0, $totalAmount - $transaction->total_paid);
+
+//         Log::info('Final invoice totals', [
+//             'total_amount' => $totalAmount,
+//             'absolute_discount' => $absoluteDiscount,
+//             'total_paid' => $transaction->total_paid,
+//             'due_amount' => $dueAmount
+//         ]);
+       
+//                     $data = [
+//                         'invoice' => (object) $invoice,
+//                         'transaction' => $transaction,
+//                         'items' => $items,
+//                         'total_amount' => $totalAmount,
+//                         'due_amount' => $dueAmount,     // Final due amount
+//                         'company' => $company,
+//                         'customer' => $customer,
+//                         'userDetails' => $userDetails,
+//                         'payment_mode' => $paymentModes[$transaction->payment_mode] ?? 'Unknown',
+
+//                     ];
+
+//                     $pdf = Pdf::loadView('invoices.invoice', $data);
+//                     return response($pdf->output())
+//                         ->header('Content-Type', 'application/pdf')
+//                         ->header('Content-Disposition', "inline; filename=\"invoice_{$transactionId}.pdf\"");
+//                 } catch (\Exception $e) {
+//                     Log::error('Invoice generation failed', [
+//                         'transaction_id' => $transactionId,
+//                         'error' => $e->getMessage(),
+//                         'trace' => $e->getTraceAsString()
+//                     ]);
+//                     return response()->json(['message' => 'Error generating invoice', 'error' => $e->getMessage()], 500);
+//                 }
+// }
 
 public function generateInvoice($transactionId)
 {
@@ -1582,6 +1796,215 @@ public function getCustomerStats(Request $request)
 
 
 
+
+
+// public function b2cSalesReport(Request $request)
+// {
+//     $user = Auth::user();
+//     if (!$user) {
+//         return response()->json(['message' => 'Unauthorized'], 401);
+//     }
+
+//     if (!in_array($user->rid, [1, 2, 3])) {
+//         return response()->json(['message' => 'Forbidden'], 403);
+//     }
+
+//     $request->validate([
+//         'start_date' => 'required|date',
+//         'end_date'   => 'required|date|after_or_equal:start_date',
+//     ]);
+
+//     $startDate = Carbon::parse($request->start_date)->startOfDay();
+//     $endDate   = Carbon::parse($request->end_date)->endOfDay();
+//     $dateRange = $startDate->format('d-m-Y') . ' to ' . $endDate->format('d-m-Y');
+//     $cid = $user->cid;
+
+//     $report = DB::table('sales_items as si')
+//         ->join('sales_bills as sb', 'si.bid', '=', 'sb.id')
+//         ->join('products as p', 'si.pid', '=', 'p.id')
+//         ->join('sales_clients as sc', 'sb.scid', '=', 'sc.id')
+//         ->leftJoin('users as u', 'sb.uid', '=', 'u.id')
+//         ->where('u.cid', $cid)
+//         ->where(function ($q) {
+//             $q->whereNull('sc.gst_no')->orWhere('sc.gst_no', '');
+//         })
+//         ->whereBetween('sb.updated_at', [$startDate, $endDate])
+//         ->select(
+//             'p.id',
+//             'p.name as item_name',
+//             'p.hscode',
+//             'si.gst as gst_rate',
+//             DB::raw('SUM(si.quantity * si.s_price * (1 - COALESCE(si.dis, 0)/100)) as taxable_amount'),
+//             DB::raw('SUM(si.quantity * si.s_price * (1 - COALESCE(si.dis, 0)/100) * (COALESCE(si.gst, 0)/100)) as total_gst')
+//         )
+//         ->groupBy('p.id', 'p.name', 'p.hscode', 'si.gst')
+//         ->orderBy('p.name')
+//         ->get();
+
+//     $finalReport = $report->map(function ($row) {
+//         $gstRate = (float)$row->gst_rate;
+//         return (object)[
+//             'item_name'      => $row->item_name,
+//             'hscode'         => $row->hscode ?: 'N/A',
+//             'cgst_rate'      => $gstRate > 0 ? number_format($gstRate / 2, 1) : '0.0',
+//             'sgst_rate'      => $gstRate > 0 ? number_format($gstRate / 2, 1) : '0.0',
+//             'igst_rate'      => '0.0',
+//             'taxable_amount' => round($row->taxable_amount, 2),
+//             'total_gst'      => round($row->total_gst, 2),
+//             'total_amount'   => round($row->taxable_amount + $row->total_gst, 2),
+//         ];
+//     });
+
+//     if ($finalReport->isEmpty()) {
+//         return response()->json(['message' => 'No B2C sales found in this period'], 404);
+//     }
+
+//     // THIS WORKS PERFECTLY WHEN ROUTE IS IN web.php
+//     // return Excel::download(
+//     //     new B2CSalesReportExport($finalReport, $dateRange),
+//     //     'B2C_Sales_Report_' . now()->format('d_m_Y') . '.xlsx'
+//     // );
+//     // THIS ONE LINE FIXES EVERYTHING — WORKS IN POSTMAN, BROWSER, MOBILE, EVERYWHERE
+// return response()->streamDownload(function () use ($finalReport, $dateRange) {
+//     echo \Maatwebsite\Excel\Facades\Excel::raw(
+//         new B2CSalesReportExport($finalReport, $dateRange),
+//         \Maatwebsite\Excel\Excel::XLSX
+//     );
+// }, 'B2C_Sales_Report_' . now()->format('d_m_Y') . '.xlsx');
+// }
+
+
+// public function b2cSalesReport(Request $request)
+// {
+//     $request->validate([
+//         'start_date' => 'required|date',
+//         'end_date'   => 'required|date|after_or_equal:start_date',
+//     ]);
+
+//     $startDate = $request->start_date . ' 00:00:00';
+//     $endDate   = $request->end_date . ' 23:59:59';
+
+//     // Get all B2C bills (customers without GSTIN) created by current user
+//     $b2cBills = DB::table('sales_bills as sb')
+//         ->join('sales_clients as sc', 'sb.scid', '=', 'sc.id')
+//         ->where('sb.uid', auth()->id())
+//         ->where(function ($q) {
+//             $q->whereNull('sc.gst_no')
+//               ->orWhere('sc.gst_no', '=', '')
+//               ->orWhereRaw("TRIM(COALESCE(sc.gst_no, '')) = ''");
+//         })
+//         ->whereBetween('sb.updated_at', [$startDate, $endDate])
+//         ->pluck('sb.id');
+
+//     if ($b2cBills->isEmpty()) {
+//         return response()->json(['message' => 'No B2C sales found in this period'], 404);
+//     }
+
+//     // Aggregate all items from B2C bills → One row per product
+//     $data = DB::table('sales_items as si')
+//         ->join('products as p', 'si.pid', '=', 'p.id')
+//         ->whereIn('si.bid', $b2cBills)
+//         ->select(
+//             'p.name as item_name',
+//             'p.hscode',
+//             'si.gst as gst_rate',
+//             DB::raw('ROUND(SUM(si.quantity * si.s_price * (100 - COALESCE(si.dis, 0)) / 100), 2) as taxable_value'),
+//             DB::raw('ROUND(SUM(si.quantity * si.s_price * (100 - COALESCE(si.dis, 0)) / 100 * (si.gst / 100)), 2) as gst_amount')
+//         )
+//         ->groupBy('p.id', 'p.name', 'p.hscode', 'si.gst')
+//         ->orderBy('p.name')
+//         ->get();
+
+//     if ($data->isEmpty()) {
+//         return response()->json(['message' => 'No items found in B2C sales'], 404);
+//     }
+
+//     $report = $data->map(function ($row) {
+//         $rate = (float)$row->gst_rate;
+//         return [
+//             'item_name' => $row->item_name,
+//             'hsn'       => $row->hscode ?: 'N/A',
+//             'cgst'      => $rate > 0 ? round($rate / 2, 1) : 0,
+//             'sgst'      => $rate > 0 ? round($rate / 2, 1) : 0,
+//             'igst'      => 0,
+//             'taxable'   => (float)$row->taxable_value,
+//             'gst'       => (float)$row->gst_amount,
+//             'total'     => round((float)$row->taxable_value + (float)$row->gst_amount, 2),
+//         ];
+//     });
+
+//     // Stream Excel directly (NO PhpSpreadsheet error)
+//     return response()->streamDownload(function () use ($report, $request) {
+//         $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+//         $sheet = $spreadsheet->getActiveSheet();
+
+//         // Title & Period
+//         $sheet->setCellValue('A1', 'B2C Sales Report (Unregistered Customers)');
+//         $sheet->mergeCells('A1:H1');
+//         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16);
+
+//         $sheet->setCellValue('A2', 'Period: ' . $request->start_date . ' to ' . $request->end_date);
+//         $sheet->mergeCells('A2:H2');
+
+//         // Headers
+//         $headers = ['Product Name', 'HSN Code', 'CGST %', 'SGST %', 'IGST %', 'Taxable Value', 'GST Amount', 'Total Amount'];
+//         $sheet->fromArray($headers, null, 'A4');
+
+//         // Header Style (Safe way - NO getFill() on Font)
+//         $headerStyle = $sheet->getStyle('A4:H4');
+//         $headerStyle->getFont()->setBold(true);
+//         $headerStyle->getFill()
+//             ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+//             ->getStartColor()->setARGB('FFE3F2FD');
+
+//         // Data rows
+//         $row = 5;
+//         foreach ($report as $item) {
+//             $sheet->setCellValue("A$row", $item['item_name']);
+//             $sheet->setCellValue("B$row", $item['hsn']);
+//             $sheet->setCellValue("C$row", $item['cgst']);
+//             $sheet->setCellValue("D$row", $item['sgst']);
+//             $sheet->setCellValue("E$row", $item['igst']);
+//             $sheet->setCellValue("F$row", $item['taxable']);
+//             $sheet->setCellValue("G$row", $item['gst']);
+//             $sheet->setCellValue("H$row", $item['total']);
+//             $row++;
+//         }
+
+//         // Grand Total
+//         $lastRow = $row;
+//         $sheet->setCellValue("E$lastRow", 'GRAND TOTAL');
+//         $sheet->setCellValue("F$lastRow", $report->sum('taxable'));
+//         $sheet->setCellValue("G$lastRow", $report->sum('gst'));
+//         $sheet->setCellValue("H$lastRow", $report->sum('total'));
+
+//         $totalStyle = $sheet->getStyle("E$lastRow:H$lastRow");
+//         $totalStyle->getFont()->setBold(true);
+//         $totalStyle->getFill()
+//             ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+//             ->getStartColor()->setARGB('FFFFFF00'); // Yellow
+
+//         // Auto-size + borders
+//         foreach (range('A', 'H') as $col) {
+//             $sheet->getColumnDimension($col)->setAutoSize(true);
+//         }
+
+//         $sheet->getStyle("A4:H$lastRow")->applyFromArray([
+//             'borders' => [
+//                 'allBorders' => [
+//                     'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
+//                     'color' => ['argb' => 'FF000000'],
+//                 ],
+//             ],
+//         ]);
+
+//         $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+//         $writer->save('php://output');
+//     }, 'B2C_Report_' . $request->start_date . '_to_' . $request->end_date . '.xlsx', [
+//         'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+//     ]);
+// }
+
 public function b2cSalesReport(Request $request)
 {
     $request->validate([
@@ -1723,6 +2146,140 @@ public function b2cSalesReport(Request $request)
 }
 
 
+//B2B Sales Report
+
+// public function b2bSalesReport(Request $request)
+// {
+//     $request->validate([
+//         'start_date' => 'required|date',
+//         'end_date'   => 'required|date|after_or_equal:start_date',
+//     ]);
+
+//     $user = Auth::user();
+//     $start = $request->start_date . ' 00:00:00';
+//     $end   = $request->end_date . ' 23:59:59';
+
+//     // GET COMPANY GST FROM clients TABLE (your actual company table)
+//     $company = DB::table('clients')->where('id', $user->cid)->first();
+
+//     if (!$company || !$company->gst_no) {
+//         return response()->json(['message' => 'Company GST not set. Please update company profile.'], 400);
+//     }
+
+//     $companyStateCode = substr(trim($company->gst_no), 0, 2);
+
+//     // Get all B2B bills (only registered customers)
+//     $bills = DB::table('sales_bills as sb')
+//         ->join('sales_clients as sc', 'sb.scid', '=', 'sc.id')
+//         ->where('sb.uid', $user->id)
+//         ->where('sc.cid', $user->cid)
+//         ->whereNotNull('sc.gst_no')
+//         ->where('sc.gst_no', '!=', '')
+//         ->whereBetween('sb.updated_at', [$start, $end])
+//         ->select(
+//             'sb.id',
+//             'sb.bill_name as invoice_no',
+//             'sb.updated_at as bill_date',
+//             'sc.name as customer_name',
+//             'sc.gst_no as customer_gst'
+//         )
+//         ->orderBy('sb.updated_at')
+//         ->get();
+
+//     if ($bills->isEmpty()) {
+//         return response()->json(['message' => 'No B2B sales found in this period'], 404);
+//     }
+
+//     // Get items (merge same product in same invoice)
+//     $items = DB::table('sales_items as si')
+//         ->join('products as p', 'si.pid', '=', 'p.id')
+//         ->whereIn('si.bid', $bills->pluck('id'))
+//         ->select(
+//             'si.bid',
+//             'p.name as item_name',
+//             'p.hscode',
+//             'si.gst as gst_rate',
+//             DB::raw('ROUND(SUM(si.quantity * si.s_price * (100 - COALESCE(si.dis, 0)) / 100), 2) as taxable_amount'),
+//             DB::raw('ROUND(SUM(si.quantity * si.s_price * (100 - COALESCE(si.dis, 0)) / 100 * (si.gst / 100)), 2) as gst_amount')
+//         )
+//         ->groupBy('si.bid', 'p.id', 'p.name', 'p.hscode', 'si.gst')
+//         ->get()
+//         ->groupBy('bid');
+
+//     return response()->streamDownload(function () use ($bills, $items, $companyStateCode, $request) {
+//         $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
+//         $sheet = $spreadsheet->getActiveSheet();
+
+//         // Title
+//         $sheet->setCellValue('A1', 'B2B Sales Report (Registered Dealers) - GSTR-1');
+//         $sheet->mergeCells('A1:N1');
+//         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16);
+//         $sheet->setCellValue('A2', "Period: {$request->start_date} to {$request->end_date}");
+//         $sheet->mergeCells('A2:N2');
+
+//         // Headers
+//         $headers = ['Sl.', 'Inv No', 'Date', 'Customer', 'GSTIN', '', 'Item', 'HSN', 'CGST%', 'SGST%', 'IGST%', 'Taxable', 'GST', 'Total'];
+//         $sheet->fromArray($headers, null, 'A4');
+//         $sheet->getStyle('A4:N4')->getFont()->setBold(true);
+//         $sheet->getStyle('A4:N4')->getFill()
+//             ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+//             ->getStartColor()->setARGB('FFE3F2FD');
+
+//         $row = 5;
+//         $sl = 1;
+
+//         foreach ($bills as $bill) {
+//             $custState = substr(trim($bill->customer_gst), 0, 2);
+//             $sameState = ($custState === $companyStateCode);
+
+//             $billItems = $items->get($bill->id, collect());
+//             $first = true;
+
+//             foreach ($billItems as $item) {
+//                 $cgst = $sameState ? round($item->gst_rate / 2, 1) : 0;
+//                 $sgst = $sameState ? round($item->gst_rate / 2, 1) : 0;
+//                 $igst = $sameState ? 0 : $item->gst_rate;
+
+//                 $sheet->setCellValue("A$row", $first ? $sl : '');
+//                 $sheet->setCellValue("B$row", $first ? $bill->invoice_no : '');
+//                 $sheet->setCellValue("C$row", $first ? date('d-m-Y', strtotime($bill->bill_date)) : '');
+//                 $sheet->setCellValue("D$row", $first ? $bill->customer_name : '');
+//                 $sheet->setCellValue("E$row", $first ? $bill->customer_gst : '');
+
+//                 $sheet->setCellValue("G$row", $item->item_name);
+//                 $sheet->setCellValue("H$row", $item->hscode ?? 'N/A');
+//                 $sheet->setCellValue("I$row", $cgst);
+//                 $sheet->setCellValue("J$row", $sgst);
+//                 $sheet->setCellValue("K$row", $igst);
+//                 $sheet->setCellValue("L$row", $item->taxable_amount);
+//                 $sheet->setCellValue("M$row", $item->gst_amount);
+//                 $sheet->setCellValue("N$row", round($item->taxable_amount + $item->gst_amount, 2));
+
+//                 if ($first) { $sl++; $first = false; }
+//                 $row++;
+//             }
+//             $row++; // space between invoices
+//         }
+
+//         // Grand Total
+//         $last = $row;
+//         $sheet->setCellValue("K$last", 'GRAND TOTAL');
+//         $sheet->setCellValue("L$last", '=SUM(L5:L'.($last-1).')');
+//         $sheet->setCellValue("M$last", '=SUM(M5:M'.($last-1).')');
+//         $sheet->setCellValue("N$last", '=SUM(N5:N'.($last-1).')');
+//         $sheet->getStyle("K$last:N$last")->getFont()->setBold(true);
+//         $sheet->getStyle("K$last:N$last")->getFill()
+//             ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
+//             ->getStartColor()->setARGB('FFFFFF00');
+
+//         foreach (range('A', 'N') as $col) {
+//             $sheet->getColumnDimension($col)->setAutoSize(true);
+//         }
+
+//         $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+//         $writer->save('php://output');
+//     }, 'B2B_GSTR1_' . $request->start_date . '_to_' . $request->end_date . '.xlsx');
+// }
 
 public function b2bSalesReport(Request $request)
 {

@@ -130,7 +130,52 @@ class ProductInfoController extends Controller
             ], 500);
         }
     }
+    // public function getProductById($pid)
+    // {
+    //     // Authentication check
+    //     $user = Auth::user();
+    //     if (!$user) {
+    //         return response()->json(['message' => 'Unauthorized'], 401);
+    //     }
     
+    //     // Authorization check (restrict access based on role)
+    //     if ($user->rid < 1 || $user->rid > 3) {
+    //         return response()->json(['message' => 'Forbidden'], 403);
+    //     }
+    
+    //     // Validate that the product_id is numeric
+    //     if (!is_numeric($pid)) {
+    //         return response()->json(['message' => 'Invalid product ID'], 422);
+    //     }
+    
+    //     // Fetch the product by product_id
+    //     $product = ProductInfo::where('id', $pid)
+    //     ->select(
+    //             'id as pid',
+    //             'name as product_name',
+    //             'hsn_code',
+    //             'description',
+    //             'purchase_price',
+    //             'profit_percentage',
+    //             'pre_gst_sale_cost',
+    //             'gst',
+    //             'post_gst_sale_cost'
+    //        )
+    //    ->first();
+    
+    //     // Check if the product exists
+    //     if (!$product) {
+    //         return response()->json([
+    //             'message' => 'Product not found',
+    //         ], 404);
+    //     }
+    
+    //     // Return the product details
+    //     return response()->json([
+    //         'message' => 'Product retrieved successfully',
+    //         'product' => $product,
+    //     ], 200);
+    // }
 
     public function getProductById($pid)
     {
@@ -355,6 +400,42 @@ public function updateProductById($pid, Request $request)
         'product' => $productData,
     ], 200);
 }
+
+// public function destroy($pid)
+//     {
+//         // // Force JSON response
+//         // request()->headers->set('Accept', 'application/json');
+    
+//         // Get the authenticated user
+//         $user = Auth::user();
+    
+//         // Check if user is authenticated
+//         if (!$user) {
+//             return response()->json(['message' => 'Unauthenticated'], 401);
+//         }
+    
+//         // Restrict to rid 1, 2, 3
+//         if (!in_array($user->rid, [1, 2, 3])) {
+//             return response()->json(['message' => 'Unauthorized to delete product'], 403);
+//         }
+    
+//         // Find the product by ID and ensure it belongs to the user's company
+//         $product = ProductInfo::where('id', $pid)->where('cid', $user->cid)->first();
+    
+//         // Check if the product exists and belongs to the user's company
+//         if (!$product) {
+//             return response()->json(['message' => 'Product not found or not authorized'], 404);
+//         }
+    
+//         // Attempt to delete the product
+//         try {
+//             $product->delete();
+//             return response()->json(['message' => 'Product deleted successfully'], 200);
+//         } catch (\Exception $e) {
+//             Log::error('Failed to delete product: ' . $e->getMessage());
+//             return response()->json(['message' => 'Failed to delete product', 'error' => $e->getMessage()], 500);
+//         }
+//     }
 
 public function destroy($pid)
     {
