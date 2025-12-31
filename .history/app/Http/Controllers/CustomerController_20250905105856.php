@@ -36,7 +36,6 @@ class CustomerController extends Controller
             'address' => 'nullable|string',
             'gst_no' => 'nullable|string',
             'pan' => 'nullable|string|max:20',
-            'customer_type_id' => 'nullable|exists:customer_types,id',   // ← ADD THIS
         ]);
 
         $salesClient = SalesClient::create([
@@ -48,7 +47,6 @@ class CustomerController extends Controller
             'address' => $validated['address'] ?? null,
             'gst_no' => $validated['gst_no'] ?? null,
             'pan' => $validated['pan'] ?? null,
-            'customer_type_id' => $validated['customer_type_id'] ?? null,   // ← ADD THIS
         ]);
     
         return response()->json([
@@ -146,7 +144,6 @@ class CustomerController extends Controller
         'sales_clients.pan',
         'sales_clients.gst_no',
         'sales_clients.uid',
-        'sales_clients.customer_type_id',          // ← ADD THIS
        'users.name as created_by'  // Get the user's name
        )
     ->orderBy('sales_clients.id', 'desc')
@@ -162,7 +159,6 @@ class CustomerController extends Controller
             'gst_no' => $salesClient->gst_no,
             'uid' => $salesClient->uid,
             'created_by' => $salesClient->created_by,  // Added to response
-            'customer_type_id'  => $salesClient->customer_type_id,   // ← ADD THIS
         ];
     });
         return response()->json([
@@ -233,7 +229,6 @@ public function getCustomer($customerId)
             'gst_no' => $salesClient->gst_no ?? null,
             'pan' => $salesClient->pan ?? null,
             'uid' => $salesClient->uid,
-            'customer_type_id' => $salesClient->customer_type_id,  // ← THIS IS THE KEY LINE
             // 'cid' => $salesClient->cid,
             // 'created_at' => Carbon::parse($salesClient->created_at)->format('Y-m-d H:i:s'),
             // 'updated_at' => $salesClient->updated_at ? Carbon::parse($salesClient->updated_at)->format('Y-m-d H:i:s') : null,
@@ -295,7 +290,6 @@ public function update(Request $request, $id)
         'address' => 'nullable|string',
         'gst_no' => 'nullable|string',
         'pan' => 'nullable|string|max:20',
-        'customer_type_id' => 'nullable|exists:customer_types,id',   // ← ADD THIS
     ]);
     
     // Update the sales client directly in the database

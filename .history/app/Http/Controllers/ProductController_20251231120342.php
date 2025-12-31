@@ -602,375 +602,201 @@ public function setPriceByCustomerType(Request $request, $productId)
 //     }
 // }
 
-// public function getUnitsByProductId(Request $request, $product_id)
-// {
-//     $request->headers->set('Accept', 'application/json');
-
-//     $user = Auth::user();
-//     if (!$user) {
-//         return response()->json(['message' => 'Unauthenticated'], 401);
-//     }
-
-//     if (!is_numeric($product_id) || intval($product_id) <= 0) {
-//         return response()->json([
-//             'message' => 'The given data was invalid.',
-//             'errors' => [
-//                 'product_id' => ['The product ID must be a positive integer.']
-//             ]
-//         ], 422);
-//     }
-
-//     $cid = $user->cid;
-//     $product_id = (int) $product_id;
-
-//     try {
-//         // === REQUIRE customer_id ===
-//         $request->validate([
-//             'customer_id' => 'required|integer|exists:sales_clients,id,cid,' . $cid,        ]);
-
-//         $customerId = $request->input('customer_id');
-
-//         // Fetch customer and their type
-//         $customer = \App\Models\SalesClient::where('id', $customerId)
-//             ->where('cid', $cid)
-//             ->with('customerType')
-//             ->first();
-
-//         if (!$customer) {
-//             return response()->json([
-//                 'message' => 'Customer not found in your company'
-//             ], 404);
-//         }
-
-//         if (!$customer->customer_type_id || !$customer->customerType) {
-//             return response()->json([
-//                 'message' => 'This customer has no customer type assigned. Please assign a type first.'
-//             ], 422);
-//         }
-
-//         // === GET TYPE-SPECIFIC SELLING PRICE (ONLY SOURCE) ===
-//         $typePrice = \App\Models\ProductPriceByType::where('product_id', $product_id)
-//             ->where('customer_type_id', $customer->customer_type_id)
-//             ->where('cid', $cid)
-//             ->first();
-
-//         if (!$typePrice) {
-//             return response()->json([
-//                 'message' => 'No selling price set for customer type: "' . $customer->customerType->name . '". Please set the price first.'
-//             ], 422);
-//         }
-
-//         $salePrice = (float) $typePrice->selling_price;
-
-//         // === FETCH PRODUCT DETAILS (purchase price & GST from product_info) ===
-//         $product = Product::where('products.id', $product_id)
-//             ->leftJoin('product_info', function ($join) use ($cid) {
-//                 $join->on('product_info.pid', '=', 'products.id')
-//                      ->where('product_info.cid', '=', $cid);
-//             })
-//             ->select(
-//                 'products.id',
-//                 'products.name',
-//                 'products.description',
-//                 'products.p_unit',
-//                 'products.s_unit',
-//                 'products.c_factor',
-//                 'product_info.purchase_price',
-//                 'product_info.profit_percentage',
-//                 'product_info.gst',
-//                 'product_info.unit_id as price_unit'
-//             )
-//             ->first();
-
-//         if (!$product) {
-//             Log::warning('Product not found', [
-//                 'product_id' => $product_id,
-//                 'cid' => $cid,
-//                 'user_id' => $user->id,
-//             ]);
-//             return response()->json([
-//                 'message' => 'Product not found'
-//             ], 404);
-//         }
-
-//         // Fetch units
-//         $unitIds = array_filter([$product->p_unit, $product->s_unit]);
-//         $units = Unit::whereIn('id', $unitIds)
-//             ->select('id', 'name')
-//             ->get()
-//             ->keyBy('id');
-
-//         if ($units->isEmpty()) {
-//             return response()->json(['message' => 'Units not found for this product'], 404);
-//         }
-
-//         // Normalize c_factor
-//         $cFactor = (float) ($product->c_factor ?? 1);
-//         if ($cFactor <= 0) {
-//             $cFactor = 1;
-//         }
-
-//         // Use purchase price and GST from product_info
-//         $infoPurchase = (float) ($product->purchase_price ?? 0.0);
-//         $infoProfit   = (float) ($product->profit_percentage ?? 0.0);
-//         $infoGst      = (float) ($product->gst ?? 0.0);
-//         $priceUnit    = $product->price_unit ?? null;
-
-//         // === PRICE CALCULATION USING TYPE-SPECIFIC SALE PRICE ===
-//         $primaryUnitPrice = [
-//             'purchase_price'    => 0.0,
-//             'pre_gst_sale_cost' => 0.0,
-//             'profit_percentage' => $infoProfit,
-//             'gst'               => $infoGst,
-//         ];
-//         $secondaryUnitPrice = $primaryUnitPrice;
-
-//         // Determine which unit the prices are stored in and convert
-//         if ($priceUnit && $priceUnit == $product->p_unit) {
-//             // Prices stored per primary unit
-//             $primaryUnitPrice['purchase_price'] = $infoPurchase;
-//             $primaryUnitPrice['pre_gst_sale_cost'] = $salePrice;
-
-//             if ($product->s_unit) {
-//                 $secondaryUnitPrice['purchase_price'] = $infoPurchase / $cFactor;
-//                 $secondaryUnitPrice['pre_gst_sale_cost'] = $salePrice / $cFactor;
-//             }
-//         } elseif ($priceUnit && $priceUnit == $product->s_unit) {
-//             // Prices stored per secondary unit
-//             $secondaryUnitPrice['purchase_price'] = $infoPurchase;
-//             $secondaryUnitPrice['pre_gst_sale_cost'] = $salePrice;
-
-//             if ($product->p_unit) {
-//                 $primaryUnitPrice['purchase_price'] = $infoPurchase * $cFactor;
-//                 $primaryUnitPrice['pre_gst_sale_cost'] = $salePrice * $cFactor;
-//             }
-//         } else {
-//             // Fallback: assume primary unit
-//             $primaryUnitPrice['purchase_price'] = $infoPurchase;
-//             $primaryUnitPrice['pre_gst_sale_cost'] = $salePrice;
-
-//             if ($product->s_unit) {
-//                 $secondaryUnitPrice['purchase_price'] = $infoPurchase / $cFactor;
-//                 $secondaryUnitPrice['pre_gst_sale_cost'] = $salePrice / $cFactor;
-//             }
-//         }
-
-//         // Round values
-//         $primaryUnitPrice['purchase_price'] = round($primaryUnitPrice['purchase_price'], 2);
-//         $primaryUnitPrice['pre_gst_sale_cost'] = round($primaryUnitPrice['pre_gst_sale_cost'], 2);
-//         $secondaryUnitPrice['purchase_price'] = round($secondaryUnitPrice['purchase_price'], 2);
-//         $secondaryUnitPrice['pre_gst_sale_cost'] = round($secondaryUnitPrice['pre_gst_sale_cost'], 2);
-
-//         // Build unit pricing response
-//         $unitPricing = [];
-
-//         if ($product->p_unit && $units->has($product->p_unit)) {
-//             $unitPricing[] = [
-//                 'unit_id'           => $product->p_unit,
-//                 'unit_name'         => $units->get($product->p_unit)->name,
-//                 'is_primary'        => true,
-//                 'purchase_price'    => $primaryUnitPrice['purchase_price'],
-//                 'sale_price'        => $primaryUnitPrice['pre_gst_sale_cost'],
-//                 'profit_percentage' => $primaryUnitPrice['profit_percentage'],
-//                 'gst'               => $primaryUnitPrice['gst'],
-//             ];
-//         }
-
-//         if ($product->s_unit && $units->has($product->s_unit)) {
-//             $unitPricing[] = [
-//                 'unit_id'           => $product->s_unit,
-//                 'unit_name'         => $units->get($product->s_unit)->name,
-//                 'is_primary'        => false,
-//                 'purchase_price'    => $secondaryUnitPrice['purchase_price'],
-//                 'sale_price'        => $secondaryUnitPrice['pre_gst_sale_cost'],
-//                 'profit_percentage' => $secondaryUnitPrice['profit_percentage'],
-//                 'gst'               => $secondaryUnitPrice['gst'],
-//             ];
-//         }
-
-//         Log::info('Units and type-specific price retrieved successfully', [
-//             'product_id'     => $product_id,
-//             'customer_id'    => $customerId,
-//             'customer_type'  => $customer->customerType->name,
-//             'sale_price'     => $salePrice,
-//             'cid'            => $cid,
-//             'user_id'        => $user->id,
-//         ]);
-
-//         return response()->json([
-//             'product' => [
-//                 'id'          => $product->id,
-//                 'name'        => $product->name,
-//                 'description' => $product->description ?? '',
-//                 'c_factor'    => $product->c_factor ?? 1,
-//             ],
-//             'unit_pricing' => $unitPricing
-//         ], 200);
-
-//     } catch (\Exception $e) {
-//         Log::error('Failed to fetch units and price', [
-//             'product_id' => $product_id,
-//             'cid'        => $cid,
-//             'user_id'    => $user->id,
-//             'error'      => $e->getMessage(),
-//         ]);
-//         return response()->json([
-//             'message' => 'Failed to fetch data',
-//             'error'   => $e->getMessage(),
-//         ], 500);
-//     }
-// }
-
 public function getUnitsByProductId(Request $request, $product_id)
 {
     $request->headers->set('Accept', 'application/json');
 
     $user = Auth::user();
-    if (!$user || !$user->cid) {
+    if (!$user) {
         return response()->json(['message' => 'Unauthenticated'], 401);
     }
 
-    $product_id = (int) $product_id;
-    if ($product_id <= 0) {
+    if (!is_numeric($product_id) || intval($product_id) <= 0) {
         return response()->json([
-            'message' => 'Invalid product ID'
+            'message' => 'The given data was invalid.',
+            'errors' => [
+                'product_id' => ['The product ID must be a positive integer.']
+            ]
         ], 422);
     }
 
     $cid = $user->cid;
+    $product_id = (int) $product_id;
 
     try {
-        // Make customer_id completely optional
-        $customerId = $request->input('customer_id'); // null if not provided
+        // === REQUIRE customer_id ===
+        $request->validate([
+            //'customer_id' => 'required|integer|exists:sales_clients,id,cid,' . $cid,
+            'customer_id' => 'sometimes|required|integer|exists:sales_clients,id,cid,' . $cid,
+        ]);
 
-        $salePrice = null; // Will be set only if customer-type pricing applies
+        $customerId = $request->input('customer_id');
 
-        // === ONLY apply customer-type pricing if customer_id is provided ===
-        if ($customerId) {
-            $customer = \App\Models\SalesClient::where('id', $customerId)
-                ->where('cid', $cid)
-                ->with('customerType')
-                ->first();
-
-            if (!$customer) {
-                return response()->json([
-                    'message' => 'Customer not found in your company'
-                ], 404);
-            }
-
-            if (!$customer->customer_type_id || !$customer->customerType) {
-                return response()->json([
-                    'message' => 'This customer has no customer type assigned.'
-                ], 422);
-            }
-
-            $typePrice = \App\Models\ProductPriceByType::where('product_id', $product_id)
-                ->where('customer_type_id', $customer->customer_type_id)
-                ->where('cid', $cid)
-                ->first();
-
-            if (!$typePrice) {
-                return response()->json([
-                    'message' => 'No selling price set for customer type: "' . $customer->customerType->name . '".'
-                ], 422);
-            }
-
-            $salePrice = (float) $typePrice->selling_price;
-        }
-
-        // === Fetch product info (purchase price, GST, profit %) from product_info ===
-        $productInfo = \App\Models\ProductInfo::where('pid', $product_id)
+        // Fetch customer and their type
+        $customer = \App\Models\SalesClient::where('id', $customerId)
             ->where('cid', $cid)
+            ->with('customerType')
             ->first();
 
-        if (!$productInfo) {
+        if (!$customer) {
             return response()->json([
-                'message' => 'Product pricing information not found. Please make a purchase first.'
+                'message' => 'Customer not found in your company'
             ], 404);
         }
 
-        $basePurchasePrice = (float) $productInfo->purchase_price;
-        $baseGst           = (float) $productInfo->gst;
-        $profitPercentage  = (float) ($productInfo->profit_percentage ?? 0);
-        $priceUnitId       = $productInfo->unit_id; // Unit in which prices are stored
+        if (!$customer->customer_type_id || !$customer->customerType) {
+            return response()->json([
+                'message' => 'This customer has no customer type assigned. Please assign a type first.'
+            ], 422);
+        }
 
-        // === Determine final sale price ===
-        // If customer-type price exists → use it
-        // Otherwise → calculate from purchase price + profit percentage
-        $finalSalePrice = $salePrice ?? ($basePurchasePrice * (1 + $profitPercentage / 100));
+        // === GET TYPE-SPECIFIC SELLING PRICE (ONLY SOURCE) ===
+        $typePrice = \App\Models\ProductPriceByType::where('product_id', $product_id)
+            ->where('customer_type_id', $customer->customer_type_id)
+            ->where('cid', $cid)
+            ->first();
 
-        // === Fetch product and units ===
-        $product = \App\Models\Product::where('id', $product_id)
-            ->select('id', 'name', 'description', 'p_unit', 's_unit', 'c_factor')
+        if (!$typePrice) {
+            return response()->json([
+                'message' => 'No selling price set for customer type: "' . $customer->customerType->name . '". Please set the price first.'
+            ], 422);
+        }
+
+        $salePrice = (float) $typePrice->selling_price;
+
+        // === FETCH PRODUCT DETAILS (purchase price & GST from product_info) ===
+        $product = Product::where('products.id', $product_id)
+            ->leftJoin('product_info', function ($join) use ($cid) {
+                $join->on('product_info.pid', '=', 'products.id')
+                     ->where('product_info.cid', '=', $cid);
+            })
+            ->select(
+                'products.id',
+                'products.name',
+                'products.description',
+                'products.p_unit',
+                'products.s_unit',
+                'products.c_factor',
+                'product_info.purchase_price',
+                'product_info.profit_percentage',
+                'product_info.gst',
+                'product_info.unit_id as price_unit'
+            )
             ->first();
 
         if (!$product) {
-            return response()->json(['message' => 'Product not found'], 404);
+            Log::warning('Product not found', [
+                'product_id' => $product_id,
+                'cid' => $cid,
+                'user_id' => $user->id,
+            ]);
+            return response()->json([
+                'message' => 'Product not found'
+            ], 404);
         }
 
-        // Fetch unit names
+        // Fetch units
         $unitIds = array_filter([$product->p_unit, $product->s_unit]);
-        $units = \App\Models\Unit::whereIn('id', $unitIds)
-            ->pluck('name', 'id');
+        $units = Unit::whereIn('id', $unitIds)
+            ->select('id', 'name')
+            ->get()
+            ->keyBy('id');
 
         if ($units->isEmpty()) {
-            return response()->json(['message' => 'No units defined for this product'], 404);
+            return response()->json(['message' => 'Units not found for this product'], 404);
         }
 
-        $cFactor = max(1, (float) ($product->c_factor ?? 1));
+        // Normalize c_factor
+        $cFactor = (float) ($product->c_factor ?? 1);
+        if ($cFactor <= 0) {
+            $cFactor = 1;
+        }
 
-        // === Build unit pricing array ===
+        // Use purchase price and GST from product_info
+        $infoPurchase = (float) ($product->purchase_price ?? 0.0);
+        $infoProfit   = (float) ($product->profit_percentage ?? 0.0);
+        $infoGst      = (float) ($product->gst ?? 0.0);
+        $priceUnit    = $product->price_unit ?? null;
+
+        // === PRICE CALCULATION USING TYPE-SPECIFIC SALE PRICE ===
+        $primaryUnitPrice = [
+            'purchase_price'    => 0.0,
+            'pre_gst_sale_cost' => 0.0,
+            'profit_percentage' => $infoProfit,
+            'gst'               => $infoGst,
+        ];
+        $secondaryUnitPrice = $primaryUnitPrice;
+
+        // Determine which unit the prices are stored in and convert
+        if ($priceUnit && $priceUnit == $product->p_unit) {
+            // Prices stored per primary unit
+            $primaryUnitPrice['purchase_price'] = $infoPurchase;
+            $primaryUnitPrice['pre_gst_sale_cost'] = $salePrice;
+
+            if ($product->s_unit) {
+                $secondaryUnitPrice['purchase_price'] = $infoPurchase / $cFactor;
+                $secondaryUnitPrice['pre_gst_sale_cost'] = $salePrice / $cFactor;
+            }
+        } elseif ($priceUnit && $priceUnit == $product->s_unit) {
+            // Prices stored per secondary unit
+            $secondaryUnitPrice['purchase_price'] = $infoPurchase;
+            $secondaryUnitPrice['pre_gst_sale_cost'] = $salePrice;
+
+            if ($product->p_unit) {
+                $primaryUnitPrice['purchase_price'] = $infoPurchase * $cFactor;
+                $primaryUnitPrice['pre_gst_sale_cost'] = $salePrice * $cFactor;
+            }
+        } else {
+            // Fallback: assume primary unit
+            $primaryUnitPrice['purchase_price'] = $infoPurchase;
+            $primaryUnitPrice['pre_gst_sale_cost'] = $salePrice;
+
+            if ($product->s_unit) {
+                $secondaryUnitPrice['purchase_price'] = $infoPurchase / $cFactor;
+                $secondaryUnitPrice['pre_gst_sale_cost'] = $salePrice / $cFactor;
+            }
+        }
+
+        // Round values
+        $primaryUnitPrice['purchase_price'] = round($primaryUnitPrice['purchase_price'], 2);
+        $primaryUnitPrice['pre_gst_sale_cost'] = round($primaryUnitPrice['pre_gst_sale_cost'], 2);
+        $secondaryUnitPrice['purchase_price'] = round($secondaryUnitPrice['purchase_price'], 2);
+        $secondaryUnitPrice['pre_gst_sale_cost'] = round($secondaryUnitPrice['pre_gst_sale_cost'], 2);
+
+        // Build unit pricing response
         $unitPricing = [];
 
-        // Primary Unit
         if ($product->p_unit && $units->has($product->p_unit)) {
-            $purchasePrice = $basePurchasePrice;
-            $salePricePerUnit = $finalSalePrice;
-
-            // Adjust if stored unit is secondary
-            if ($priceUnitId && $priceUnitId == $product->s_unit) {
-                $purchasePrice *= $cFactor;
-                $salePricePerUnit *= $cFactor;
-            }
-
             $unitPricing[] = [
                 'unit_id'           => $product->p_unit,
-                'unit_name'         => $units[$product->p_unit],
-                'purchase_price'    => round($purchasePrice, 2),
-                'sale_price'        => round($salePricePerUnit, 2),
-                'gst'               => $baseGst,
-                'profit_percentage' => $profitPercentage,
+                'unit_name'         => $units->get($product->p_unit)->name,
+                'is_primary'        => true,
+                'purchase_price'    => $primaryUnitPrice['purchase_price'],
+                'sale_price'        => $primaryUnitPrice['pre_gst_sale_cost'],
+                'profit_percentage' => $primaryUnitPrice['profit_percentage'],
+                'gst'               => $primaryUnitPrice['gst'],
             ];
         }
 
-        // Secondary Unit
         if ($product->s_unit && $units->has($product->s_unit)) {
-            $purchasePrice = $basePurchasePrice;
-            $salePricePerUnit = $finalSalePrice;
-
-            // Adjust if stored unit is primary
-            if ($priceUnitId && $priceUnitId == $product->p_unit) {
-                $purchasePrice /= $cFactor;
-                $salePricePerUnit /= $cFactor;
-            }
-
             $unitPricing[] = [
                 'unit_id'           => $product->s_unit,
-                'unit_name'         => $units[$product->s_unit],
-                'purchase_price'    => round($purchasePrice, 2),
-                'sale_price'        => round($salePricePerUnit, 2),
-                'gst'               => $baseGst,
-                'profit_percentage' => $profitPercentage,
+                'unit_name'         => $units->get($product->s_unit)->name,
+                'is_primary'        => false,
+                'purchase_price'    => $secondaryUnitPrice['purchase_price'],
+                'sale_price'        => $secondaryUnitPrice['pre_gst_sale_cost'],
+                'profit_percentage' => $secondaryUnitPrice['profit_percentage'],
+                'gst'               => $secondaryUnitPrice['gst'],
             ];
         }
 
-        // Log success
-        Log::info('Units fetched successfully', [
-            'product_id'   => $product_id,
-            'customer_id'  => $customerId ?? 'N/A (Purchase flow)',
-            'sale_price_source' => $salePrice ? 'Customer Type' : 'Base + Profit %',
-            'cid'          => $cid,
-            'user_id'      => $user->id,
+        Log::info('Units and type-specific price retrieved successfully', [
+            'product_id'     => $product_id,
+            'customer_id'    => $customerId,
+            'customer_type'  => $customer->customerType->name,
+            'sale_price'     => $salePrice,
+            'cid'            => $cid,
+            'user_id'        => $user->id,
         ]);
 
         return response()->json([
@@ -984,17 +810,15 @@ public function getUnitsByProductId(Request $request, $product_id)
         ], 200);
 
     } catch (\Exception $e) {
-        Log::error('Failed to fetch units for product', [
+        Log::error('Failed to fetch units and price', [
             'product_id' => $product_id,
             'cid'        => $cid,
             'user_id'    => $user->id,
             'error'      => $e->getMessage(),
-            'trace'      => $e->getTraceAsString(),
         ]);
-
         return response()->json([
             'message' => 'Failed to fetch data',
-            'error'   => $e->getMessage()
+            'error'   => $e->getMessage(),
         ], 500);
     }
 }
