@@ -74,10 +74,6 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/products/stock/{cid}', [HelperController::class, 'getProductStock']);
     Route::post('/transactions-by-cid', [PurchaseController::class, 'getTransactionsByCid']);
     Route::post('/purchases-by-transaction-id', [PurchaseController::class, 'getPurchaseDetailsByTransaction']);
-
-    Route::get('/purchase/invoice/{transaction_id}/pdf', [PurchaseController::class, 'downloadPurchaseInvoice'])
-         ->name('purchase.invoice.pdf');
-
     Route::get('/sales/company/{cid}', [SalesController::class, 'getAllInvoicesByCompany']);
     Route::get('/companies', [CompanyController::class, 'index']);
     Route::post('/update-recent-company', [CompanyController::class, 'updateRecentCompany']);

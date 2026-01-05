@@ -965,20 +965,6 @@ public function getUnitsByProductId(Request $request, $product_id)
     }
 }
 
-public function getPricesByType($productId)
-{
-    $user = Auth::user();
-    if (!$user || !in_array($user->rid, [1, 2])) {
-        return response()->json(['message' => 'Unauthorized'], 403);
-    }
-
-    $prices = \App\Models\ProductPriceByType::where('product_id', $productId)
-        ->where('cid', $user->cid)
-        ->pluck('selling_price', 'customer_type_id');
-
-    return response()->json($prices);
-}
-
 
 
 }
