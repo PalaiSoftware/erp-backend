@@ -75,7 +75,7 @@
             text-align: left;
             color: #333;
             width: 38%;
-            font-size: 14px;
+            font-size: 12px;
             font-weight: 500; /* Light bold for headers */
         }
 
@@ -141,7 +141,6 @@
             border: 1px solid #ddd;
             background-color: #f9f9f9;
             font-weight: normal; /* Values normal */
-            font-size: 10px;
         }
         /* Slight highlight for Due Amount row */
         .totals-due td {

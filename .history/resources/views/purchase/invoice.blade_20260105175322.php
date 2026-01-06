@@ -12,7 +12,6 @@
             padding: 0;
             background-color: #f9f9f9;
             color: #333;
-            font-size: 12px;
             
         }
         .invoice-container {
@@ -67,16 +66,11 @@
             padding: 7px 10px;
             border: 1px solid #ddd;
         }
-        .billing-table td {
-            font-size: 12px;
-        }
         .billing-table th {
             background: #f4f4f4;
             text-align: left;
             color: #333;
             width: 38%;
-            font-size: 14px;
-            font-weight: 500; /* Light bold for headers */
         }
 
         /* Items Table */
@@ -141,7 +135,6 @@
             border: 1px solid #ddd;
             background-color: #f9f9f9;
             font-weight: normal; /* Values normal */
-            font-size: 10px;
         }
         /* Slight highlight for Due Amount row */
         .totals-due td {

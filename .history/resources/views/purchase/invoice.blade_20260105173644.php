@@ -12,8 +12,7 @@
             padding: 0;
             background-color: #f9f9f9;
             color: #333;
-            font-size: 12px;
-            
+            font-size: 13px;
         }
         .invoice-container {
             max-width: 800px;
@@ -25,7 +24,7 @@
         }
         h1.invoice-title {
             text-align: center;
-            font-size: 18px;
+            font-size: 26px;
             color: #2c3e50;
             margin: 0 0 20px 0;
             font-weight: bold;
@@ -49,12 +48,9 @@
             border-spacing: 20px 0;
             margin-bottom: 20px;
         }
-        .header-table td {
-            vertical-align: top;
-        }
         .company-info h4, .vendor-info h4 {
             margin: 0 0 8px 0;
-            font-size: 12px;
+            font-size: 15px;
             color: #333;
             font-weight: bold;
         }
@@ -67,16 +63,11 @@
             padding: 7px 10px;
             border: 1px solid #ddd;
         }
-        .billing-table td {
-            font-size: 12px;
-        }
         .billing-table th {
             background: #f4f4f4;
             text-align: left;
             color: #333;
             width: 38%;
-            font-size: 14px;
-            font-weight: 500; /* Light bold for headers */
         }
 
         /* Items Table */
@@ -141,7 +132,6 @@
             border: 1px solid #ddd;
             background-color: #f9f9f9;
             font-weight: normal; /* Values normal */
-            font-size: 10px;
         }
         /* Slight highlight for Due Amount row */
         .totals-due td {
@@ -164,7 +154,7 @@
                 <img src="{{ public_path('images/logo.png') }}" alt="Company Logo">
             </div>
             <div class="invoice-title-wrapper">
-                <h1 class="invoice-title">Purchse Invoice</h1>
+                <h1 class="invoice-title">PURCHASE INVOICE</h1>
             </div>
         </div>
 
@@ -209,10 +199,10 @@
                     <th class="col-hsn">HSN</th>
                     <th class="col-serial">Serial No(s)</th>
                     <th class="col-disc">Discount%</th>
-                    <th class="col-amount">Amount</th>
+                    <th class="col-amount">Amount&nbsp; <span class="rupee">&#8377;</span></th>
                     <th class="col-sgst">SGST%</th>
                     <th class="col-cgst">CGST%</th>
-                    <th class="col-total">Total</th>
+                    <th class="col-total">Total&nbsp; <span class="rupee">₹</span></th>
                 </tr>
             </thead>
             <tbody>

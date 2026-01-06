@@ -310,18 +310,14 @@
         <table class="items-table" style="margin-top: 20px;">
             <thead>
                 <tr>
-                    <th>Total Items Value</th>
-                    <th>Total GST</th>
-                    <th>Gross Total</th>
-                    <th>Payable Amount</th>
-                    <th>Paid Amount</th>
-                    <th>Due Amount</th>
+                    <th>Total</th>
+                    <th>Payable</th>
+                    <th>Paid</th>
+                    <th>Due</th>
                 </tr>
             </thead>
             <tbody>
                 <tr>
-                    <td>{{ number_format($total_item_net_value, 2) }}</td>
-                    <td>{{ number_format($total_gst_amount, 2) }}</td>
                     <td>{{ number_format($total_amount, 2) }}</td>
                     <td>{{ number_format($payable_amount, 2) }}</td>
                     <td>{{ number_format($paid_amount, 2) }}</td>

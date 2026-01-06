@@ -141,7 +141,6 @@
             border: 1px solid #ddd;
             background-color: #f9f9f9;
             font-weight: normal; /* Values normal */
-            font-size: 10px;
         }
         /* Slight highlight for Due Amount row */
         .totals-due td {

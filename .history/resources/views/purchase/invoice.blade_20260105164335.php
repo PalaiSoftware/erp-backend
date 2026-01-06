@@ -5,15 +5,13 @@
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
     <title>Purchase Invoice</title>
     <style>
-        /* DejaVu Sans = Perfect ₹ in DomPDF */
+        /* General Styles */
         body {
-            font-family: DejaVu Sans, sans-serif;
+            font-family: 'Segoe UI', Arial, sans-serif;
             margin: 0;
             padding: 0;
             background-color: #f9f9f9;
             color: #333;
-            font-size: 12px;
-            
         }
         .invoice-container {
             max-width: 800px;
@@ -25,11 +23,13 @@
         }
         h1.invoice-title {
             text-align: center;
-            font-size: 18px;
-            color: #2c3e50;
-            margin: 0 0 20px 0;
+            font-size: 24px;
+            color: #333;
+            margin: 0;
             font-weight: bold;
         }
+
+        /* Top Header */
         .top-header {
             display: flex;
             align-items: center;
@@ -43,40 +43,42 @@
             flex: 1;
             text-align: center;
         }
+
+        /* Header Tables */
         .header-table {
             width: 100%;
             border-collapse: separate;
             border-spacing: 20px 0;
             margin-bottom: 20px;
         }
-        .header-table td {
-            vertical-align: top;
+        .company-info, .vendor-info {
+            width: 50%;
         }
         .company-info h4, .vendor-info h4 {
             margin: 0 0 8px 0;
-            font-size: 12px;
+            font-size: 15px;
             color: #333;
-            font-weight: bold;
         }
+
+        /* Billing Table Style (used for details) */
         .billing-table {
             width: 100%;
             border-collapse: collapse;
             font-size: 13px;
         }
-        .billing-table th, .billing-table td {
-            padding: 7px 10px;
-            border: 1px solid #ddd;
-        }
+        .billing-table th,
         .billing-table td {
-            font-size: 12px;
+            padding: 6px 8px;
+            border: 1px solid #ddd;
         }
         .billing-table th {
             background: #f4f4f4;
             text-align: left;
             color: #333;
-            width: 38%;
-            font-size: 14px;
-            font-weight: 500; /* Light bold for headers */
+            width: 35%;
+        }
+        .billing-table td {
+            background: #fff;
         }
 
         /* Items Table */
@@ -87,88 +89,93 @@
             font-size: 12px;
             table-layout: fixed;
         }
-        table.items-table th, table.items-table td {
+        table.items-table th,
+        table.items-table td {
             border: 1px solid #ddd;
-            padding: 8px 5px;
-            text-align: center;
-            vertical-align: top;
+            padding: 6px;
+            text-align: left;
+            vertical-align: middle;
             word-wrap: break-word;
         }
         table.items-table th {
             background-color: #f4f4f4;
-            font-weight: 600; /* Light bold for headers */
+            font-weight: bold;
             color: #333;
         }
-        table.items-table tbody tr:nth-child(even) {
-            background-color: #f9f9f9;
+        table.items-table td {
+            color: #555;
         }
+        /* Column widths & alignment */
+        .col-sn       { width: 5%; text-align: center; }
+        .col-product  { width: 22%; }
+        .col-hsn      { width: 8%; text-align: center; }
+        .col-serial   { width: 18%; font-size: 9px; white-space: pre-line; word-break: break-all; }
+        .col-disc     { width: 8%; text-align: center; }
+        .col-amount   { width: 10%; text-align: right; }
+        .col-sgst     { width: 7%; text-align: center; }
+        .col-cgst     { width: 7%; text-align: center; }
+        .col-total    { width: 15%; text-align: right; font-weight: bold; }
 
-        /* Column Widths */
-        .col-sn       { width: 5%; }
-        .col-product  { width: 24%; text-align: left; }
-        .col-hsn      { width: 8%; }
-        .col-serial   { width: 18%; font-size: 9.5px; white-space: pre-line; word-break: break-all; line-height: 1.3; }
-        .col-disc     { width: 9%; }
-        .col-amount   { width: 11%; text-align: right; }
-        .col-sgst     { width: 8%; }
-        .col-cgst     { width: 8%; }
-        .col-total    { width: 13%; text-align: right; }
-
+        /* Quantity & Rate inside product cell */
         .quantity, .unit, .unit-price {
             font-size: 11px;
             color: #666;
         }
 
-        /* Horizontal Totals Table */
-        table.totals-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 30px;
-            font-size: 13px;
-            table-layout: fixed;
-        }
-        table.totals-table th {
-            background-color: #f4f4f4;
-            font-weight: 600; /* Light bold - same as items table */
-            padding: 10px;
-            text-align: center;
-            border: 1px solid #ddd;
-            color: #333;
-        }
-        table.totals-table td {
-            padding: 12px 10px;
+        /* Footer Totals */
+        .footer-section {
+            margin-top: 20px;
             text-align: right;
-            border: 1px solid #ddd;
-            background-color: #f9f9f9;
-            font-weight: normal; /* Values normal */
-            font-size: 10px;
         }
-        /* Slight highlight for Due Amount row */
-        .totals-due td {
-            font-weight: normal;
-            background-color: #ecf0f1;
+        .footer-section table {
+            width: auto;
+            display: inline-table;
+            border-collapse: collapse;
             font-size: 14px;
         }
+        .footer-section th,
+        .footer-section td {
+            padding: 6px 12px;
+            text-align: left;
+            border: none;
+        }
+        .footer-section th {
+            font-weight: normal;
+            color: #333;
+        }
+        .footer-section td {
+            font-weight: bold;
+            text-align: right;
+            min-width: 120px;
+        }
+        .total-row td {
+            font-size: 16px;
+            font-weight: bold;
+            color: #000;
+            border-top: 2px solid #333;
+            padding-top: 10px;
+        }
 
-        .rupee {
-            font-family: DejaVu Sans;
+        /* Currency */
+        .currency-symbol {
+            margin-right: 3px;
         }
     </style>
 </head>
 <body>
     <div class="invoice-container">
 
-        <!-- Logo + Title -->
+        <!-- Top Header: Logo + Title -->
         <div class="top-header">
             <div class="logo-container">
                 <img src="{{ public_path('images/logo.png') }}" alt="Company Logo">
             </div>
             <div class="invoice-title-wrapper">
-                <h1 class="invoice-title">Purchse Invoice</h1>
+                <h1 class="invoice-title">PURCHASE INVOICE</h1>
             </div>
         </div>
 
-        <!-- Company & Vendor Details - Single Table -->
+        <!-- Company & Vendor Details -->
         <table class="header-table">
             <tr>
                 <td class="company-info">
@@ -183,7 +190,8 @@
                         <tr><th>PAN</th><td>{{ $company->pan }}</td></tr>
                     </table>
                 </td>
-                <td class="vendor-info">
+
+                <td class="vendor-info" style="text-align: right;">
                     <h4>Vendor Details (Supplier)</h4>
                     <table class="billing-table">
                         <tr><th>Bill Name</th><td>{{ $transaction->bill_name }}</td></tr>
@@ -205,7 +213,7 @@
             <thead>
                 <tr>
                     <th class="col-sn">SN</th>
-                    <th class="col-product">Item Details</th>
+                    <th>Item Details</th>
                     <th class="col-hsn">HSN</th>
                     <th class="col-serial">Serial No(s)</th>
                     <th class="col-disc">Discount%</th>
@@ -218,58 +226,66 @@
             <tbody>
                 @forelse($items as $index => $item)
                     <tr>
-                        <td class="col-sn">{{ $index + 1 }}</td>
-                        <td class="col-product">
+                        <td class="col-sn">{{ $index + 1 }}.</td>
+                        <td>
                             {{ $item->product_name }}<br>
                             <span class="quantity">{{ $item->quantity }}</span>
                             <span class="unit"> {{ $item->unit_name }}</span>
-                            @ <span class="unit-price"><span class="rupee"></span>{{ number_format($item->per_item_cost, 2) }}</span>
+                            @ <span class="unit-price">{{ number_format($item->per_item_cost, 2) }}</span>
                         </td>
                         <td class="col-hsn">{{ $item->hsn ?? '-' }}</td>
                         <td class="col-serial">{{ $item->serial_numbers ?? '-' }}</td>
                         <td class="col-disc">{{ $item->discount ?? 0 }}</td>
-                        <td class="col-amount"><span class="rupee"></span>{{ number_format($item->net_price, 2) }}</td>
+                        <td class="col-amount">{{ number_format($item->net_price, 2) }}</td>
                         <td class="col-sgst">{{ ($item->gst ?? 0) / 2 }}</td>
                         <td class="col-cgst">{{ ($item->gst ?? 0) / 2 }}</td>
                         <td class="col-total">
-                            <span class="rupee"></span>{{ number_format($item->per_product_total + $item->gst_amount, 2) }}
+                            <span class="currency-symbol">₹</span>{{ number_format($item->per_product_total + $item->gst_amount, 2) }}
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="9" style="text-align:center;">No items found.</td></tr>
+                    <tr>
+                        <td colspan="9">No items found.</td>
+                    </tr>
                 @endforelse
             </tbody>
         </table>
 
-        <!-- Horizontal Totals Table -->
-        <table class="totals-table">
-            <thead>
+        <!-- Footer Totals -->
+        <div class="footer-section">
+            <table>
                 <tr>
                     <th>Total Items Value</th>
+                    <td><span class="currency-symbol">₹</span> {{ number_format($total_item_net_value, 2) }}</td>
+                </tr>
+                <tr>
                     <th>Total GST</th>
+                    <td><span class="currency-symbol">₹</span> {{ number_format($total_gst_amount, 2) }}</td>
+                </tr>
+                <tr>
                     <th>Gross Total</th>
-                    @if($absolute_discount > 0)
-                        <th>Absolute Discount</th>
-                    @endif
+                    <td><span class="currency-symbol">₹</span> {{ number_format($total_amount, 2) }}</td>
+                </tr>
+                @if($absolute_discount > 0)
+                <tr>
+                    <th>Absolute Discount</th>
+                    <td><span class="currency-symbol">₹</span> {{ number_format($absolute_discount, 2) }}</td>
+                </tr>
+                @endif
+                <tr>
                     <th>Payable Amount</th>
+                    <td><span class="currency-symbol">₹</span> {{ number_format($payable_amount, 2) }}</td>
+                </tr>
+                <tr>
                     <th>Paid Amount</th>
+                    <td><span class="currency-symbol">₹</span> {{ number_format($paid_amount, 2) }}</td>
+                </tr>
+                <tr class="total-row">
                     <th>Due Amount</th>
+                    <td><span class="currency-symbol">₹</span> {{ number_format($due_amount, 2) }}</td>
                 </tr>
-            </thead>
-            <tbody>
-                <tr @if($due_amount > 0) class="totals-due" @endif>
-                    <td><span class="rupee"></span> {{ number_format($total_item_net_value, 2) }}</td>
-                    <td><span class="rupee"></span> {{ number_format($total_gst_amount, 2) }}</td>
-                    <td><span class="rupee"></span> {{ number_format($total_amount, 2) }}</td>
-                    @if($absolute_discount > 0)
-                        <td><span class="rupee"></span> {{ number_format($absolute_discount, 2) }}</td>
-                    @endif
-                    <td><span class="rupee"></span> {{ number_format($payable_amount, 2) }}</td>
-                    <td><span class="rupee"></span> {{ number_format($paid_amount, 2) }}</td>
-                    <td><span class="rupee"></span> {{ number_format($due_amount, 2) }}</td>
-                </tr>
-            </tbody>
-        </table>
+            </table>
+        </div>
 
     </div>
 </body>
