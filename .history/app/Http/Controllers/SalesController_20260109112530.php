@@ -1750,13 +1750,6 @@ public function b2bSalesReport(Request $request)
     ]);
 
     $user = Auth::user();
-
-    // ONLY rid 1, 2, 3 can download B2B report
-    if (!in_array($user->rid, [1, 2, 3])) {
-        return response()->json([
-            'message' => 'Forbidden: You do not have permission to download B2B GST reports'
-        ], 403);
-    }
     $start = $request->start_date . ' 00:00:00';
     $end   = $request->end_date . ' 23:59:59';
 

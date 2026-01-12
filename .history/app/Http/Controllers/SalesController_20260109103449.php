@@ -974,15 +974,9 @@ public function generateInvoice($transactionId)
     }
 
     // Restrict access to users with rid between 1 and 5 inclusive
-    // if ($user->rid < 1 || $user->rid > 5) {
-    //     return response()->json(['message' => 'Forbidden'], 403);
-    // }
-    // Only Admin (1), Superuser (2), and Moderator (3) can generate/download invoice PDF
-if (!in_array($user->rid, [1, 2, 3])) {
-    return response()->json([
-        'message' => 'Forbidden: You do not have permission to generate or download sales invoices'
-    ], 403);
-}
+    if ($user->rid < 1 || $user->rid > 5) {
+        return response()->json(['message' => 'Forbidden'], 403);
+    }
 
     try {
         // Fetch transaction from sales_bills
@@ -1233,7 +1227,7 @@ public function getCustomersWithDues($cid)
 public function getCustomerDues(Request $request, $customer_id)
 {
     $user = Auth::user();
-    if (!$user || !in_array($user->rid, [1,2,3])) {
+    if (!$user || !in_array($user->rid, [1,2,3,4])) {
         return response()->json(['error' => 'Unauthorized'], 401);
     }
 
@@ -1598,15 +1592,6 @@ public function b2cSalesReport(Request $request)
         'end_date'   => 'required|date|after_or_equal:start_date',
     ]);
 
-    $user = Auth::user();
-
-    // ONLY rid 1, 2, 3 can download B2C report
-    if (!in_array($user->rid, [1, 2, 3])) {
-        return response()->json([
-            'message' => 'Forbidden: You do not have permission to download B2C GST reports'
-        ], 403);
-    }
-
     $startDate = $request->start_date . ' 00:00:00';
     $endDate   = $request->end_date . ' 23:59:59';
 
@@ -1750,13 +1735,6 @@ public function b2bSalesReport(Request $request)
     ]);
 
     $user = Auth::user();
-
-    // ONLY rid 1, 2, 3 can download B2B report
-    if (!in_array($user->rid, [1, 2, 3])) {
-        return response()->json([
-            'message' => 'Forbidden: You do not have permission to download B2B GST reports'
-        ], 403);
-    }
     $start = $request->start_date . ' 00:00:00';
     $end   = $request->end_date . ' 23:59:59';
 

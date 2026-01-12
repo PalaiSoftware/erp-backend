@@ -877,12 +877,9 @@ public function updateTransactionById(Request $request, $transaction_id)
     }
 
     // Restrict access to users with rid between 1 and 4 inclusive
-    // if ($user->rid < 1 || $user->rid > 4) {
-    //     return response()->json(['message' => 'Forbidden'], 403);
-    // }
-    if (!in_array($user->rid, [1, 2])) {
-    return response()->json(['message' => 'Forbidden: Only Admin and Superuser can update purchases'], 403);
-}
+    if ($user->rid < 1 || $user->rid > 4) {
+        return response()->json(['message' => 'Forbidden'], 403);
+    }
 
     // Validation rules — s_price is now optional (kept for backward compatibility/history)
     try {
@@ -1274,7 +1271,7 @@ public function getPurchaseTransactionsByPid(Request $request)
 public function downloadPurchaseInvoice($transactionId)
 {
     $user = Auth::user();
-    if (!$user || !in_array($user->rid, [1, 2, 3])) {
+    if (!$user || !in_array($user->rid, [1, 2, 3, 4])) {
         abort(403, 'Unauthorized');
     }
 

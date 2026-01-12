@@ -1274,7 +1274,7 @@ public function getPurchaseTransactionsByPid(Request $request)
 public function downloadPurchaseInvoice($transactionId)
 {
     $user = Auth::user();
-    if (!$user || !in_array($user->rid, [1, 2, 3])) {
+    if (!$user || !in_array($user->rid, [1, 2, 3, 4])) {
         abort(403, 'Unauthorized');
     }
 

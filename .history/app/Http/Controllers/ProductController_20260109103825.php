@@ -24,7 +24,7 @@ public function store(Request $request)
     }
 
     // Role restriction
-    if (!in_array($user->rid, [1, 2, 3])) {
+    if (!in_array($user->rid, [1, 2, 3, 4])) {
         return response()->json(['message' => 'Unauthorized to add product'], 403);
     }
 
