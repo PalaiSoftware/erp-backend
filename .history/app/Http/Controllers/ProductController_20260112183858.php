@@ -366,8 +366,10 @@ public function update(Request $request, $id)
             ->where('cid', $user->cid)
             ->exists();
 
-        // FIXED: use SalesItem model + correct column (pid)
-        $hasSale = \App\Models\SalesItem::where('pid', $product->id)
+        // FIX: use correct sales table name
+        $hasSale = \Illuminate\Support\Facades\DB::table('sales_items') // <-- CHANGED HERE
+            ->where('product_id', $product->id)
+            ->where('cid', $user->cid)
             ->exists();
 
         $hasUsage = $hasPurchase || $hasSale;

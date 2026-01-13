@@ -366,8 +366,8 @@ public function update(Request $request, $id)
             ->where('cid', $user->cid)
             ->exists();
 
-        // FIXED: use SalesItem model + correct column (pid)
-        $hasSale = \App\Models\SalesItem::where('pid', $product->id)
+        $hasSale = \App\Models\SaleItem::where('product_id', $product->id)
+            ->where('cid', $user->cid)
             ->exists();
 
         $hasUsage = $hasPurchase || $hasSale;
@@ -451,7 +451,6 @@ public function update(Request $request, $id)
         return response()->json(['error' => $e->getMessage()], 500);
     }
 }
-
 /**
  * Set selling price for a product based on customer type
  * This is the ONLY place where selling price is set

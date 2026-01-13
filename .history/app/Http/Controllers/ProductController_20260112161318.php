@@ -243,104 +243,6 @@ public function getProductById($product_id)
     ], 200);
 }
 
-// public function update(Request $request, $id)
-// {
-//     try {
-//         $user = Auth::user();
-//         if (!$user) {
-//             return response()->json(['message' => 'Unauthorized'], 401);
-//         }
-//         if (!in_array($user->rid, [1, 2, 3])) {
-//             return response()->json(['message' => 'Forbidden'], 403);
-//         }
-
-//         // Find product and verify it belongs to current company
-//         $product = Product::where('id', $id)
-//             ->where('cid', $user->cid) // CRITICAL: Only allow products from current company
-//             ->first();
-
-//         if (!$product) {
-//             return response()->json(['message' => 'Product not found or not authorized'], 404);
-//         }
-//         // CORRECTED VALIDATION (top-level fields, NOT array-based)
-//         $validated = $request->validate([
-//             'name' => [
-//                 'required',
-//                 'string',
-//                 'max:255',
-//                 function ($attribute, $value, $fail) use ($id, $user) {
-//                     // Check duplicate ONLY within current company
-//                     if (Product::whereRaw('LOWER(name) = LOWER(?)', [$value])
-//                         ->where('id', '!=', $id)
-//                         ->where('cid', $user->cid) // Company-specific filter
-//                         ->exists()) {
-//                         $fail('This product name is already in use in your company.');
-//                     }
-//                 },
-//             ],
-//             'category_id' => 'nullable|integer|exists:categories,id',
-//             'hscode' => 'nullable|string|max:255',
-//             'description'=> 'nullable|string|max:500',
-//             'p_unit' => [
-//                 'required',
-//                 'integer',
-//                 'exists:units,id',
-//                 function ($attribute, $value, $fail) {
-//                     if ($value === 0) {
-//                         $fail('Primary unit cannot be "None". Please select a valid unit.');
-//                     }
-//                 },
-//             ],
-//             's_unit' => 'nullable|integer|exists:units,id', // Allow 0 as valid "None"
-//             'c_factor' => 'nullable|numeric',
-//         ], [
-//             'p_unit.required' => 'Primary unit is required.',
-//             'p_unit.integer' => 'Primary unit must be a valid number.',
-//             'p_unit.exists' => 'Selected primary unit does not exist.',
-//         ]);
-
-//         // CORRECTED c_factor VALIDATION (single product)
-//         $pUnit = $validated['p_unit'];
-//         $sUnit = $validated['s_unit'] ?? 0; // Default to 0 if not provided
-//         $cFactor = $validated['c_factor'] ?? 0; // Default to 0 if not provided
-
-//         $errors = [];
-
-//         // Case 1: Secondary unit is 0 ("None") → c_factor must be exactly 0 or null (you may enforce presence if you want)
-//         if ($pUnit > 0 && $sUnit == 0) {
-//             // Accept null or 0, but reject any positive non-zero value
-//             if ($cFactor !== null && $cFactor != 0.0) {
-//                 $errors['c_factor'][] = 'When secondary unit is "None", conversion factor must be 0.';
-//             }
-//         }
-//         // Case 2: Secondary unit > 0 → c_factor must be >= 0.1 (and must be present)
-//         elseif ($pUnit > 0 && $sUnit > 0) {
-//             if ($cFactor === null) {
-//                 $errors['c_factor'][] = 'Conversion factor is required when a secondary unit is provided.';
-//             } elseif ($cFactor < 0.1) {
-//                 $errors['c_factor'][] = 'When secondary unit is provided, conversion factor must be at least 0.1.';
-//             }
-//         }
-
-//         // Return errors if any
-//         if (!empty($errors)) {
-//             return response()->json([
-//                 'message' => 'Validation failed',
-//                 'errors' => $errors
-//             ], 422);
-//         }
-
-//         $product->update($validated);
-
-//         return response()->json([
-//             'message' => 'Product updated successfully',
-//             'product' => $product->refresh()
-//         ], 200);
-//     } catch (\Exception $e) {
-//         \Log::error($e->getMessage());
-//         return response()->json(['error' => $e->getMessage()], 500);
-//     }
-// }
 public function update(Request $request, $id)
 {
     try {
@@ -352,36 +254,25 @@ public function update(Request $request, $id)
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        // Find product and verify company
+        // Find product and verify it belongs to current company
         $product = Product::where('id', $id)
-            ->where('cid', $user->cid)
+            ->where('cid', $user->cid) // CRITICAL: Only allow products from current company
             ->first();
 
         if (!$product) {
             return response()->json(['message' => 'Product not found or not authorized'], 404);
         }
-
-        // ===== CHECK IF PRODUCT USED IN PURCHASE OR SALES =====
-        $hasPurchase = \App\Models\ProductInfo::where('pid', $product->id)
-            ->where('cid', $user->cid)
-            ->exists();
-
-        // FIXED: use SalesItem model + correct column (pid)
-        $hasSale = \App\Models\SalesItem::where('pid', $product->id)
-            ->exists();
-
-        $hasUsage = $hasPurchase || $hasSale;
-
-        // ===== VALIDATION =====
+        // CORRECTED VALIDATION (top-level fields, NOT array-based)
         $validated = $request->validate([
             'name' => [
                 'required',
                 'string',
                 'max:255',
                 function ($attribute, $value, $fail) use ($id, $user) {
+                    // Check duplicate ONLY within current company
                     if (Product::whereRaw('LOWER(name) = LOWER(?)', [$value])
                         ->where('id', '!=', $id)
-                        ->where('cid', $user->cid)
+                        ->where('cid', $user->cid) // Company-specific filter
                         ->exists()) {
                         $fail('This product name is already in use in your company.');
                     }
@@ -396,42 +287,42 @@ public function update(Request $request, $id)
                 'exists:units,id',
                 function ($attribute, $value, $fail) {
                     if ($value === 0) {
-                        $fail('Primary unit cannot be "None".');
+                        $fail('Primary unit cannot be "None". Please select a valid unit.');
                     }
                 },
             ],
-            's_unit' => 'nullable|integer|exists:units,id',
+            's_unit' => 'nullable|integer|exists:units,id', // Allow 0 as valid "None"
             'c_factor' => 'nullable|numeric',
+        ], [
+            'p_unit.required' => 'Primary unit is required.',
+            'p_unit.integer' => 'Primary unit must be a valid number.',
+            'p_unit.exists' => 'Selected primary unit does not exist.',
         ]);
 
-        // ===== BLOCK PRIMARY UNIT CHANGE IF USED =====
-        if ($hasUsage) {
-            if (isset($validated['p_unit']) && $validated['p_unit'] != $product->p_unit) {
-                return response()->json([
-                    'message' => 'Primary unit cannot be changed because this product already has purchase or sales history.'
-                ], 422);
-            }
-        }
-
-        // ===== c_factor VALIDATION =====
+        // CORRECTED c_factor VALIDATION (single product)
         $pUnit = $validated['p_unit'];
-        $sUnit = $validated['s_unit'] ?? 0;
-        $cFactor = $validated['c_factor'] ?? 0;
+        $sUnit = $validated['s_unit'] ?? 0; // Default to 0 if not provided
+        $cFactor = $validated['c_factor'] ?? 0; // Default to 0 if not provided
 
         $errors = [];
 
+        // Case 1: Secondary unit is 0 ("None") → c_factor must be exactly 0 or null (you may enforce presence if you want)
         if ($pUnit > 0 && $sUnit == 0) {
+            // Accept null or 0, but reject any positive non-zero value
             if ($cFactor !== null && $cFactor != 0.0) {
                 $errors['c_factor'][] = 'When secondary unit is "None", conversion factor must be 0.';
             }
-        } elseif ($pUnit > 0 && $sUnit > 0) {
+        }
+        // Case 2: Secondary unit > 0 → c_factor must be >= 0.1 (and must be present)
+        elseif ($pUnit > 0 && $sUnit > 0) {
             if ($cFactor === null) {
-                $errors['c_factor'][] = 'Conversion factor is required when secondary unit is provided.';
+                $errors['c_factor'][] = 'Conversion factor is required when a secondary unit is provided.';
             } elseif ($cFactor < 0.1) {
-                $errors['c_factor'][] = 'Conversion factor must be at least 0.1.';
+                $errors['c_factor'][] = 'When secondary unit is provided, conversion factor must be at least 0.1.';
             }
         }
 
+        // Return errors if any
         if (!empty($errors)) {
             return response()->json([
                 'message' => 'Validation failed',
@@ -445,47 +336,50 @@ public function update(Request $request, $id)
             'message' => 'Product updated successfully',
             'product' => $product->refresh()
         ], 200);
-
     } catch (\Exception $e) {
-        Log::error($e->getMessage());
+        \Log::error($e->getMessage());
         return response()->json(['error' => $e->getMessage()], 500);
     }
 }
 
 /**
- * Set selling price for a product based on customer type
- * This is the ONLY place where selling price is set
- * Allowed for: Admin (rid=1) and Superuser (rid=2) only
+ * Set selling price — user always enters price PER PRIMARY UNIT
+ * Backend converts to per-secondary if secondary exists
  */
 public function setPriceByCustomerType(Request $request, $productId)
 {
     $user = Auth::user();
 
-    // Only Admin and Superuser can set prices
     if (!in_array($user->rid, [1, 2])) {
         return response()->json([
             'message' => 'Unauthorized: Only Admin or Superuser can set product prices'
         ], 403);
     }
 
-    // Validate input
+    // Validate input (no unit_id required now)
     $validated = $request->validate([
         'customer_type_id' => 'required|integer|exists:customer_types,id,cid,' . $user->cid,
         'selling_price'    => 'required|numeric|min:0',
     ]);
 
-    // Optional: Verify the product belongs to the user's company
-    $productExists = \App\Models\Product::where('id', $productId)
+    // Find product
+    $product = Product::where('id', $productId)
         ->where('cid', $user->cid)
-        ->exists();
+        ->first();
 
-    if (!$productExists) {
-        return response()->json([
-            'message' => 'Product not found in your company'
-        ], 404);
+    if (!$product) {
+        return response()->json(['message' => 'Product not found in your company'], 404);
     }
 
-    // Save or update the price for this product + customer type + company
+    $inputPrice = $validated['selling_price'];
+    $priceToStore = $inputPrice;
+
+    // If product has secondary unit → assume input is per-primary, convert to per-secondary
+    if ($product->s_unit && $product->c_factor > 1) {
+        $priceToStore = $inputPrice / $product->c_factor;
+    }
+
+    // Save the converted price
     $price = \App\Models\ProductPriceByType::updateOrCreate(
         [
             'product_id'       => $productId,
@@ -493,20 +387,22 @@ public function setPriceByCustomerType(Request $request, $productId)
             'cid'              => $user->cid,
         ],
         [
-            'selling_price' => $validated['selling_price'],
+            'selling_price' => $priceToStore,
         ]
     );
 
     return response()->json([
-        'message' => 'Selling price successfully set for this customer type',
-        'product_id' => $productId,
-        'customer_type_id' => $validated['customer_type_id'],
-        'selling_price' => $price->selling_price,
-        'data' => $price
+        'message'          => 'Selling price set successfully (as per primary unit)',
+        'entered_price'    => $inputPrice,
+        'stored_price'     => $priceToStore,
+        'primary_equivalent' => $product->s_unit ? round($priceToStore * $product->c_factor, 2) : $priceToStore,
+        'data'             => $price
     ], 200);
 }
 
-
+/**
+ * Get units and prices — always show primary unit price as user-expected value
+ */
 public function getUnitsByProductId(Request $request, $product_id)
 {
     $request->headers->set('Accept', 'application/json');
@@ -524,7 +420,7 @@ public function getUnitsByProductId(Request $request, $product_id)
     $cid = $user->cid;
 
     try {
-        $customerId = $request->input('customer_id'); // Optional
+        $customerId = $request->input('customer_id');
         $salePrice = null;
 
         if ($customerId) {
@@ -551,13 +447,11 @@ public function getUnitsByProductId(Request $request, $product_id)
             $salePrice = (float) $typePrice->selling_price;
         }
 
-        // === Allow first purchase even if no product_info exists ===
         $productInfo = \App\Models\ProductInfo::where('pid', $product_id)
             ->where('cid', $cid)
             ->first();
 
         if (!$productInfo) {
-            // First time purchasing this product — use defaults
             $basePurchasePrice = 0.0;
             $baseGst           = 0.0;
             $profitPercentage  = 0.0;
@@ -588,41 +482,37 @@ public function getUnitsByProductId(Request $request, $product_id)
 
         $cFactor = max(1, (float) ($product->c_factor ?? 1));
 
+        // Normalize stored price to per-secondary if secondary exists
+        $purchaseSecondary = $basePurchasePrice;
+        $saleSecondary     = $finalSalePrice;
+
+        if ($priceUnitId && $priceUnitId == $product->p_unit && $cFactor > 1) {
+            $purchaseSecondary /= $cFactor;
+            $saleSecondary     /= $cFactor;
+        }
+
         $unitPricing = [];
 
+        // Primary unit — show full price
         if ($product->p_unit && $units->has($product->p_unit)) {
-            $purchasePrice = $basePurchasePrice;
-            $salePriceUnit = $finalSalePrice;
-
-            if ($priceUnitId && $priceUnitId == $product->s_unit) {
-                $purchasePrice *= $cFactor;
-                $salePriceUnit *= $cFactor;
-            }
-
+            $displayPrimarySale = $saleSecondary * $cFactor;
             $unitPricing[] = [
                 'unit_id'           => $product->p_unit,
                 'unit_name'         => $units[$product->p_unit],
-                'purchase_price'    => round($purchasePrice, 2),
-                'sale_price'        => round($salePriceUnit, 2),
+                'purchase_price'    => round($purchaseSecondary * $cFactor, 2),
+                'sale_price'        => round($displayPrimarySale, 2),
                 'gst'               => $baseGst,
                 'profit_percentage' => $profitPercentage,
             ];
         }
 
+        // Secondary unit — show divided price
         if ($product->s_unit && $units->has($product->s_unit)) {
-            $purchasePrice = $basePurchasePrice;
-            $salePriceUnit = $finalSalePrice;
-
-            if ($priceUnitId && $priceUnitId == $product->p_unit) {
-                $purchasePrice /= $cFactor;
-                $salePriceUnit /= $cFactor;
-            }
-
             $unitPricing[] = [
                 'unit_id'           => $product->s_unit,
                 'unit_name'         => $units[$product->s_unit],
-                'purchase_price'    => round($purchasePrice, 2),
-                'sale_price'        => round($salePriceUnit, 2),
+                'purchase_price'    => round($purchaseSecondary, 2),
+                'sale_price'        => round($saleSecondary, 2),
                 'gst'               => $baseGst,
                 'profit_percentage' => $profitPercentage,
             ];
@@ -641,13 +531,13 @@ public function getUnitsByProductId(Request $request, $product_id)
     } catch (\Exception $e) {
         Log::error('Failed to fetch units', [
             'product_id' => $product_id,
-            'cid' => $cid,
-            'error' => $e->getMessage()
+            'cid'        => $cid,
+            'error'      => $e->getMessage()
         ]);
 
         return response()->json([
             'message' => 'Failed to fetch data',
-            'error' => $e->getMessage()
+            'error'   => $e->getMessage()
         ], 500);
     }
 }
