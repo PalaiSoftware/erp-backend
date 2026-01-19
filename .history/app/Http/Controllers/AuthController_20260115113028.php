@@ -158,7 +158,7 @@ public function newuser(Request $request)
     $user = Auth::user();
     
     // Check if user has permission to create new users based on their role
-    if (!in_array($user->rid, [1, 2])) {
+    if (!in_array($user->rid, [1, 2, 3])) {
         return response()->json([
             'message' => 'You are not allowed to create a new user for your company'
         ], 403);
@@ -289,8 +289,8 @@ public function userBlockUnblock(Request $request)
         return response()->json(['message' => 'Unauthorized'], 401);
     }
 
-    // Check if current user's rid is 1, 2
-    if (!in_array($currentUser->rid, [1, 2])) {
+    // Check if current user's rid is 1, 2, or 3
+    if (!in_array($currentUser->rid, [1, 2, 3])) {
         return response()->json([
             'message' => 'You are not authorized to block/unblock users'
         ], 403);
@@ -349,8 +349,8 @@ public function UserPromoteDemote(Request $request)
         return response()->json(['message' => 'Unauthorized'], 401);
     }
 
-    // Check if current user's rid is 1, 2,(only these can promote/demote)
-    if (!in_array($currentUser->rid, [1, 2])) {
+    // Check if current user's rid is 1, 2, or 3 (only these can promote/demote)
+    if (!in_array($currentUser->rid, [1, 2, 3])) {
         return response()->json([
             'message' => 'You are not authorized to promote or demote users'
         ], 403);
@@ -502,10 +502,10 @@ public function updateCompanyDetails(Request $request, $cid)
         return response()->json(['message' => 'Unauthorized'], 401);
     }
 
-    // Restrict access to users with rid 1, 2
+    // Restrict access to users with rid 1, 2, or 3
     if (!in_array($user->rid, [1, 2])) {
         return response()->json([
-            'message' => 'Forbidden: Only Admin, Superuser can update company details'
+            'message' => 'Forbidden: Only Admin, Superuser, and Moderator can update company details'
         ], 403);
     }
 

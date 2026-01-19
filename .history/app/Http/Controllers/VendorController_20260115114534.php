@@ -244,7 +244,7 @@ public function update(Request $request, $id)
     if (!$user) {
         return response()->json(['message' => 'Unauthorized'], 401);
     }
-    if (!in_array($user->rid, [1, 2])) {
+    if (!in_array($user->rid, [1, 2, 3])) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 

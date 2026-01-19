@@ -1,0 +1,12 @@
+[90m= [39m[34;4mApp\Models\PurchaseBill[39;24m {#5275
+    [34mid[39m: [35m1[39m,
+    [34mbill_name[39m: "[32mMaN Motors - 2025-09-18[39m",
+    [34mpcid[39m: [35m1[39m,
+    [34muid[39m: [35m1[39m,
+    [34mpayment_mode[39m: [35m3[39m,
+    [34mabsolute_discount[39m: "[32m0.00[39m",
+    [34mpaid_amount[39m: "[32m8000000.00[39m",
+    [34mcreated_at[39m: "[32m2025-09-18 11:04:00[39m",
+    [34mupdated_at[39m: "[32m2025-09-18 11:04:00[39m",
+  }
+

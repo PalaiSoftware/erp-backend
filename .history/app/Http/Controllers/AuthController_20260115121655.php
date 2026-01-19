@@ -158,7 +158,7 @@ public function newuser(Request $request)
     $user = Auth::user();
     
     // Check if user has permission to create new users based on their role
-    if (!in_array($user->rid, [1, 2])) {
+    if (!in_array($user->rid, [1, 2, 3])) {
         return response()->json([
             'message' => 'You are not allowed to create a new user for your company'
         ], 403);

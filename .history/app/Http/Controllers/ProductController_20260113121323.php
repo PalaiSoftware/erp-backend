@@ -6,8 +6,6 @@ use Illuminate\Http\Request;
 use App\Models\Product;
 use App\Models\ProductValue; 
 use App\Models\Unit;
-use App\Models\ProductInfo;          // ← ADD THIS LINE
-use App\Models\ProductPriceByType;    // ← ADD THIS LINE RIGHT HERE
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log; 
@@ -245,104 +243,6 @@ public function getProductById($product_id)
     ], 200);
 }
 
-// public function update(Request $request, $id)
-// {
-//     try {
-//         $user = Auth::user();
-//         if (!$user) {
-//             return response()->json(['message' => 'Unauthorized'], 401);
-//         }
-//         if (!in_array($user->rid, [1, 2, 3])) {
-//             return response()->json(['message' => 'Forbidden'], 403);
-//         }
-
-//         // Find product and verify it belongs to current company
-//         $product = Product::where('id', $id)
-//             ->where('cid', $user->cid) // CRITICAL: Only allow products from current company
-//             ->first();
-
-//         if (!$product) {
-//             return response()->json(['message' => 'Product not found or not authorized'], 404);
-//         }
-//         // CORRECTED VALIDATION (top-level fields, NOT array-based)
-//         $validated = $request->validate([
-//             'name' => [
-//                 'required',
-//                 'string',
-//                 'max:255',
-//                 function ($attribute, $value, $fail) use ($id, $user) {
-//                     // Check duplicate ONLY within current company
-//                     if (Product::whereRaw('LOWER(name) = LOWER(?)', [$value])
-//                         ->where('id', '!=', $id)
-//                         ->where('cid', $user->cid) // Company-specific filter
-//                         ->exists()) {
-//                         $fail('This product name is already in use in your company.');
-//                     }
-//                 },
-//             ],
-//             'category_id' => 'nullable|integer|exists:categories,id',
-//             'hscode' => 'nullable|string|max:255',
-//             'description'=> 'nullable|string|max:500',
-//             'p_unit' => [
-//                 'required',
-//                 'integer',
-//                 'exists:units,id',
-//                 function ($attribute, $value, $fail) {
-//                     if ($value === 0) {
-//                         $fail('Primary unit cannot be "None". Please select a valid unit.');
-//                     }
-//                 },
-//             ],
-//             's_unit' => 'nullable|integer|exists:units,id', // Allow 0 as valid "None"
-//             'c_factor' => 'nullable|numeric',
-//         ], [
-//             'p_unit.required' => 'Primary unit is required.',
-//             'p_unit.integer' => 'Primary unit must be a valid number.',
-//             'p_unit.exists' => 'Selected primary unit does not exist.',
-//         ]);
-
-//         // CORRECTED c_factor VALIDATION (single product)
-//         $pUnit = $validated['p_unit'];
-//         $sUnit = $validated['s_unit'] ?? 0; // Default to 0 if not provided
-//         $cFactor = $validated['c_factor'] ?? 0; // Default to 0 if not provided
-
-//         $errors = [];
-
-//         // Case 1: Secondary unit is 0 ("None") → c_factor must be exactly 0 or null (you may enforce presence if you want)
-//         if ($pUnit > 0 && $sUnit == 0) {
-//             // Accept null or 0, but reject any positive non-zero value
-//             if ($cFactor !== null && $cFactor != 0.0) {
-//                 $errors['c_factor'][] = 'When secondary unit is "None", conversion factor must be 0.';
-//             }
-//         }
-//         // Case 2: Secondary unit > 0 → c_factor must be >= 0.1 (and must be present)
-//         elseif ($pUnit > 0 && $sUnit > 0) {
-//             if ($cFactor === null) {
-//                 $errors['c_factor'][] = 'Conversion factor is required when a secondary unit is provided.';
-//             } elseif ($cFactor < 0.1) {
-//                 $errors['c_factor'][] = 'When secondary unit is provided, conversion factor must be at least 0.1.';
-//             }
-//         }
-
-//         // Return errors if any
-//         if (!empty($errors)) {
-//             return response()->json([
-//                 'message' => 'Validation failed',
-//                 'errors' => $errors
-//             ], 422);
-//         }
-
-//         $product->update($validated);
-
-//         return response()->json([
-//             'message' => 'Product updated successfully',
-//             'product' => $product->refresh()
-//         ], 200);
-//     } catch (\Exception $e) {
-//         \Log::error($e->getMessage());
-//         return response()->json(['error' => $e->getMessage()], 500);
-//     }
-// 1}
 public function update(Request $request, $id)
 {
     try {
@@ -356,23 +256,23 @@ public function update(Request $request, $id)
 
         // Find product and verify it belongs to current company
         $product = Product::where('id', $id)
-            ->where('cid', $user->cid)
+            ->where('cid', $user->cid) // CRITICAL: Only allow products from current company
             ->first();
 
         if (!$product) {
             return response()->json(['message' => 'Product not found or not authorized'], 404);
         }
-
-        // Validation
+        // CORRECTED VALIDATION (top-level fields, NOT array-based)
         $validated = $request->validate([
             'name' => [
                 'required',
                 'string',
                 'max:255',
                 function ($attribute, $value, $fail) use ($id, $user) {
+                    // Check duplicate ONLY within current company
                     if (Product::whereRaw('LOWER(name) = LOWER(?)', [$value])
                         ->where('id', '!=', $id)
-                        ->where('cid', $user->cid)
+                        ->where('cid', $user->cid) // Company-specific filter
                         ->exists()) {
                         $fail('This product name is already in use in your company.');
                     }
@@ -391,7 +291,7 @@ public function update(Request $request, $id)
                     }
                 },
             ],
-            's_unit' => 'nullable|integer|exists:units,id',
+            's_unit' => 'nullable|integer|exists:units,id', // Allow 0 as valid "None"
             'c_factor' => 'nullable|numeric',
         ], [
             'p_unit.required' => 'Primary unit is required.',
@@ -399,25 +299,30 @@ public function update(Request $request, $id)
             'p_unit.exists' => 'Selected primary unit does not exist.',
         ]);
 
-        // c_factor validation
+        // CORRECTED c_factor VALIDATION (single product)
         $pUnit = $validated['p_unit'];
-        $sUnit = $validated['s_unit'] ?? 0;
-        $cFactor = $validated['c_factor'] ?? 0;
+        $sUnit = $validated['s_unit'] ?? 0; // Default to 0 if not provided
+        $cFactor = $validated['c_factor'] ?? 0; // Default to 0 if not provided
 
         $errors = [];
 
+        // Case 1: Secondary unit is 0 ("None") → c_factor must be exactly 0 or null (you may enforce presence if you want)
         if ($pUnit > 0 && $sUnit == 0) {
+            // Accept null or 0, but reject any positive non-zero value
             if ($cFactor !== null && $cFactor != 0.0) {
                 $errors['c_factor'][] = 'When secondary unit is "None", conversion factor must be 0.';
             }
-        } elseif ($pUnit > 0 && $sUnit > 0) {
+        }
+        // Case 2: Secondary unit > 0 → c_factor must be >= 0.1 (and must be present)
+        elseif ($pUnit > 0 && $sUnit > 0) {
             if ($cFactor === null) {
-                $errors['c_factor'][] = 'Conversion factor is required when secondary unit is provided.';
+                $errors['c_factor'][] = 'Conversion factor is required when a secondary unit is provided.';
             } elseif ($cFactor < 0.1) {
                 $errors['c_factor'][] = 'When secondary unit is provided, conversion factor must be at least 0.1.';
             }
         }
 
+        // Return errors if any
         if (!empty($errors)) {
             return response()->json([
                 'message' => 'Validation failed',
@@ -425,28 +330,7 @@ public function update(Request $request, $id)
             ], 422);
         }
 
-        // Update the product
         $product->update($validated);
-
-        // NEW FIX: Reset product_info base unit if secondary unit was removed
-        if (
-            (!isset($validated['s_unit']) || $validated['s_unit'] == 0 || empty($validated['s_unit'])) &&
-            $product->s_unit != ($validated['s_unit'] ?? 0)
-        ) {
-            ProductInfo::where('pid', $id)
-                ->where('cid', $user->cid)
-                ->update([
-                    'unit_id'    => $validated['p_unit'],
-                    'updated_at' => now()
-                ]);
-
-            Log::info('Reset product_info base unit after secondary unit removed', [
-                'product_id'       => $id,
-                'new_base_unit_id' => $validated['p_unit'],
-                'previous_s_unit'  => $product->s_unit,
-                'cid'              => $user->cid
-            ]);
-        }
 
         return response()->json([
             'message' => 'Product updated successfully',

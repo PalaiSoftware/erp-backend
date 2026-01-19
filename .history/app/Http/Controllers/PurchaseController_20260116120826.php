@@ -12,7 +12,6 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Barryvdh\DomPDF\Facade\Pdf;
-use Carbon\Carbon;
 
 class PurchaseController extends Controller
 {
@@ -1409,7 +1408,7 @@ public function getVendorsWithDues($cid)
         return response()->json(['message' => 'Unauthenticated'], 401);
     }
 
-    if (!in_array($user->rid, [1, 2])) {
+    if (!in_array($user->rid, [1, 2, 3, 4])) {
         return response()->json(['message' => 'Unauthorized'], 403);
     }
 
@@ -1417,32 +1416,19 @@ public function getVendorsWithDues($cid)
         return response()->json(['message' => 'Forbidden: Wrong company'], 403);
     }
 
-    $vendorTotals = DB::table('purchase_bills as pb')
-        ->join('purchase_clients as pc', 'pb.pcid', '=', 'pc.id')
-        ->leftJoin('purchase_items as pi', 'pb.id', '=', 'pi.bid')
-        ->select(
-            'pc.id as vendor_id',
-            'pc.name as vendor_name',
-            DB::raw("
-                COALESCE(SUM(
-                    pi.quantity * pi.p_price * 
-                    (1 - COALESCE(pi.dis, 0)/100) * 
-                    (1 + COALESCE(pi.gst, 0)/100)
-                ), 0) as gross_total
-            "),
-            DB::raw('COALESCE(SUM(pb.absolute_discount), 0) as total_discount'),
-            DB::raw('COALESCE(SUM(pb.paid_amount), 0) as total_paid')
-        )
-        ->where('pc.cid', $cid)
-        ->groupBy('pc.id', 'pc.name')
-        ->havingRaw('
-            COALESCE(SUM(
-                pi.quantity * pi.p_price * 
-                (1 - COALESCE(pi.dis, 0)/100) * 
-                (1 + COALESCE(pi.gst, 0)/100)
-            ), 0) - COALESCE(SUM(pb.absolute_discount), 0) - COALESCE(SUM(pb.paid_amount), 0) > 0
-        ')
-        ->get();
+   $vendorTotals = DB::table('purchase_bills as pb')
+    ->join('purchase_clients as pc', 'pb.pcid', '=', 'pc.id')
+    ->select(
+        'pc.id as vendor_id',
+        'pc.name as vendor_name',
+        DB::raw('COALESCE(SUM(pb.grand_total), 0) as total_billed'),   // ← use stored total if you have it
+        DB::raw('COALESCE(SUM(pb.absolute_discount), 0) as total_discount'),
+        DB::raw('COALESCE(SUM(pb.paid_amount), 0) as total_paid')
+    )
+    ->where('pc.cid', $cid)
+    ->groupBy('pc.id', 'pc.name')
+    ->havingRaw('COALESCE(SUM(pb.grand_total), 0) - COALESCE(SUM(pb.absolute_discount), 0) - COALESCE(SUM(pb.paid_amount), 0) > 0')
+    ->get();
 
     $result = $vendorTotals->map(function ($row) {
         $billTotal = round($row->gross_total - $row->total_discount, 2);
@@ -1514,7 +1500,7 @@ public function getVendorDues(Request $request, $vendor_id)
                     ->where('id', $bill->id)
                     ->update([
                         'paid_amount' => DB::raw("paid_amount + $paying"),
-                        //'updated_at'  => now(),
+                        'updated_at'  => now(),
                     ]);
 
                 DB::table('vendor_bill_payments')->insert([

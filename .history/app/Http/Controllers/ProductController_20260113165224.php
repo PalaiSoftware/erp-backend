@@ -621,14 +621,93 @@ public function update(Request $request, $id)
 //         'data' => $price
 //     ], 200);
 // }
+// public function setPriceByCustomerType(Request $request, $productId)
+// {
+//     $user = Auth::user();
+
+//     if (!in_array($user->rid, [1, 2])) {
+//         return response()->json([
+//             'message' => 'Unauthorized: Only Admin or Superuser can set product prices'
+//         ], 403);
+//     }
+
+//     $validated = $request->validate([
+//         'customer_type_id' => 'required|integer|exists:customer_types,id,cid,' . $user->cid,
+//         'selling_price'    => 'required|numeric|min:0',
+//     ]);
+
+//     // Verify product belongs to company
+//     $product = Product::where('id', $productId)
+//         ->where('cid', $user->cid)
+//         ->first();
+
+//     if (!$product) {
+//         return response()->json(['message' => 'Product not found in your company'], 404);
+//     }
+
+//     // Get base unit from product_info (this is what purchase/sale logic uses)
+//     $productInfo = ProductInfo::where('pid', $productId)
+//         ->where('cid', $user->cid)
+//         ->first();
+
+//     $baseUnitId = $productInfo ? $productInfo->unit_id : $product->p_unit; // fallback for brand new products
+
+//     $inputPrice = (float) $validated['selling_price'];
+//     $convertedPrice = $inputPrice;
+
+//     // Only convert if we have secondary unit + factor + units differ
+//     if ($product->s_unit && $product->s_unit != 0 && $product->c_factor > 0) {
+//         $cFactor = (float) $product->c_factor;
+
+//         // Assumption: when user sets price now, they are thinking in terms of CURRENT primary unit (Packet)
+//         // i.e. input_price = price per p_unit
+//         if ($product->p_unit == $baseUnitId) {
+//             // Base is primary → no conversion needed (rare after first purchase)
+//             $convertedPrice = $inputPrice;
+//         } else {
+//             // Most common case after unit change: base is still Piece (s_unit), input is per Packet (p_unit)
+//             // → convert to per Piece: divide by factor
+//             $convertedPrice = $inputPrice / $cFactor;
+
+//             Log::info('Customer selling price converted to base unit', [
+//                 'product_id'     => $productId,
+//                 'customer_type_id' => $validated['customer_type_id'],
+//                 'input_price'    => $inputPrice,
+//                 'converted_price'=> $convertedPrice,
+//                 'base_unit_id'   => $baseUnitId,
+//                 'c_factor'       => $cFactor,
+//                 'input_assumed_per' => 'p_unit (' . $product->p_unit . ')',
+//             ]);
+//         }
+//     }
+
+//     // Save converted price
+//     $priceRecord = ProductPriceByType::updateOrCreate(
+//         [
+//             'product_id'       => $productId,
+//             'customer_type_id' => $validated['customer_type_id'],
+//             'cid'              => $user->cid,
+//         ],
+//         [
+//             'selling_price' => $convertedPrice,
+//             'updated_at'    => now(),
+//         ]
+//     );
+
+//     return response()->json([
+//         'message'          => 'Selling price set successfully (converted to base unit)',
+//         'product_id'       => $productId,
+//         'customer_type_id' => $validated['customer_type_id'],
+//         'saved_price'      => $priceRecord->selling_price,           // this is now per base unit
+//         'display_hint'     => "This price is stored per base unit. When showing per Packet it will be × {$product->c_factor}",
+//     ], 200);
+// }
 public function setPriceByCustomerType(Request $request, $productId)
 {
     $user = Auth::user();
 
     if (!in_array($user->rid, [1, 2])) {
-        return response()->json([
-            'message' => 'Unauthorized: Only Admin or Superuser can set product prices'
-        ], 403);
+        return response()->json(['message' => 'Unauthorized'], 403);
     }
 
     $validated = $request->validate([
@@ -636,52 +715,15 @@ public function setPriceByCustomerType(Request $request, $productId)
         'selling_price'    => 'required|numeric|min:0',
     ]);
 
-    // Verify product belongs to company
     $product = Product::where('id', $productId)
         ->where('cid', $user->cid)
         ->first();
 
     if (!$product) {
-        return response()->json(['message' => 'Product not found in your company'], 404);
+        return response()->json(['message' => 'Product not found'], 404);
     }
 
-    // Get base unit from product_info (this is what purchase/sale logic uses)
-    $productInfo = ProductInfo::where('pid', $productId)
-        ->where('cid', $user->cid)
-        ->first();
-
-    $baseUnitId = $productInfo ? $productInfo->unit_id : $product->p_unit; // fallback for brand new products
-
-    $inputPrice = (float) $validated['selling_price'];
-    $convertedPrice = $inputPrice;
-
-    // Only convert if we have secondary unit + factor + units differ
-    if ($product->s_unit && $product->s_unit != 0 && $product->c_factor > 0) {
-        $cFactor = (float) $product->c_factor;
-
-        // Assumption: when user sets price now, they are thinking in terms of CURRENT primary unit (Packet)
-        // i.e. input_price = price per p_unit
-        if ($product->p_unit == $baseUnitId) {
-            // Base is primary → no conversion needed (rare after first purchase)
-            $convertedPrice = $inputPrice;
-        } else {
-            // Most common case after unit change: base is still Piece (s_unit), input is per Packet (p_unit)
-            // → convert to per Piece: divide by factor
-            $convertedPrice = $inputPrice / $cFactor;
-
-            Log::info('Customer selling price converted to base unit', [
-                'product_id'     => $productId,
-                'customer_type_id' => $validated['customer_type_id'],
-                'input_price'    => $inputPrice,
-                'converted_price'=> $convertedPrice,
-                'base_unit_id'   => $baseUnitId,
-                'c_factor'       => $cFactor,
-                'input_assumed_per' => 'p_unit (' . $product->p_unit . ')',
-            ]);
-        }
-    }
-
-    // Save converted price
+    // Save EXACTLY what frontend sends — no division here anymore
     $priceRecord = ProductPriceByType::updateOrCreate(
         [
             'product_id'       => $productId,
@@ -689,17 +731,17 @@ public function setPriceByCustomerType(Request $request, $productId)
             'cid'              => $user->cid,
         ],
         [
-            'selling_price' => $convertedPrice,
+            'selling_price' => $validated['selling_price'],  // ← Keep as-is
             'updated_at'    => now(),
         ]
     );
 
     return response()->json([
-        'message'          => 'Selling price set successfully (converted to base unit)',
+        'message'          => 'Selling price set successfully',
         'product_id'       => $productId,
         'customer_type_id' => $validated['customer_type_id'],
-        'saved_price'      => $priceRecord->selling_price,           // this is now per base unit
-        'display_hint'     => "This price is stored per base unit. When showing per Packet it will be × {$product->c_factor}",
+        'saved_price'      => $priceRecord->selling_price,
+        'c_factor'         => $product->c_factor ?? 1,  // Optional hint
     ], 200);
 }
 

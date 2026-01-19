@@ -24,7 +24,7 @@ class VendorController extends Controller
         return response()->json(['message' => 'Unauthenticated'], 401);
     }
 
-    // Check if the user's rid is one of 1, 2
+    // Check if the user's rid is one of 1, 2, 3,
     if (!in_array($user->rid, [1, 2])) {
         return response()->json(['message' => 'Unauthorized to create a purchase client'], 403);
     }
@@ -244,7 +244,7 @@ public function update(Request $request, $id)
     if (!$user) {
         return response()->json(['message' => 'Unauthorized'], 401);
     }
-    if (!in_array($user->rid, [1, 2])) {
+    if (!in_array($user->rid, [1, 2, 3])) {
         return response()->json(['message' => 'Forbidden'], 403);
     }
 

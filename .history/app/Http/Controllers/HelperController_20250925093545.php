@@ -383,7 +383,7 @@ public function addUnit(Request $request)
         return response()->json(['message' => 'Unauthenticated'], 401);
     }
      // Role restriction
-     if (!in_array($user->rid, [1, 2])) {
+     if (!in_array($user->rid, [1, 2, 3, 4])) {
         return response()->json(['message' => 'Unauthorized to add unit'], 403);
     }
         // Validate the request data

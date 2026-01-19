@@ -12,7 +12,6 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Barryvdh\DomPDF\Facade\Pdf;
-use Carbon\Carbon;
 
 class PurchaseController extends Controller
 {
@@ -1409,7 +1408,7 @@ public function getVendorsWithDues($cid)
         return response()->json(['message' => 'Unauthenticated'], 401);
     }
 
-    if (!in_array($user->rid, [1, 2])) {
+    if (!in_array($user->rid, [1, 2, 3, 4])) {
         return response()->json(['message' => 'Unauthorized'], 403);
     }
 
@@ -1514,7 +1513,7 @@ public function getVendorDues(Request $request, $vendor_id)
                     ->where('id', $bill->id)
                     ->update([
                         'paid_amount' => DB::raw("paid_amount + $paying"),
-                        //'updated_at'  => now(),
+                        'updated_at'  => now(),
                     ]);
 
                 DB::table('vendor_bill_payments')->insert([

@@ -1409,7 +1409,7 @@ public function getVendorsWithDues($cid)
         return response()->json(['message' => 'Unauthenticated'], 401);
     }
 
-    if (!in_array($user->rid, [1, 2])) {
+    if (!in_array($user->rid, [1, 2, 3, 4])) {
         return response()->json(['message' => 'Unauthorized'], 403);
     }
 

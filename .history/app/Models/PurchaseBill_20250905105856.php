@@ -18,10 +18,5 @@ class PurchaseBill extends Model
         'created_at',
         'updated_at',
     ];
-
-    public function payments()
-{
-    return $this->hasMany(VendorBillPayment::class, 'bill_id');
-}
     
 }

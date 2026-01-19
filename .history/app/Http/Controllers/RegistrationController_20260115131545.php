@@ -1,0 +1,377 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\PendingRegistration;
+use App\Models\User;
+use App\Models\Client;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Auth; 
+
+class RegistrationController extends Controller
+{
+    // Register → save into pending_registrations
+    public function register(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'email' => [
+                'required',
+                'string',
+                'email',
+                'max:255',
+                function ($attribute, $value, $fail) {
+                    if (
+                        User::whereRaw('LOWER(email) = LOWER(?)', [strtolower($value)])->exists() ||
+                        PendingRegistration::whereRaw('LOWER(email) = LOWER(?)', [strtolower($value)])->exists()
+                    ) {
+                        $fail('The email has already been taken.');
+                    }
+                },
+            ],
+            'mobile' => 'required|string|max:255',
+            'country' => 'required|string|max:255',
+            'password' => 'required|string|min:6',
+            'rid' => 'required|integer|between:1,5',
+            'client_name' => 'required|string|max:255',
+            'client_address' => 'nullable|string',
+            'client_phone' => 'nullable|string|max:20',
+            'gst_no' => 'nullable|string|max:255',
+            'pan' => 'nullable|string|max:20',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json(['errors' => $validator->errors()], 422);
+        }
+
+        $pending = PendingRegistration::create([
+            'name' => $request->name,
+            'email' => $request->email,
+            'mobile' => $request->mobile,
+            'country' => $request->country,
+            'password' => Hash::make($request->password),
+            'rid' => 4,
+            'client_name' => $request->client_name,
+            'client_address' => $request->client_address,
+            'client_phone' => $request->client_phone,
+            'gst_no' => $request->gst_no,
+            'pan' => $request->pan,
+        ]);
+
+        return response()->json([
+            'message' => 'Registration submitted for approval',
+            'data' => $pending
+        ], 201);
+    }
+
+    
+public function pendingList(Request $request)
+{
+    $user = $request->user(); // more reliable than Auth::user() in some setups
+
+    if (!$user) {
+        return response()->json(['message' => 'Unauthenticated'], 401);
+    }
+
+    if (!in_array($user->rid, [1, 2])) {
+        return response()->json(['message' => 'Unauthorized to Access pending users'], 403);
+    }
+    
+    $pending = PendingRegistration::select(
+        'pending_registrations.*',
+        'roles.role as role'
+    )
+    ->leftJoin('roles', 'pending_registrations.rid', '=', 'roles.id')
+    ->where('pending_registrations.approved', false)
+    ->orderBy('pending_registrations.created_at', 'desc')
+    ->get();
+    return response()->json($pending, 200);
+}
+
+    //only single pending user 
+    public function getUserById($id)
+{
+     // Get the authenticated user
+     $user = Auth::user();
+
+     // Check if user is authenticated
+     if (!$user) {
+         return response()->json(['message' => 'Unauthenticated'], 401);
+     }
+
+     // Restrict to rid 1, 2
+     if (!in_array($user->rid, [1, 2])) {
+         return response()->json(['message' => 'Unauthorized to Access pending user'], 403);
+     }
+    try {
+        $user = PendingRegistration::select(
+            'pending_registrations.*',
+            'roles.role as role_name'
+        )
+        ->leftJoin('roles', 'pending_registrations.rid', '=', 'roles.id')
+        ->where('pending_registrations.id', $id)
+        ->first();
+
+
+        if (!$user) {
+            return response()->json([
+                'message' => 'User not found'
+            ], 404);
+        }
+
+        return response()->json([
+            'message' => 'User retrieved successfully',
+            'user' => $user
+        ], 200);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'message' => 'Failed to fetch user',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
+
+public function approve(Request $request)
+{
+     // Get the authenticated user
+     $user = Auth::user();
+
+     // Check if user is authenticated
+     if (!$user) {
+         return response()->json(['message' => 'Unauthenticated'], 401);
+     }
+
+     // Restrict to rid 1, 2
+     if (!in_array($user->rid, [1, 2])) {
+         return response()->json(['message' => 'Unauthorized to approve pending users'], 403);
+     }
+    // Create a Validator instance so we can check ->fails() and return JSON ourselves
+    $validator = Validator::make($request->all(), [
+        'id' => 'required|integer|exists:pending_registrations,id',
+        'name' => 'required|string|max:255',
+        'email' => [
+            'required',
+            'string',
+            'email',
+            'max:255',
+            function ($attribute, $value, $fail) use ($request) {
+                // 1) Check against users
+                $emailExistsInUsers = User::whereRaw('LOWER(email) = LOWER(?)', [strtolower($value)])->exists();
+                if ($emailExistsInUsers) {
+                    $fail('The email has already been taken by an existing user.');
+                    return;
+                }
+
+                // 2) Also check pending registrations (another pending record with same email)
+                $query = PendingRegistration::whereRaw('LOWER(email) = LOWER(?)', [strtolower($value)]);
+                if ($request->has('id')) {
+                    // exclude the current pending record (so editing the same record's email is allowed)
+                    $query->where('id', '<>', $request->id);
+                }
+                if ($query->exists()) {
+                    $fail('The email has already been taken by another pending registration.');
+                }
+            }
+        ],
+        'mobile' => 'required|string|max:20',
+        'country' => 'required|string|max:255',
+        //'rid' => 'required|integer|between:3,5',
+
+
+        'rid' => [
+    'required',
+    'integer',
+    function ($attribute, $value, $fail) use ($user) {
+        if ($user->rid === 1) {
+            // Global admin can assign any role from 2 to 5
+            if ($value < 2 || $value > 5) {
+                $fail('Role ID must be between 2 and 5.');
+            }
+        } else {
+            // rid=2 (company admin) can only assign 3 to 5
+            if ($value < 3 || $value > 5) {
+                $fail('You can only assign roles from Moderator (3) to Basic User (5).');
+            }
+        }
+    },
+],
+
+
+
+        'client_name' => 'required|string|max:255',
+        'client_address' => 'nullable|string',
+        'client_phone' => 'nullable|string|max:20',
+        'gst_no' => 'nullable|string|max:255',
+        'pan' => 'nullable|string|max:20',
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json(['errors' => $validator->errors()], 422);
+    }
+
+    $pending = PendingRegistration::findOrFail($request->id);
+
+    DB::beginTransaction();
+    try {
+        // Create or update Client
+        $client = Client::create([
+            'name'    => $request->client_name,
+            'address' => $request->client_address,
+            'phone'   => $request->client_phone,
+            'gst_no'  => $request->gst_no,
+            'pan'     => $request->pan,
+            'blocked' => 0,
+        ]);
+
+        // Create User (using pending hashed password)
+        $user = User::create([
+            'name'     => $request->name,
+            'email'    => $request->email,
+            'mobile'   => $request->mobile,
+            'country'  => $request->country,
+            'password' => $pending->password, // already hashed in pending
+            'rid'      => $request->rid,
+            'blocked'  => 0,
+            'cid'      => $client->id,
+        ]);
+
+        // Mark pending registration as approved (or you can delete)
+        $pending->approved = true;
+        $pending->save();
+
+        DB::commit();
+
+        return response()->json([
+            'message' => 'User approved with modifications successfully',
+            'user'    => $user,
+            'client'  => $client,
+        ], 200);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return response()->json([
+            'message' => 'Approval failed',
+            'error'   => $e->getMessage(),
+        ], 500);
+    }
+}
+
+/**
+ * Show all approved users with their role and client details
+ * Only accessible by rid 1 (Global Admin)
+ */
+public function approvedList(Request $request)
+{
+    $user = Auth::user();
+
+    if (!$user) {
+        return response()->json(['message' => 'Unauthenticated'], 401);
+    }
+
+    // Only Global Admin (rid = 1) can see this list
+    if ($user->rid !== 1) {
+        return response()->json([
+            'message' => 'Forbidden: Only Global Admin can view the list of approved users'
+        ], 403);
+    }
+
+    try {
+        $approvedUsers = DB::table('users as u')
+            ->join('clients as c', 'u.cid', '=', 'c.id')
+            ->leftJoin('roles as r', 'u.rid', '=', 'r.id')
+            ->select(
+                'u.name as user_name',
+                'u.email',
+                'u.mobile',
+                'u.country',
+                'r.role as assigned_role',           // Role name (e.g., Authenticated, Moderator, etc.)
+                'c.name as client_name',
+                'c.address as client_address',
+                'c.phone as client_phone'
+            )
+            ->where('u.blocked', 0) // Optional: exclude blocked users
+            ->orderBy('u.created_at', 'desc')
+            ->get();
+
+        if ($approvedUsers->isEmpty()) {
+            return response()->json([
+                'message' => 'No approved users found'
+            ], 404);
+        }
+
+        // Format response exactly as you requested
+        $formattedUsers = $approvedUsers->map(function ($item) {
+            return [
+                'Name'           => $item->user_name,
+                'Email'          => $item->email,
+                'Mobile'         => $item->mobile,
+                'Country'        => $item->country,
+                'Assign Role'    => $item->assigned_role ?? 'Unknown Role',
+                'Client Name'    => $item->client_name,
+                'Client Address' => $item->client_address ?? '-',
+                'Client Phone'   => $item->client_phone ?? '-',
+            ];
+        });
+
+        return response()->json([
+            'message' => 'Approved users retrieved successfully',
+            'total'   => $formattedUsers->count(),
+            'data'    => $formattedUsers
+        ], 200);
+
+    } catch (\Exception $e) {
+        \Log::error('Failed to fetch approved users list', [
+            'error' => $e->getMessage(),
+            'admin_id' => $user->id
+        ]);
+
+        return response()->json([
+            'message' => 'Failed to retrieve approved users',
+            'error'   => $e->getMessage()
+        ], 500);
+    }
+}
+
+public function reject(Request $request)
+{
+    $user = Auth::user();
+
+    if (!$user) {
+        return response()->json(['message' => 'Unauthenticated'], 401);
+    }
+
+    if (!in_array($user->rid, [1, 2])) {
+        return response()->json(['message' => 'Unauthorized to reject pending users'], 403);
+    }
+
+    $validator = Validator::make($request->all(), [
+        'id' => 'required|integer|exists:pending_registrations,id',
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json(['errors' => $validator->errors()], 422);
+    }
+
+    try {
+        $pending = PendingRegistration::findOrFail($request->id);
+        $pending->delete(); 
+
+        return response()->json([
+            'message' => 'Pending registration rejected successfully'
+        ], 200);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'message' => 'Reject failed',
+            'error' => $e->getMessage()
+        ], 500);
+    }
+}
+
+
+
+}

@@ -1591,154 +1591,6 @@ public function getCustomerStats(Request $request)
 
 
 
-// public function b2cSalesReport(Request $request)
-// {
-//     $request->validate([
-//         'start_date' => 'required|date',
-//         'end_date'   => 'required|date|after_or_equal:start_date',
-//     ]);
-
-//     $user = Auth::user();
-
-//     // ONLY rid 1, 2, 3 can download B2C report
-//     if (!in_array($user->rid, [1, 2, 3])) {
-//         return response()->json([
-//             'message' => 'Forbidden: You do not have permission to download B2C GST reports'
-//         ], 403);
-//     }
-
-//     $startDate = $request->start_date . ' 00:00:00';
-//     $endDate   = $request->end_date . ' 23:59:59';
-
-//     // Get all B2C bills (customers without GSTIN) created by current user
-//     $b2cBills = DB::table('sales_bills as sb')
-//         ->join('sales_clients as sc', 'sb.scid', '=', 'sc.id')
-//         ->where('sb.uid', auth()->id())
-//         ->where(function ($q) {
-//             $q->whereNull('sc.gst_no')
-//               ->orWhere('sc.gst_no', '=', '')
-//               ->orWhereRaw("TRIM(COALESCE(sc.gst_no, '')) = ''");
-//         })
-//         ->whereBetween('sb.updated_at', [$startDate, $endDate])
-//         ->pluck('sb.id');
-
-//     if ($b2cBills->isEmpty()) {
-//         return response()->json(['message' => 'No B2C sales found in this period'], 404);
-//     }
-
-//     // Aggregate items ONLY from products that have a valid HSN code
-//     $data = DB::table('sales_items as si')
-//         ->join('products as p', 'si.pid', '=', 'p.id')
-//         ->whereIn('si.bid', $b2cBills)
-//         ->whereNotNull('p.hscode')                    // HSN must exist
-//         ->where('p.hscode', '!=', '')                 // Not empty string
-//         ->whereRaw("TRIM(p.hscode) != ''")             // Not just spaces
-//         //->whereRaw("TRIM(p.hscode) ~ '^[0-9]{1,9}$'")   // Only valid HSN (1-9 digits)
-//         ->whereRaw("REGEXP_REPLACE(p.hscode, '\\s+', '', 'g') ~ '^[0-9]{1,20}$'")
-//         ->select(
-//             'p.name as item_name',
-//             'p.hscode',
-//             'si.gst as gst_rate',
-//             DB::raw('ROUND(SUM(si.quantity * si.s_price * (100 - COALESCE(si.dis, 0)) / 100), 2) as taxable_value'),
-//             DB::raw('ROUND(SUM(si.quantity * si.s_price * (100 - COALESCE(si.dis, 0)) / 100 * (si.gst / 100)), 2) as gst_amount')
-//         )
-//         ->groupBy('p.id', 'p.name', 'p.hscode', 'si.gst')
-//         ->orderBy('p.name')
-//         ->get();
-
-//     if ($data->isEmpty()) {
-//         return response()->json(['message' => 'No B2C sales found with products having HSN code in this period'], 404);
-//     }
-
-//     $report = $data->map(function ($row) {
-//         $rate = (float)$row->gst_rate;
-//         return [
-//             'item_name' => $row->item_name,
-//             'hsn'       => $row->hscode,  // Guaranteed to be valid now
-//             'cgst'      => $rate > 0 ? round($rate / 2, 1) : 0,
-//             'sgst'      => $rate > 0 ? round($rate / 2, 1) : 0,
-//             'igst'      => 0,
-//             'taxable'   => (float)$row->taxable_value,
-//             'gst'       => (float)$row->gst_amount,
-//             'total'     => round((float)$row->taxable_value + (float)$row->gst_amount, 2),
-//         ];
-//     });
-
-//     // Stream Excel Download
-//     return response()->streamDownload(function () use ($report, $request) {
-//         $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
-//         $sheet = $spreadsheet->getActiveSheet();
-
-//         // Title
-//         $sheet->setCellValue('A1', 'B2C Sales Report (Unregistered Customers - HSN Wise)');
-//         $sheet->mergeCells('A1:H1');
-//         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16);
-
-//         // Period
-//         $sheet->setCellValue('A2', 'Period: ' . $request->start_date . ' to ' . $request->end_date);
-//         $sheet->mergeCells('A2:H2');
-
-//         // Headers
-//         $headers = ['Product Name', 'HSN Code', 'CGST %', 'SGST %', 'IGST %', 'Taxable Value', 'GST Amount', 'Total Amount'];
-//         $sheet->fromArray($headers, null, 'A4');
-
-//         // Header Style
-//         $headerStyle = $sheet->getStyle('A4:H4');
-//         $headerStyle->getFont()->setBold(true);
-//         $headerStyle->getFill()
-//             ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
-//             ->getStartColor()->setARGB('FFE3F2FD');
-
-//         // Data Rows
-//         $row = 5;
-//         foreach ($report as $item) {
-//             $sheet->setCellValue("A$row", $item['item_name']);
-//             $sheet->setCellValue("B$row", $item['hsn']);
-//             $sheet->setCellValue("C$row", $item['cgst']);
-//             $sheet->setCellValue("D$row", $item['sgst']);
-//             $sheet->setCellValue("E$row", $item['igst']);
-//             $sheet->setCellValue("F$row", $item['taxable']);
-//             $sheet->setCellValue("G$row", $item['gst']);
-//             $sheet->setCellValue("H$row", $item['total']);
-//             $row++;
-//         }
-
-//         // Grand Total Row
-//         $lastRow = $row;
-//         $sheet->setCellValue("E$lastRow", 'GRAND TOTAL');
-//         $sheet->getStyle("E$lastRow")->getFont()->setBold(true);
-//         $sheet->setCellValue("F$lastRow", $report->sum('taxable'));
-//         $sheet->setCellValue("G$lastRow", $report->sum('gst'));
-//         $sheet->setCellValue("H$lastRow", $report->sum('total'));
-
-//         // Total Row Style
-//         $totalStyle = $sheet->getStyle("E$lastRow:H$lastRow");
-//         $totalStyle->getFont()->setBold(true);
-//         $totalStyle->getFill()
-//             ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
-//             ->getStartColor()->setARGB('FFFFFF00');
-
-//         // Auto-size columns
-//         foreach (range('A', 'H') as $col) {
-//             $sheet->getColumnDimension($col)->setAutoSize(true);
-//         }
-
-//         // Apply borders to entire data
-//         $sheet->getStyle("A4:H$lastRow")->applyFromArray([
-//             'borders' => [
-//                 'allBorders' => [
-//                     'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
-//                     'color' => ['argb' => 'FF000000'],
-//                 ],
-//             ],
-//         ]);
-
-//         $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
-//         $writer->save('php://output');
-//     }, 'B2C_HSN_Report_' . $request->start_date . '_to_' . $request->end_date . '.xlsx', [
-//         'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-//     ]);
-// }
 public function b2cSalesReport(Request $request)
 {
     $request->validate([
@@ -1758,7 +1610,7 @@ public function b2cSalesReport(Request $request)
     $startDate = $request->start_date . ' 00:00:00';
     $endDate   = $request->end_date . ' 23:59:59';
 
-    // Get B2C bills (customers without GSTIN)
+    // Get all B2C bills (customers without GSTIN) created by current user
     $b2cBills = DB::table('sales_bills as sb')
         ->join('sales_clients as sc', 'sb.scid', '=', 'sc.id')
         ->where('sb.uid', auth()->id())
@@ -1774,44 +1626,41 @@ public function b2cSalesReport(Request $request)
         return response()->json(['message' => 'No B2C sales found in this period'], 404);
     }
 
-    // Get individual sales items with bill name
-    // No grouping — one row per item
+    // Aggregate items ONLY from products that have a valid HSN code
     $data = DB::table('sales_items as si')
         ->join('products as p', 'si.pid', '=', 'p.id')
-        ->join('sales_bills as sb', 'si.bid', '=', 'sb.id') // ← Join to get bill_name
         ->whereIn('si.bid', $b2cBills)
-        ->whereNotNull('p.hscode')
-        ->where('p.hscode', '!=', '')
-        ->whereRaw("TRIM(p.hscode) != ''")
+        ->whereNotNull('p.hscode')                    // HSN must exist
+        ->where('p.hscode', '!=', '')                 // Not empty string
+        ->whereRaw("TRIM(p.hscode) != ''")             // Not just spaces
+        //->whereRaw("TRIM(p.hscode) ~ '^[0-9]{1,9}$'")   // Only valid HSN (1-9 digits)
         ->whereRaw("REGEXP_REPLACE(p.hscode, '\\s+', '', 'g') ~ '^[0-9]{1,20}$'")
         ->select(
-            'sb.bill_name',                           // ← NEW: Bill name
             'p.name as item_name',
             'p.hscode',
             'si.gst as gst_rate',
-            DB::raw('ROUND(si.quantity * si.s_price * (100 - COALESCE(si.dis, 0)) / 100, 2) as taxable_value'),
-            DB::raw('ROUND(si.quantity * si.s_price * (100 - COALESCE(si.dis, 0)) / 100 * (si.gst / 100), 2) as gst_amount')
+            DB::raw('ROUND(SUM(si.quantity * si.s_price * (100 - COALESCE(si.dis, 0)) / 100), 2) as taxable_value'),
+            DB::raw('ROUND(SUM(si.quantity * si.s_price * (100 - COALESCE(si.dis, 0)) / 100 * (si.gst / 100)), 2) as gst_amount')
         )
-        ->orderBy('sb.bill_name')                     // Sort by bill name
+        ->groupBy('p.id', 'p.name', 'p.hscode', 'si.gst')
         ->orderBy('p.name')
         ->get();
 
     if ($data->isEmpty()) {
-        return response()->json(['message' => 'No B2C sales found with valid HSN in this period'], 404);
+        return response()->json(['message' => 'No B2C sales found with products having HSN code in this period'], 404);
     }
 
     $report = $data->map(function ($row) {
         $rate = (float)$row->gst_rate;
         return [
-            'bill_name'  => $row->bill_name ?: 'Unnamed Bill',  // ← NEW column
-            'item_name'  => $row->item_name,
-            'hsn'        => $row->hscode,
-            'cgst'       => $rate > 0 ? round($rate / 2, 1) : 0,
-            'sgst'       => $rate > 0 ? round($rate / 2, 1) : 0,
-            'igst'       => 0,
-            'taxable'    => (float)$row->taxable_value,
-            'gst'        => (float)$row->gst_amount,
-            'total'      => round((float)$row->taxable_value + (float)$row->gst_amount, 2),
+            'item_name' => $row->item_name,
+            'hsn'       => $row->hscode,  // Guaranteed to be valid now
+            'cgst'      => $rate > 0 ? round($rate / 2, 1) : 0,
+            'sgst'      => $rate > 0 ? round($rate / 2, 1) : 0,
+            'igst'      => 0,
+            'taxable'   => (float)$row->taxable_value,
+            'gst'       => (float)$row->gst_amount,
+            'total'     => round((float)$row->taxable_value + (float)$row->gst_amount, 2),
         ];
     });
 
@@ -1821,20 +1670,20 @@ public function b2cSalesReport(Request $request)
         $sheet = $spreadsheet->getActiveSheet();
 
         // Title
-        $sheet->setCellValue('A1', 'B2C Sales Report (Unregistered Customers - Item Wise with Bill Name)');
-        $sheet->mergeCells('A1:I1');
+        $sheet->setCellValue('A1', 'B2C Sales Report (Unregistered Customers - HSN Wise)');
+        $sheet->mergeCells('A1:H1');
         $sheet->getStyle('A1')->getFont()->setBold(true)->setSize(16);
 
         // Period
         $sheet->setCellValue('A2', 'Period: ' . $request->start_date . ' to ' . $request->end_date);
-        $sheet->mergeCells('A2:I2');
+        $sheet->mergeCells('A2:H2');
 
-        // Headers – added Bill Name
-        $headers = ['Bill Name', 'Product Name', 'HSN Code', 'CGST %', 'SGST %', 'IGST %', 'Taxable Value', 'GST Amount', 'Total Amount'];
+        // Headers
+        $headers = ['Product Name', 'HSN Code', 'CGST %', 'SGST %', 'IGST %', 'Taxable Value', 'GST Amount', 'Total Amount'];
         $sheet->fromArray($headers, null, 'A4');
 
         // Header Style
-        $headerStyle = $sheet->getStyle('A4:I4');
+        $headerStyle = $sheet->getStyle('A4:H4');
         $headerStyle->getFont()->setBold(true);
         $headerStyle->getFill()
             ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
@@ -1843,40 +1692,39 @@ public function b2cSalesReport(Request $request)
         // Data Rows
         $row = 5;
         foreach ($report as $item) {
-            $sheet->setCellValue("A$row", $item['bill_name']);
-            $sheet->setCellValue("B$row", $item['item_name']);
-            $sheet->setCellValue("C$row", $item['hsn']);
-            $sheet->setCellValue("D$row", $item['cgst']);
-            $sheet->setCellValue("E$row", $item['sgst']);
-            $sheet->setCellValue("F$row", $item['igst']);
-            $sheet->setCellValue("G$row", $item['taxable']);
-            $sheet->setCellValue("H$row", $item['gst']);
-            $sheet->setCellValue("I$row", $item['total']);
+            $sheet->setCellValue("A$row", $item['item_name']);
+            $sheet->setCellValue("B$row", $item['hsn']);
+            $sheet->setCellValue("C$row", $item['cgst']);
+            $sheet->setCellValue("D$row", $item['sgst']);
+            $sheet->setCellValue("E$row", $item['igst']);
+            $sheet->setCellValue("F$row", $item['taxable']);
+            $sheet->setCellValue("G$row", $item['gst']);
+            $sheet->setCellValue("H$row", $item['total']);
             $row++;
         }
 
         // Grand Total Row
         $lastRow = $row;
-        $sheet->setCellValue("F$lastRow", 'GRAND TOTAL');
-        $sheet->getStyle("F$lastRow")->getFont()->setBold(true);
-        $sheet->setCellValue("G$lastRow", $report->sum('taxable'));
-        $sheet->setCellValue("H$lastRow", $report->sum('gst'));
-        $sheet->setCellValue("I$lastRow", $report->sum('total'));
+        $sheet->setCellValue("E$lastRow", 'GRAND TOTAL');
+        $sheet->getStyle("E$lastRow")->getFont()->setBold(true);
+        $sheet->setCellValue("F$lastRow", $report->sum('taxable'));
+        $sheet->setCellValue("G$lastRow", $report->sum('gst'));
+        $sheet->setCellValue("H$lastRow", $report->sum('total'));
 
         // Total Row Style
-        $totalStyle = $sheet->getStyle("F$lastRow:I$lastRow");
+        $totalStyle = $sheet->getStyle("E$lastRow:H$lastRow");
         $totalStyle->getFont()->setBold(true);
         $totalStyle->getFill()
             ->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
             ->getStartColor()->setARGB('FFFFFF00');
 
         // Auto-size columns
-        foreach (range('A', 'I') as $col) {
+        foreach (range('A', 'H') as $col) {
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
 
-        // Borders
-        $sheet->getStyle("A4:I$lastRow")->applyFromArray([
+        // Apply borders to entire data
+        $sheet->getStyle("A4:H$lastRow")->applyFromArray([
             'borders' => [
                 'allBorders' => [
                     'borderStyle' => \PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN,
@@ -1887,7 +1735,7 @@ public function b2cSalesReport(Request $request)
 
         $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
         $writer->save('php://output');
-    }, 'B2C_Item_Report_' . $request->start_date . '_to_' . $request->end_date . '.xlsx', [
+    }, 'B2C_HSN_Report_' . $request->start_date . '_to_' . $request->end_date . '.xlsx', [
         'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     ]);
 }
